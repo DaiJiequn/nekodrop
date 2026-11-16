@@ -86,12 +86,9 @@ Step 'add it to the driver store (binds nothing)' {
 }
 
 'Network'
-Step 'TAP-Windows adapter for Wi-Fi beside AirDrop' {
-  $tap = Get-NetAdapter -IncludeHidden -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceDescription -like 'TAP-Windows*' }
-  if (-not $tap -and (Test-Path "$Source\tap-windows.exe")) {
-    $p = Start-Process "$Source\tap-windows.exe" -ArgumentList '/S', '/SELECT_UTILITIES=0' -Wait -PassThru
-    if ($p.ExitCode -ne 0) { "    TAP-Windows did not install ($($p.ExitCode)); concurrent mode will fall back to on-demand" }
-  }
+Step "nekodrop's own TAP adapter (DHCP) for Wi-Fi beside AirDrop" {
+  try { & "$Source\setup-tap.ps1" -TapSetup "$Source\tap-windows.exe" | Out-Host }
+  catch { "    TAP adapter not ready ($($_.Exception.Message)); concurrent mode will fall back to on-demand" }
 }
 Step 'firewall: AirDrop receiver and discovery, from link-local addresses only' {
   Get-NetFirewallRule -Group $FirewallGroup -ErrorAction SilentlyContinue | Remove-NetFirewallRule

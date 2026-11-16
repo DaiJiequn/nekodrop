@@ -93,7 +93,7 @@ dotnet publish "$repo\app\service\NekoDrop.Service.csproj" -c Release -o "$stage
 if ($LASTEXITCODE -ne 0) { throw 'service publish failed' }
 dotnet publish "$repo\app\client\NekoDrop.csproj" -c Release -o "$stage" --nologo -v q @single
 if ($LASTEXITCODE -ne 0) { throw 'client publish failed' }
-Copy-Item "$repo\installer\install.ps1", "$repo\installer\uninstall.ps1" $stage
+Copy-Item "$repo\installer\install.ps1", "$repo\installer\uninstall.ps1", "$repo\installer\setup-tap.ps1" $stage
 
 'downloads'
 $py = "$downloads\python-$PythonVersion-embed-amd64.zip"
