@@ -41,6 +41,7 @@
 #include "kdev.h"
 
 #include <type_traits>
+#include <map>
 #include "radio_link.h"
 
 namespace {
@@ -217,6 +218,54 @@ bool parse_radiotap(const uint8_t *p, size_t len, RadiotapInfo &info) {
 }
 
 constexpr uint16_t kStaEthernet = 0x100; /* inbox: a frame from the TAP adapter */
+constexpr uint16_t kScanRequest = 0x101; /* inbox: "scan" on stdin (the service's Wi-Fi list) */
+
+/* Networks heard in beacons and probe responses, for the client's Wi-Fi list. */
+struct BssSeen {
+  std::string ssid;
+  uint8_t channel = 0;
+  int8_t dbm = -127;
+  std::string security; /* open, wep, wpa2-psk, wpa3-sae, wpa2/3-psk, 802.1x */
+  uint64_t seen_ms = 0;
+};
+
+std::string bss_security(const uint8_t *ies, size_t len, uint16_t capability) {
+  bool psk = false, sae = false, dot1x = false, rsn = false;
+  for (size_t i = 0; i + 2 <= len;) {
+    const uint8_t id = ies[i], n = ies[i + 1];
+    if (i + 2 + n > len) break;
+    if (id == 48 && n >= 8) {
+      rsn = true;
+      const uint8_t *r = ies + i + 2;
+      size_t o = 2 + 4;
+      const unsigned pc = r[o] | r[o + 1] << 8;
+      o += 2 + 4u * pc;
+      if (o + 2 <= n) {
+        const unsigned ac = r[o] | r[o + 1] << 8;
+        o += 2;
+        for (unsigned k = 0; k < ac && o + 4 <= n; k++, o += 4) {
+          if (r[o] != 0x00 || r[o + 1] != 0x0f || r[o + 2] != 0xac) continue;
+          if (r[o + 3] == 2 || r[o + 3] == 6) psk = true;
+          else if (r[o + 3] == 8) sae = true;
+          else if (r[o + 3] == 1 || r[o + 3] == 5) dot1x = true;
+        }
+      }
+    }
+    i += 2 + n;
+  }
+  if (rsn) {
+    if (psk && sae) return "wpa2/3-psk";
+    if (sae) return "wpa3-sae";
+    if (psk) return "wpa2-psk";
+    if (dot1x) return "802.1x";
+    return "rsn";
+  }
+  return (capability & 0x0010) ? "wep" : "open";
+}
+
+const uint8_t kScanChannels[] = {1,   2,   3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,
+                                 36,  40,  44,  48,  52,  56,  60,  64,  100, 104, 108, 112, 116,
+                                 120, 124, 128, 132, 136, 140, 144, 149, 153, 157, 161, 165};
 
 struct Request {
   uint16_t type;
@@ -276,6 +325,25 @@ int main(int argc, char **argv) {
   std::mutex filter_mutex;
 
   /* The device thread owns the card: bring-up, receive polling, sending. */
+  /* The service asks for Wi-Fi scans on stdin. */
+  std::thread stdin_thread([&] {
+    char line[128];
+    while (!stopping() && std::fgets(line, sizeof(line), stdin)) {
+      if (std::strncmp(line, "scan", 4) != 0) continue;
+      /* "scan" or "scan <SSID in hex>" (a directed scan, for hidden networks) */
+      std::vector<uint8_t> ssid;
+      for (const char *h = line + 4; *h == ' ' || std::isxdigit(static_cast<unsigned char>(*h));) {
+        if (*h == ' ') { h++; continue; }
+        if (!std::isxdigit(static_cast<unsigned char>(h[1]))) break;
+        char b[3] = {h[0], h[1], 0};
+        if (ssid.size() < 32) ssid.push_back(static_cast<uint8_t>(std::strtoul(b, nullptr, 16)));
+        h += 2;
+      }
+      inbox.push({kScanRequest, ssid});
+    }
+  });
+  stdin_thread.detach();
+
   std::thread device_thread([&] {
     if (opt.no_card) {
       ready = true;
@@ -367,8 +435,34 @@ int main(int argc, char **argv) {
       QueryPerformanceCounter(&t);
       return static_cast<uint64_t>(t.QuadPart) * 1000000ull / static_cast<uint64_t>(f.QuadPart);
     };
+    std::map<std::string, BssSeen> bss_seen;
+    bool scan_wanted = false, scan_started = false;
+    std::vector<uint8_t> scan_ssid;
+    uint64_t scan_started_ms = 0;
     dev.set_rx_handler([&](const RxFrame &f) {
       rx_all++;
+      if (f.len >= 36 && (f.data[0] == 0x80 || f.data[0] == 0x50)) { /* beacon, probe response */
+        char key[18];
+        std::snprintf(key, sizeof(key), "%02x:%02x:%02x:%02x:%02x:%02x", f.data[16], f.data[17], f.data[18],
+                      f.data[19], f.data[20], f.data[21]);
+        if (bss_seen.size() < 256 || bss_seen.count(key)) {
+          BssSeen &b = bss_seen[key];
+          const uint8_t *ies = f.data + 36;
+          const size_t ies_len = f.len - 36;
+          uint8_t ch = f.channel;
+          for (size_t i = 0; i + 2 <= ies_len;) {
+            const uint8_t id = ies[i], n = ies[i + 1];
+            if (i + 2 + n > ies_len) break;
+            if (id == 0 && n <= 32) b.ssid.assign(reinterpret_cast<const char *>(ies + i + 2), n);
+            else if ((id == 3 || id == 61) && n >= 1 && ies[i + 2]) ch = ies[i + 2];
+            i += 2 + n;
+          }
+          b.channel = ch;
+          b.dbm = f.dbm;
+          b.security = bss_security(ies, ies_len, static_cast<uint16_t>(f.data[34] | f.data[35] << 8));
+          b.seen_ms = GetTickCount64();
+        }
+      }
       if (sta && sta->owns(f)) {
         sta->on_frame(f);
         return;
@@ -578,6 +672,9 @@ int main(int argc, char **argv) {
           } else {
             dev.transmit(frame, len, rate);
           }
+        } else if (req.type == kScanRequest) {
+          scan_wanted = true;
+          scan_ssid = req.payload;
         } else if (req.type == kStaEthernet) {
           if (sta) sta->on_ethernet(req.payload.data(), req.payload.size());
         } else if (req.type == RADIO_LINK_SET_ADDRESS && req.payload.size() == 6) {
@@ -647,6 +744,37 @@ int main(int argc, char **argv) {
         SwitchToThread();
       }
       const uint64_t now = GetTickCount64();
+      if (scan_wanted && !scan_started) {
+        scan_wanted = false;
+        bool started = false;
+        if constexpr (kOwnCard) {
+          started = dev.umac_scan(kScanChannels, sizeof(kScanChannels), scan_ssid.data(), scan_ssid.size(),
+                                  dev.hw_address().data());
+        }
+        scan_started_ms = now;
+        scan_started = true;
+        log_line(started ? "event: scan-started" : "event: scan-started (beacons on this channel only)");
+      }
+      bool scan_finished = false;
+      if constexpr (kOwnCard) scan_finished = scan_started && !dev.scan_running() && now - scan_started_ms > 300;
+      else scan_finished = scan_started && now - scan_started_ms > 2000;
+      if (scan_started && (scan_finished || now - scan_started_ms > 15000)) {
+        scan_started = false;
+        unsigned n = 0;
+        for (const auto &[bssid, b] : bss_seen) {
+          if (now - b.seen_ms > 120000 || b.ssid.empty()) continue;
+          std::string hex;
+          char h[3];
+          for (unsigned char c : b.ssid) {
+            std::snprintf(h, sizeof(h), "%02x", c);
+            hex += h;
+          }
+          log_line("event: bss " + bssid + " " + std::to_string(b.channel) + " " + std::to_string(b.dbm) + " " +
+                   b.security + " " + hex);
+          n++;
+        }
+        log_line("event: scan-done " + std::to_string(n));
+      }
       if (now - last_health >= 1000) {
         last_health = now;
         dev.check_health();

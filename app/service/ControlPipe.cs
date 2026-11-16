@@ -69,6 +69,17 @@ public sealed class ControlPipe(Supervisor sup)
                     case "mode":
                         if (Enum.TryParse<NetMode>((string?)cmd?["mode"], true, out var m)) sup.SetMode(m);
                         break;
+                    case "wifi-scan": sup.WifiScan((string?)cmd?["ssid"]); break;
+                    case "wifi-connect":
+                    {
+                        var why = sup.WifiConnect((string?)cmd?["ssid"] ?? "", (string?)cmd?["password"],
+                                                  (bool?)cmd?["auto"], (bool?)cmd?["hidden"] ?? false);
+                        await Send(writer, new JsonObject { ["event"] = "wifi-connect", ["ssid"] = (string?)cmd?["ssid"], ["error"] = why });
+                        break;
+                    }
+                    case "wifi-disconnect": sup.WifiDisconnect(); break;
+                    case "wifi-forget": sup.WifiForget((string?)cmd?["ssid"] ?? ""); break;
+                    case "wifi-auto": sup.WifiAuto((string?)cmd?["ssid"] ?? "", (bool?)cmd?["on"] ?? true); break;
                 }
             }
         }

@@ -32,6 +32,8 @@ Copy-Item "$repo\third_party\winawdl\build\awdl\awdld.exe", "$repo\third_party\w
 'airdrop engine'
 New-Item -ItemType Directory -Force "$stage\airdrop" | Out-Null
 Copy-Item "$repo\third_party\winawdl\airdrop\*.py", "$repo\third_party\winawdl\airdrop\LICENSE" "$stage\airdrop\"
+& python -I "$PSScriptRoot\patch-engine.py" "$stage\airdrop"
+if ($LASTEXITCODE -ne 0) { throw 'engine patch failed' }
 # sender.py looks for the Bluetooth beacon script in ..\scripts beside its own folder.
 New-Item -ItemType Directory -Force "$stage\scripts" | Out-Null
 Copy-Item "$repo\third_party\winawdl\scripts\airdrop-beacon.ps1" "$stage\scripts\"

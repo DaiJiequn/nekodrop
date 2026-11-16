@@ -24,6 +24,14 @@ public sealed class Supervisor : IDisposable
     /// <summary>The network last read from Windows; once the card is ours the WLAN service sees nothing.</summary>
     Wlan.Network? _net;
     string _wifi = "";
+    /* Wi-Fi management (the list, connect, forget, auto-connect) */
+    readonly KnownNetworks _known = KnownNetworks.Load();
+    List<JsonObject> _scan = [], _scanPending = [];
+    bool _scanBusy;
+    DateTime _scanAt = DateTime.MinValue, _wifiDownSince = DateTime.UtcNow;
+    bool _userChose, _userOff;
+    string _staSsid = "", _wifiError = "";
+    (string Ssid, string? Password, bool? Auto)? _pendingConnect;
     string _detail = "";
     bool _wanted;
     DateTime _lastUse = DateTime.UtcNow, _lastData = DateTime.UtcNow, _startedAt;
@@ -50,6 +58,20 @@ public sealed class Supervisor : IDisposable
                 ["country"] = _cfg.Country,
                 ["wifi"] = _wifi,
                 ["detail"] = _detail,
+                ["ssid"] = _staSsid,
+                ["scanning"] = _scanBusy,
+                ["wifiError"] = _wifiError,
+                ["networks"] = new JsonArray(_scan.Select(n =>
+                {
+                    var c = (JsonObject)n.DeepClone();
+                    var known = _known.Find((string?)n["ssid"] ?? "");
+                    c["saved"] = known is { HasKey: true };
+                    c["auto"] = known?.AutoConnect ?? false;
+                    c["connected"] = (string?)n["ssid"] == _staSsid && _wifi == "connected";
+                    return (JsonNode)c;
+                }).ToArray()),
+                ["known"] = new JsonArray(_known.All().Select(k =>
+                    (JsonNode)new JsonObject { ["ssid"] = k.Ssid, ["auto"] = k.AutoConnect }).ToArray()),
             };
         }
     }
@@ -145,18 +167,33 @@ public sealed class Supervisor : IDisposable
             {
                 var why = "";
                 var cardFree = !(Card.Find() is { } c && Card.TakenByProxy(c));
-                var fresh = cardFree ? Wlan.Current(out why) : null;
+                if (cardFree)
+                {
+                    try
+                    {
+                        var imported = _known.ImportFromWindows();
+                        if (imported > 0) Say($"Wi-Fi: imported {imported} saved network(s) from Windows");
+                    }
+                    catch (Exception e) { Say("Wi-Fi: could not read Windows' saved networks: " + e.Message); }
+                }
+                // The user's choice wins over what Windows was connected to.
+                var fresh = cardFree && !_userChose && !_userOff ? Wlan.Current(out why) : null;
                 // Not connected (USB tethering, or Intel's driver just got the card back):
                 // let Windows join a saved network once, to read what the station needs.
-                for (int i = 0; cardFree && fresh is null && _net is null && i < 4; i++)
+                for (int i = 0; cardFree && !_userChose && !_userOff && fresh is null && _net is null && i < 4; i++)
                 {
                     if (i == 0) Say("Wi-Fi: Windows is not connected; joining a saved network to read it");
                     fresh = Wlan.ConnectSaved(out why, TimeSpan.FromSeconds(15));
                     if (fresh is null && why == "no WLAN interface") Thread.Sleep(5000);
                     else break;
                 }
-                if (fresh is not null) _net = fresh;
-                var net = fresh ?? _net;
+                if (fresh is not null)
+                {
+                    _net = fresh;
+                    _known.Remember(fresh.Ssid, fresh.Passphrase, fresh.PskHex, fresh.Open);
+                }
+                var net = _userOff ? null : _net;
+                lock (_lock) _staSsid = net?.Ssid ?? "";
                 if (net is not null && (net.Open || net.Passphrase is not null || net.PskHex is not null))
                 {
                     staConf = Wlan.WriteStaConfig(net);
@@ -260,8 +297,44 @@ public sealed class Supervisor : IDisposable
                     });
                 break;
             case "wifi":
-                lock (_lock) _wifi = value;
+                lock (_lock)
+                {
+                    if (value == "connected") { _wifiDownSince = DateTime.MaxValue; _wifiError = ""; }
+                    else if (_wifi == "connected" || _wifiDownSince == DateTime.MaxValue) _wifiDownSince = DateTime.UtcNow;
+                    _wifi = value;
+                }
                 Publish();
+                break;
+            case "bss":
+            {
+                // "<bssid> <channel> <dBm> <security> <ssid hex>"
+                var f = value.Split(' ');
+                if (f.Length == 5 && int.TryParse(f[1], out var bch) && int.TryParse(f[2], out var dbm))
+                {
+                    string ssid;
+                    try { ssid = System.Text.Encoding.UTF8.GetString(Convert.FromHexString(f[4])); }
+                    catch (FormatException) { break; }
+                    lock (_lock)
+                        _scanPending.Add(new JsonObject
+                        {
+                            ["bssid"] = f[0], ["channel"] = bch, ["dbm"] = dbm, ["security"] = f[3], ["ssid"] = ssid,
+                        });
+                }
+                break;
+            }
+            case "scan-done":
+                lock (_lock)
+                {
+                    // One row per network name, its strongest access point.
+                    _scan = _scanPending.GroupBy(n => (string?)n["ssid"] ?? "")
+                        .Select(g => g.OrderByDescending(n => (int?)n["dbm"] ?? -127).First())
+                        .OrderByDescending(n => (int?)n["dbm"] ?? -127).ToList();
+                    _scanPending = [];
+                    _scanBusy = false;
+                    _scanAt = DateTime.UtcNow;
+                }
+                Publish();
+                _ = Task.Run(AfterScan);
                 break;
         }
     }
@@ -318,6 +391,11 @@ public sealed class Supervisor : IDisposable
             {
                 _restarts = 0;
             }
+            // Wi-Fi down for a while: look for a known network to join.
+            if (_cfg.Mode == NetMode.Concurrent && State == RadioState.On && !_userOff && _wifi != "connected" &&
+                !_scanBusy && DateTime.UtcNow - _wifiDownSince > TimeSpan.FromSeconds(20) &&
+                DateTime.UtcNow - _scanAt > TimeSpan.FromSeconds(30))
+                WifiScan();
             if (_cfg.Mode == NetMode.OnDemand && State == RadioState.On &&
                 DateTime.UtcNow - _lastUse > TimeSpan.FromSeconds(_cfg.IdleSeconds))
                 Stop("idle", giveBack: true);
@@ -342,6 +420,147 @@ public sealed class Supervisor : IDisposable
             if (now is not null && Card.TakenByProxy(now)) return;
             Thread.Sleep(100);
         }
+    }
+
+    /* ------------------------------------------------------- Wi-Fi management */
+
+    static readonly string[] Joinable = ["open", "wpa2-psk", "wpa2/3-psk"];
+
+    void RadioCommand(string line)
+    {
+        try
+        {
+            if (_radio is { HasExited: false } r)
+            {
+                r.StandardInput.WriteLine(line);
+                r.StandardInput.Flush();
+            }
+        }
+        catch (Exception) { }
+    }
+
+    /// <summary>Refreshes the list; `ssid` makes it a directed scan (hidden networks).</summary>
+    public void WifiScan(string? ssid = null)
+    {
+        if (State != RadioState.On) return;
+        lock (_lock)
+        {
+            _scanPending = [];
+            _scanBusy = true;
+        }
+        RadioCommand(string.IsNullOrEmpty(ssid) ? "scan" : "scan " + Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(ssid)));
+        Publish();
+    }
+
+    /// <summary>Joins `ssid` (from the last scan). Returns "" or why not.</summary>
+    public string WifiConnect(string ssid, string? password, bool? autoConnect, bool hidden)
+    {
+        JsonObject? target;
+        lock (_lock) target = _scan.FirstOrDefault(n => (string?)n["ssid"] == ssid);
+        if (target is null)
+        {
+            if (!hidden && _scanBusy) return "still scanning; try again in a moment";
+            // Not in the list (hidden, or out of the last scan): look for it by name first.
+            lock (_lock) _pendingConnect = (ssid, password, autoConnect);
+            WifiScan(ssid);
+            return "";
+        }
+        var security = (string?)target["security"] ?? "";
+        if (!Joinable.Contains(security))
+            return security switch
+            {
+                "wpa3-sae" => "WPA3-only networks are not supported yet (WPA2/WPA3 mixed works)",
+                "802.1x" => "enterprise (802.1X) networks are not supported yet",
+                "wep" => "WEP networks are not supported",
+                _ => "this network's security is not supported",
+            };
+        var open = security == "open";
+        string? pass = null, psk = null;
+        if (!open)
+        {
+            if (!string.IsNullOrEmpty(password))
+            {
+                if (password.Length == 64 && password.All(Uri.IsHexDigit)) psk = password;
+                else if (password.Length is >= 8 and <= 63) pass = password;
+                else return "the password must be 8 to 63 characters";
+            }
+            else if (_known.Find(ssid) is { HasKey: true } k)
+            {
+                pass = k.Passphrase;
+                psk = k.PskHex;
+            }
+            else return "password needed";
+        }
+        _known.Remember(ssid, pass, psk, open, autoConnect);
+        var net = new Wlan.Network(ssid, (string?)target["bssid"] ?? "", (int?)target["channel"] ?? 0, security, pass, psk, open);
+        lock (_lock)
+        {
+            _net = net;
+            _userChose = true;
+            _userOff = false;
+            _wifiError = "";
+            _staSsid = ssid;
+        }
+        Say($"Wi-Fi: joining \"{ssid}\" (chosen in nekodrop)");
+        _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        return "";
+    }
+
+    public void WifiDisconnect()
+    {
+        lock (_lock)
+        {
+            _userOff = true;
+            _userChose = false;
+            _net = null;
+            _staSsid = "";
+        }
+        Say("Wi-Fi: disconnected by the user");
+        _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+    }
+
+    public void WifiForget(string ssid)
+    {
+        _known.Forget(ssid);
+        if (ssid == _staSsid) WifiDisconnect();
+        else Publish();
+    }
+
+    public void WifiAuto(string ssid, bool on)
+    {
+        _known.SetAutoConnect(ssid, on);
+        Publish();
+    }
+
+    /// <summary>After a scan: a pending connect by name, or auto-connect when Wi-Fi is down.</summary>
+    void AfterScan()
+    {
+        (string Ssid, string? Password, bool? Auto)? pending;
+        lock (_lock)
+        {
+            pending = _pendingConnect;
+            _pendingConnect = null;
+        }
+        if (pending is { } pc)
+        {
+            bool found;
+            lock (_lock) found = _scan.Any(n => (string?)n["ssid"] == pc.Ssid);
+            var why = found ? WifiConnect(pc.Ssid, pc.Password, pc.Auto, false) : $"\"{pc.Ssid}\" was not found";
+            if (why != "") lock (_lock) _wifiError = why;
+            Publish();
+            return;
+        }
+        if (_userOff || _cfg.Mode != NetMode.Concurrent || _wifi == "connected") return;
+        if (DateTime.UtcNow - _wifiDownSince < TimeSpan.FromSeconds(20)) return;
+        JsonObject? best;
+        lock (_lock)
+            best = _scan.Where(n => Joinable.Contains((string?)n["security"] ?? "") &&
+                                    _known.Find((string?)n["ssid"] ?? "") is { HasKey: true, AutoConnect: true })
+                        .OrderByDescending(n => (int?)n["dbm"] ?? -127).FirstOrDefault();
+        if (best is null) return;
+        var ssid = (string?)best["ssid"] ?? "";
+        Say($"Wi-Fi: auto-connecting to \"{ssid}\"");
+        WifiConnect(ssid, null, null, false);
     }
 
     /// <summary>The card runs nekodrop's kernel Wi-Fi driver (nekodrop-wlan.sys).</summary>
@@ -372,6 +591,7 @@ public sealed class Supervisor : IDisposable
             CreateNoWindow = true,
             RedirectStandardError = true,
             RedirectStandardOutput = true,
+            RedirectStandardInput = true,
             WorkingDirectory = Path.GetDirectoryName(exe)!,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);

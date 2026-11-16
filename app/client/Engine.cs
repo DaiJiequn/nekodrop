@@ -58,6 +58,11 @@ public sealed class Engine : IDisposable
             return false;
         }
         Directory.CreateDirectory(s.SaveFolder);
+        if (s.ServiceId.Length != 12)
+        {
+            s.ServiceId = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
+            s.Save();
+        }
         var psi = new ProcessStartInfo(python)
         {
             UseShellExecute = false,
@@ -80,6 +85,7 @@ public sealed class Engine : IDisposable
         var openssl = Path.Combine(Root, "openssl");
         if (Directory.Exists(openssl)) psi.Environment["PATH"] = openssl + ";" + Environment.GetEnvironmentVariable("PATH");
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
+        psi.Environment["NEKODROP_SERVICE_ID"] = s.ServiceId; /* one device on the iPhone across restarts */
         try { _process = Process.Start(psi); }
         catch (Exception e) { error = e.Message; return false; }
         if (_process is null) { error = "the engine did not start"; return false; }

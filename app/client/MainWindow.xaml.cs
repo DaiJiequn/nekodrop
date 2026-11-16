@@ -77,6 +77,7 @@ public partial class MainWindow : Window
     void Accept_Click(object sender, RoutedEventArgs e) => A.Answer((string)((Button)sender).Tag, true);
     void Decline_Click(object sender, RoutedEventArgs e) => A.Answer((string)((Button)sender).Tag, false);
     void Settings_Click(object sender, RoutedEventArgs e) => new SettingsWindow { Owner = this }.Show();
+    void Wifi_Click(object sender, RoutedEventArgs e) => A.ShowWifi();
 
     void OpenFolder_Click(object sender, RoutedEventArgs e)
     {

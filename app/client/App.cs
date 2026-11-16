@@ -74,6 +74,9 @@ public sealed class App : Application
             if ((string?)Service.Last?["mode"] == "ondemand") Service.Wake();
         });
         _wake.Start();
+        var watchdog = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        watchdog.Tick += (_, _) => EngineWatchdog();
+        watchdog.Start();
         _ = Task.Run(ListenForArgs);
         HandleArgs(_startArgs, fromStart: true);
     }
@@ -82,7 +85,44 @@ public sealed class App : Application
     {
         if (Engine.Running) return;
         try { Identity.Ensure(); } catch (Exception e) { Model.Detail = L.T("err.identity") + e.Message; }
+        _engineIf = AwdlIndex();
         if (!Engine.Start(Settings, out var error)) Model.Detail = L.T("err.engine") + error;
+    }
+
+    int _engineIf = -1;
+
+    /// <summary>awdl0's interface index (-1 when absent): a new one means awdld re-created it.</summary>
+    static int AwdlIndex()
+    {
+        try
+        {
+            foreach (var n in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                if (n.Name == "awdl0" && n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                    return n.GetIPProperties().GetIPv6Properties().Index;
+        }
+        catch (Exception) { }
+        return -1;
+    }
+
+    /// <summary>
+    /// Keeps AirDrop discoverable without anyone restarting anything: the engine
+    /// comes back if it exits, and starts over when awdl0 is re-created (a radio
+    /// restart gives it a new interface the old sockets do not belong to).
+    /// </summary>
+    void EngineWatchdog()
+    {
+        if (!Settings.Discoverable || (string?)Service.Last?["radio"] != "on") return;
+        var now = AwdlIndex();
+        if (now < 0) return; /* no awdl0 yet: wait for awdld */
+        if (!Engine.Running)
+        {
+            StartEngine();
+        }
+        else if (now != _engineIf)
+        {
+            Engine.Dispose();
+            StartEngine();
+        }
     }
 
     void CreateTray()
@@ -118,6 +158,7 @@ public sealed class App : Application
             foreach (Forms.ToolStripMenuItem i in mode.DropDownItems) i.Checked = (string?)i.Tag == current;
         };
         menu.Items.Add(mode);
+        menu.Items.Add(L.T("wifi.tray"), null, (_, _) => ShowWifi());
         menu.Items.Add(L.T("tray.settings"), null, (_, _) => new SettingsWindow().Show());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(L.T("tray.quit"), null, (_, _) => Quit());
@@ -342,9 +383,56 @@ public sealed class App : Application
         Engine.SendFiles(id, d.Id, Model.Files.ToList());
     }
 
+    string _lastRadio = "", _lastWifi = "";
+    WifiWindow? _wifiWindow;
+
+    public void ShowWifi()
+    {
+        if (_wifiWindow is null)
+        {
+            _wifiWindow = new WifiWindow();
+            _wifiWindow.Closed += (_, _) => _wifiWindow = null;
+        }
+        _wifiWindow.Show();
+        _wifiWindow.Activate();
+    }
+
+    /// <summary>
+    /// Networks that want a web sign-in first (hotels, campuses): after joining,
+    /// ask Windows' connectivity probe; anything but its answer means a portal,
+    /// which opens in the browser.
+    /// </summary>
+    async Task CheckPortal(string ssid)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(6)); /* DHCP on the nekodrop adapter */
+        try
+        {
+            using var http = new System.Net.Http.HttpClient(new System.Net.Http.HttpClientHandler { AllowAutoRedirect = false })
+                { Timeout = TimeSpan.FromSeconds(8) };
+            var r = await http.GetAsync("http://www.msftconnecttest.com/connecttest.txt");
+            var body = r.IsSuccessStatusCode ? await r.Content.ReadAsStringAsync() : "";
+            if (body.Trim() == "Microsoft Connect Test") return;
+            Process.Start(new ProcessStartInfo("http://www.msftconnecttest.com/redirect") { UseShellExecute = true });
+            Shell.DoneToast("portal", L.F("wifi.portal.title", ssid), L.T("wifi.portal.body"), null);
+        }
+        catch (Exception) { /* no answer at all: not a portal question */ }
+    }
+
+
     void OnServiceState(JsonObject o)
     {
         var radio = (string?)o["radio"];
+        // A radio (re)start recreates awdl0: the engine's sockets belong to the old
+        // interface, so it starts over on the new one.
+        if (radio == "on" && _lastRadio != "on" && _lastRadio != "" && Settings.Discoverable)
+        {
+            Engine.Dispose();
+            StartEngine();
+        }
+        _lastRadio = radio ?? "";
+        var wifiNow = (string?)o["wifi"] ?? "";
+        if (wifiNow == "connected" && _lastWifi != "connected") _ = CheckPortal((string?)o["ssid"] ?? "");
+        _lastWifi = wifiNow;
         var channel = (int?)o["channel"] ?? 0;
         var wifi = (string?)o["wifi"] ?? "";
         var mode = (string?)o["mode"];

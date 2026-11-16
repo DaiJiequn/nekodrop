@@ -93,6 +93,74 @@ public static class Wlan
         finally { WlanCloseHandle(h, IntPtr.Zero); }
     }
 
+    public sealed record SavedProfile(string Ssid, string? Passphrase, string? PskHex, bool Open);
+
+    /// <summary>
+    /// Every saved Wi-Fi profile Windows has that nekodrop's station can use
+    /// (open or personal WPA/WPA2/WPA3 with a readable key), as SYSTEM.
+    /// </summary>
+    public static List<SavedProfile> SavedProfiles()
+    {
+        var result = new List<SavedProfile>();
+        if (WlanOpenHandle(2, IntPtr.Zero, out _, out var h) != 0) return result;
+        try
+        {
+            if (WlanEnumInterfaces(h, IntPtr.Zero, out var listPtr) != 0) return result;
+            var guids = new List<Guid>();
+            try
+            {
+                int count = Marshal.ReadInt32(listPtr);
+                for (int i = 0; i < count; i++) guids.Add(Marshal.PtrToStructure<Guid>(listPtr + 8 + i * 532));
+            }
+            finally { WlanFreeMemory(listPtr); }
+            foreach (var g in guids)
+            {
+                var guid = g;
+                if (WlanGetProfileList(h, ref guid, IntPtr.Zero, out var profiles) != 0) continue;
+                var names = new List<string>();
+                try
+                {
+                    int n = Marshal.ReadInt32(profiles);
+                    for (int i = 0; i < n; i++) names.Add(Marshal.PtrToStringUni(profiles + 8 + i * 516, 256).TrimEnd('\0'));
+                }
+                finally { WlanFreeMemory(profiles); }
+                foreach (var name in names)
+                {
+                    uint flags = 4; // WLAN_PROFILE_GET_PLAINTEXT_KEY
+                    if (WlanGetProfile(h, ref guid, name, IntPtr.Zero, out var xmlPtr, ref flags, out _) != 0) continue;
+                    string xml;
+                    try { xml = Marshal.PtrToStringUni(xmlPtr) ?? ""; }
+                    finally { WlanFreeMemory(xmlPtr); }
+                    if (ParseProfile(xml) is { } p && result.All(r => r.Ssid != p.Ssid)) result.Add(p);
+                }
+            }
+        }
+        finally { WlanCloseHandle(h, IntPtr.Zero); }
+        return result;
+    }
+
+    static SavedProfile? ParseProfile(string xml)
+    {
+        try
+        {
+            var doc = XDocument.Parse(xml);
+            XNamespace ns = doc.Root?.Name.Namespace ?? "";
+            var ssid = doc.Descendants(ns + "SSID").FirstOrDefault()?.Element(ns + "name")?.Value;
+            var auth = doc.Descendants(ns + "authentication").FirstOrDefault()?.Value ?? "";
+            if (string.IsNullOrEmpty(ssid)) return null;
+            if (auth == "open" && doc.Descendants(ns + "encryption").FirstOrDefault()?.Value == "none")
+                return new SavedProfile(ssid, null, null, true);
+            if (auth is not ("WPA2PSK" or "WPAPSK" or "WPA3SAE")) return null; // enterprise: not yet
+            var shared = doc.Descendants(ns + "sharedKey").FirstOrDefault();
+            var key = shared?.Element(ns + "keyMaterial")?.Value;
+            if (key is null || shared?.Element(ns + "protected")?.Value == "true") return null;
+            return shared?.Element(ns + "keyType")?.Value == "networkKey" && key.Length == 64
+                ? new SavedProfile(ssid, null, key, false)
+                : new SavedProfile(ssid, key, null, false);
+        }
+        catch (Exception) { return null; }
+    }
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     struct WLAN_CONNECTION_PARAMETERS
     {

@@ -10,6 +10,13 @@ try {
   Start-Sleep 2
   Copy-Item "$repo\build\stage\radio\nekodrop-radio.exe" "$Target\radio\" -Force
   Copy-Item "$repo\build\stage\NekoDropService.exe" "$Target\" -Force
+  # The client and the AirDrop engine too; the user's client is started again afterwards.
+  Get-Process nekodrop -ErrorAction SilentlyContinue | Stop-Process -Force
+  Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.ExecutablePath -like "$Target*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  Start-Sleep 1
+  Copy-Item "$repo\build\stage\nekodrop.exe" "$Target\" -Force
+  Copy-Item "$repo\build\stage\airdrop\*.py" "$Target\airdrop\" -Force
   Set-Service NekoDropService -StartupType Automatic
   Start-Service NekoDropService
   Get-Item "$Target\radio\nekodrop-radio.exe", "$Target\NekoDropService.exe" | Select-Object Name, LastWriteTime

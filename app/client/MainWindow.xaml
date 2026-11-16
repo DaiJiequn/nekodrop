@@ -180,6 +180,8 @@
           <Hyperlink Click="OpenFolder_Click" Foreground="{DynamicResource AccentText}"><Run Text="{local:T main.openFolder}"/></Hyperlink>
           <Run Text="   "/>
           <Hyperlink Click="Settings_Click" Foreground="{DynamicResource AccentText}"><Run Text="{local:T main.settings}"/></Hyperlink>
+          <Run Text="   "/>
+          <Hyperlink Click="Wifi_Click" Foreground="{DynamicResource AccentText}"><Run Text="{local:T wifi.tray}"/></Hyperlink>
         </TextBlock>
       </StackPanel>
     </ScrollViewer>

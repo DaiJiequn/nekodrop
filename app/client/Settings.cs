@@ -19,6 +19,8 @@ public sealed class Settings
     public bool Discoverable { get; set; } = true;
     /// <summary>"auto" (follow Windows), "zh" or "en".</summary>
     public string Language { get; set; } = "auto";
+    /// <summary>The AirDrop receiver's mDNS instance name, kept so engine restarts stay one device.</summary>
+    public string ServiceId { get; set; } = "";
 
     static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "nekodrop");
     static string FilePath => Path.Combine(Folder, "settings.json");

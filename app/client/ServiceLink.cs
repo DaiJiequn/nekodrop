@@ -15,6 +15,8 @@ public sealed class ServiceLink : IDisposable
     /// <summary>Raised on the thread pool for every "state" event.</summary>
     public event Action<JsonObject>? State;
     public event Action<bool>? Connected;
+    /// <summary>Answers to commands (e.g. wifi-connect) and other non-state events.</summary>
+    public event Action<JsonObject>? Reply;
     public JsonObject? Last { get; private set; }
 
     public void Start() => _ = Task.Run(Loop);
@@ -34,11 +36,13 @@ public sealed class ServiceLink : IDisposable
                 {
                     var line = await reader.ReadLineAsync(_cts.Token);
                     if (line is null) break;
-                    if (JsonNode.Parse(line) is JsonObject o && (string?)o["event"] == "state")
+                    if (JsonNode.Parse(line) is not JsonObject o) continue;
+                    if ((string?)o["event"] == "state")
                     {
                         Last = o;
                         State?.Invoke(o);
                     }
+                    else Reply?.Invoke(o);
                 }
             }
             catch (OperationCanceledException) { break; }
