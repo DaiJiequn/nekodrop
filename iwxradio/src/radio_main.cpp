@@ -266,7 +266,18 @@ int main(int argc, char **argv) {
       return;
     }
     std::vector<uint8_t> message;
+    uint8_t dev_address[6] = {};
+    uint64_t rx_all = 0, rx_awdl = 0, rx_to_us = 0;
+    int8_t awdl_dbm = -127;
     dev.set_rx_handler([&](const RxFrame &f) {
+      rx_all++;
+      /* AWDL action frame: category 127 (vendor), Apple OUI 00:17:f2, type 8. */
+      if (f.len >= 30 && f.data[0] == 0xd0 && f.data[24] == 0x7f && f.data[25] == 0x00 &&
+          f.data[26] == 0x17 && f.data[27] == 0xf2 && f.data[28] == 0x08) {
+        rx_awdl++;
+        awdl_dbm = f.dbm;
+      }
+      if (f.len >= 10 && std::memcmp(f.data + 4, dev_address, 6) == 0) rx_to_us++;
       if (!client_connected || f.len < 24) return;
       if (have_filter) {
         std::lock_guard<std::mutex> l(filter_mutex);
@@ -313,6 +324,7 @@ int main(int argc, char **argv) {
           else if (unicast && data) rate = opt.data_rate;
           dev.transmit(frame, len, rate);
         } else if (req.type == RADIO_LINK_SET_ADDRESS && req.payload.size() == 6) {
+          std::memcpy(dev_address, req.payload.data(), 6);
           dev.set_address(req.payload.data());
         } else if (req.type == RADIO_LINK_SET_BSSID_FILTER && req.payload.size() == 6) {
           std::lock_guard<std::mutex> l(filter_mutex);
@@ -332,9 +344,17 @@ int main(int argc, char **argv) {
         SwitchToThread();
       }
       const uint64_t now = GetTickCount64();
-      if (now - last_report >= 10000) {
+      static uint64_t last_health = 0;
+      if (now - last_health >= 1000) {
+        last_health = now;
+        dev.check_health();
+      }
+      if (now - last_report >= 5000) {
         last_report = now;
         const TxStats &s = dev.tx_stats();
+        log_line("rx: " + std::to_string(rx_all) + " frames, " + std::to_string(rx_awdl) +
+                 " AWDL action frames (last " + std::to_string(awdl_dbm) + " dBm), " +
+                 std::to_string(rx_to_us) + " addressed to us");
         log_line("tx: " + std::to_string(s.submitted) + " submitted, " +
                  std::to_string(s.acked) + " done, " + std::to_string(s.failed) + " failed, " +
                  std::to_string(s.retries) + " retries, " + std::to_string(s.dropped_full) +

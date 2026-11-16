@@ -28,11 +28,17 @@
 namespace {
 
 /* struct ieee80211_frame is only used as a flexible array in the header. */
-constexpr unsigned kTxQueueSize = IWX_DEFAULT_QUEUE_SIZE; /* 256 */
+/* The 22000 firmware walks every TFD queue as 256 entries whatever size it is
+ * told: a 64-entry ring made it transmit the 192 "frames" of memory behind
+ * the ring at every wrap, and assert on one of them (0x4216). */
+constexpr unsigned kTxQueueSize = IWX_TFD_QUEUE_SIZE_MAX;
 constexpr unsigned kCmdPayloadInline =
     sizeof(((iwx_device_cmd *)nullptr)->data_wide);
 constexpr unsigned kTxPayloadSlot = 4096;
-constexpr size_t kDmaBlocks = 6; /* 12 MiB; firmware alone takes ~1.4 MiB */
+/* Pages locked while carving: enough that runs of 8 adjacent frames turn up
+ * for the firmware's 32 KiB sections; the rest are returned once carved. */
+constexpr size_t kDmaScanPages = 262144; /* 1 GiB, locked for well under a second */
+constexpr size_t kDmaMinPages = 8192;
 
 const uint8_t kNvmChannels[] = {
     1,   2,   3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,  36,  40,
@@ -229,7 +235,10 @@ bool IwxDevice::identify(std::string &error) {
 }
 
 bool IwxDevice::alloc_rings(std::string &error) {
-  if (!_dma.init(kDmaBlocks, error)) return false;
+  if (!_dma.init(kDmaScanPages, kDmaMinPages, error)) return false;
+  _log("DMA: " + std::to_string(_dma.pages_locked()) + " pages locked, longest physical run " +
+       std::to_string(_dma.longest_run()) + " pages, " + std::to_string(_dma.runs_of(8)) +
+       " runs of 8+ (the firmware needs about 20)");
 
   _ctxt_info = _dma.alloc(sizeof(iwx_context_info), 4096);
   /* Receive: free list (64-bit addresses with the buffer id in the low 12
@@ -244,7 +253,7 @@ bool IwxDevice::alloc_rings(std::string &error) {
   _rx_bufs.resize(IWX_RX_MQ_RING_COUNT);
   auto *free_list = reinterpret_cast<uint64_t *>(_rx_free.va);
   for (unsigned i = 0; i < IWX_RX_MQ_RING_COUNT; i++) {
-    _rx_bufs[i] = _dma.alloc(IWX_RBUF_SIZE, 4096);
+    _rx_bufs[i] = _dma.alloc_page();
     if (!_rx_bufs[i]) {
       error = "out of DMA memory for receive buffers";
       return false;
@@ -257,9 +266,19 @@ bool IwxDevice::alloc_rings(std::string &error) {
     ring.qid = qid;
     ring.desc = _dma.alloc(count * sizeof(iwx_tfh_tfd), 256);
     ring.bc_tbl = _dma.alloc(sizeof(iwx_agn_scd_bc_tbl), 1024);
-    ring.cmd = _dma.alloc(count * sizeof(iwx_device_cmd), IWX_FIRST_TB_SIZE_ALIGN);
-    if (payload) ring.payload = _dma.alloc(count * payload, 4096);
-    return ring.desc && ring.bc_tbl && ring.cmd && (!payload || ring.payload);
+    bool ok = ring.desc && ring.bc_tbl;
+    if (payload) {
+      /* Data ring: a page per slot for the TX command and one for the
+       * payload, so only the 64 KiB of descriptors need adjacent frames. */
+      ring.payload.resize(count);
+      ring.cmd_slot.resize(count);
+      for (auto &slot : ring.payload) ok = ok && (slot = _dma.alloc_page());
+      for (auto &slot : ring.cmd_slot) ok = ok && (slot = _dma.alloc_page());
+    } else {
+      ring.cmd = _dma.alloc(count * sizeof(iwx_device_cmd), IWX_FIRST_TB_SIZE_ALIGN);
+      ok = ok && ring.cmd;
+    }
+    return ok;
   };
   if (!make_ring(_cmdq, IWX_CMD_QUEUE_SIZE, IWX_DQA_CMD_QUEUE, 0) ||
       !make_ring(_dataq, kTxQueueSize, 0, kTxPayloadSlot)) {
@@ -269,7 +288,7 @@ bool IwxDevice::alloc_rings(std::string &error) {
   _cmd_slots.resize(IWX_CMD_QUEUE_SIZE);
   _cmd_big.resize(IWX_CMD_QUEUE_SIZE);
   for (auto &big : _cmd_big) {
-    big = _dma.alloc(4096, 64);
+    big = _dma.alloc_page();
     if (!big) {
       error = "out of DMA memory for command buffers";
       return false;
@@ -491,6 +510,8 @@ bool IwxDevice::load_firmware(std::string &error) {
     if (!place(secs[lmac + 1 + i], ci->dram.umac_img[i])) goto nomem;
   for (size_t i = 0; i < paging; i++)
     if (!place(secs[lmac + umac + 2 + i], ci->dram.virtual_img[i])) goto nomem;
+  _dma.trim();
+  _log("DMA: " + std::to_string(_dma.pages_used()) + " pages in use, the rest returned");
   _log("firmware " + _fw.version + ": " + std::to_string(lmac) + " LMAC, " +
        std::to_string(umac) + " UMAC, " + std::to_string(paging) + " paging sections");
 
@@ -777,7 +798,7 @@ int IwxDevice::send_cmd(uint32_t id, const void *data, size_t len, bool want_res
   slot.want_resp = want_resp;
   slot.resp.clear();
   ring.queued++;
-  ring.cur = (ring.cur + 1) % ring.count;
+  ring.cur = (ring.cur + 1) % IWX_TFD_QUEUE_SIZE_MAX; /* the pointer wraps at 256, not at the ring */
   std::atomic_thread_fence(std::memory_order_seq_cst);
   wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
 
@@ -1184,8 +1205,8 @@ bool IwxDevice::transmit(const uint8_t *frame, size_t len, const TxRate &rate) {
     return false;
   }
   const unsigned idx = ring.cur & (ring.count - 1);
-  auto *cmd = reinterpret_cast<iwx_device_cmd *>(ring.cmd.va) + idx;
-  const uint64_t cmd_pa = ring.cmd.pa + uint64_t(idx) * sizeof(iwx_device_cmd);
+  auto *cmd = reinterpret_cast<iwx_device_cmd *>(ring.cmd_slot[idx].va);
+  const uint64_t cmd_pa = ring.cmd_slot[idx].pa;
   cmd->hdr.cmd = IWX_TX_CMD;
   cmd->hdr.group_id = 0;
   cmd->hdr.qid = static_cast<uint8_t>(ring.qid);
@@ -1227,8 +1248,8 @@ bool IwxDevice::transmit(const uint8_t *frame, size_t len, const TxRate &rate) {
   std::memcpy(reinterpret_cast<uint8_t *>(tx) + sizeof(*tx), frame, hdrlen);
 
   const size_t payload_len = len - hdrlen;
-  uint8_t *payload = ring.payload.va + size_t(idx) * kTxPayloadSlot;
-  const uint64_t payload_pa = ring.payload.pa + uint64_t(idx) * kTxPayloadSlot;
+  uint8_t *payload = ring.payload[idx].va;
+  const uint64_t payload_pa = ring.payload[idx].pa;
   if (payload_len) std::memcpy(payload, frame + hdrlen, payload_len);
 
   auto *desc = reinterpret_cast<iwx_tfh_tfd *>(ring.desc.va) + idx;
@@ -1254,6 +1275,8 @@ bool IwxDevice::transmit(const uint8_t *frame, size_t len, const TxRate &rate) {
   auto *bc = reinterpret_cast<iwx_agn_scd_bc_tbl *>(ring.bc_tbl.va);
   bc->tfd_offset[idx] = htole16(static_cast<uint16_t>(howmany(len, 4) | (chunks << 12)));
 
+  _tx_hist[_tx_hist_at++ % 8] = {static_cast<uint16_t>(len), static_cast<uint8_t>(hdrlen),
+                                 frame[0], frame[1], frame[4], rnf, static_cast<uint8_t>(idx)};
   ring.cur = (ring.cur + 1) % ring.count;
   ring.queued++;
   std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -1303,7 +1326,7 @@ void IwxDevice::handle_rb(unsigned index) {
   }
   /* Clear the first packet header so a stale buffer never parses twice, and
    * hand the same buffer back at the same slot of the free list. */
-  std::memset(_rx_bufs[index].va, 0, 16);
+  std::memset(_rx_bufs[index].va, 0, IWX_RBUF_SIZE); /* stale packets must never parse again */
   auto *free_list = reinterpret_cast<uint64_t *>(_rx_free.va);
   free_list[index] = htole64(_rx_bufs[index].pa | (index & 0x0fff));
 }
@@ -1431,15 +1454,91 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len) {
   }
 }
 
+bool IwxDevice::read_mem(uint32_t addr, uint32_t *out, unsigned dwords) {
+  if (!nic_lock()) return false;
+  std::vector<RegOp> ops;
+  ops.push_back({IWX_HBUS_TARG_MEM_RADDR, addr, 1});
+  for (unsigned i = 0; i < dwords; i++) ops.push_back({IWX_HBUS_TARG_MEM_RDAT, 0, 0});
+  const bool ok = _proxy.batch(ops);
+  nic_unlock();
+  if (!ok) return false;
+  for (unsigned i = 0; i < dwords; i++) out[i] = ops[i + 1].value;
+  return true;
+}
+
+namespace {
+const char *error_name(uint32_t id) {
+  static const struct { uint32_t num; const char *name; } names[] = {
+      {0x34, "NMI_INTERRUPT_WDG"}, {0x35, "SYSASSERT"}, {0x37, "UCODE_VERSION_MISMATCH"},
+      {0x38, "BAD_COMMAND"}, {0x39, "BAD_COMMAND"}, {0x3C, "NMI_INTERRUPT_DATA_ACTION_PT"},
+      {0x3D, "FATAL_ERROR"}, {0x46, "NMI_TRM_HW_ERR"}, {0x4C, "NMI_INTERRUPT_TRM"},
+      {0x54, "NMI_INTERRUPT_BREAK_POINT"}, {0x5C, "NMI_INTERRUPT_WDG_RXF_FULL"},
+      {0x64, "NMI_INTERRUPT_WDG_NO_RBD_RXF_FULL"}, {0x66, "NMI_INTERRUPT_HOST"},
+      {0x70, "NMI_INTERRUPT_LMAC_FATAL"}, {0x71, "NMI_INTERRUPT_UMAC_FATAL"},
+      {0x73, "NMI_INTERRUPT_OTHER_LMAC_FATAL"}, {0x7C, "NMI_INTERRUPT_ACTION_PT"},
+      {0x84, "NMI_INTERRUPT_UNKNOWN"}, {0x86, "NMI_INTERRUPT_INST_ACTION_PT"}};
+  for (const auto &n : names)
+    if (n.num == (id & ~0xf0000000u)) return n.name;
+  return "ADVANCED_SYSASSERT";
+}
+} // namespace
+
+void IwxDevice::check_health() {
+  if (!_open || _fw_error) return;
+  const uint32_t cause = rd(IWX_CSR_INT);
+  if (cause == 0xffffffffu) {
+    _log("the card stopped answering (CSR_INT reads all ones)");
+    _fw_error = true;
+    return;
+  }
+  if (!(cause & (IWX_CSR_INT_BIT_SW_ERR | IWX_CSR_INT_BIT_HW_ERR))) return;
+  _log("firmware/DMA error: CSR_INT " + hex(cause) + ", FH_INT_STATUS " +
+       hex(rd(IWX_CSR_FH_INT_STATUS)));
+  _fw_error = true;
+  dump_error_tables();
+}
+
 void IwxDevice::dump_error_tables() {
-  /* Error tables live in device SRAM; reading them needs the indirect memory
-   * window. Only the program counters are reported, enough to tell a
-   * firmware assert from a host-side mistake. */
   if (!_proxy.is_open() || _proxy.failed()) return;
+  const auto *stat = reinterpret_cast<volatile iwx_rb_status *>(_rx_stat.va);
+  if (stat)
+    _log("rx ring: card closed " + std::to_string(le16toh(stat->closed_rb_num) & 0xfff) +
+         ", host at " + std::to_string(_rx_cur) + "; tx queue " + std::to_string(_dataq.qid) +
+         " cur " + std::to_string(_dataq.cur) + " tail " + std::to_string(_dataq.tail) +
+         " queued " + std::to_string(_dataq.queued));
+  for (unsigned i = 0; i < 8; i++) {
+    const TxHist &h = _tx_hist[(_tx_hist_at + i) % 8];
+    if (!h.len) continue;
+    char b[128];
+    std::snprintf(b, sizeof(b), "tx history: slot %u len %u hdr %u fc %02x %02x addr1[0] %02x rate 0x%08x",
+                  h.slot, h.len, h.hdrlen, h.fc0, h.fc1, h.a1, h.rnf);
+    _log(b);
+  }
+  if (_lmac_error_table >= 0x400000) {
+    uint32_t t[38] = {};
+    if (read_mem(_lmac_error_table, t, 38) && t[0]) {
+      _log("LMAC error " + hex(t[1]) + " " + error_name(t[1]) + ": blink2 " + hex(t[4]) +
+           " ilink1 " + hex(t[5]) + " ilink2 " + hex(t[6]) + " data1 " + hex(t[7]) +
+           " data2 " + hex(t[8]) + " data3 " + hex(t[9]) + " hcmd " + hex(t[23]) +
+           " last_cmd " + hex(t[29]));
+    } else {
+      _log("LMAC error log empty or unreadable (at " + hex(_lmac_error_table) + ")");
+    }
+  }
+  if (_umac_error_table >= 0x400000) {
+    uint32_t t[15] = {};
+    if (read_mem(_umac_error_table, t, 15) && t[0]) {
+      _log("UMAC error " + hex(t[1]) + " " + error_name(t[1]) + ": blink1 " + hex(t[2]) +
+           " blink2 " + hex(t[3]) + " ilink1 " + hex(t[4]) + " ilink2 " + hex(t[5]) +
+           " data1 " + hex(t[6]) + " data2 " + hex(t[7]) + " data3 " + hex(t[8]) +
+           " cmd_header " + hex(t[13]));
+    } else {
+      _log("UMAC error log empty or unreadable (at " + hex(_umac_error_table) + ")");
+    }
+  }
   if (nic_lock()) {
     _log("UMAC PC " + hex(read_prph(IWX_UREG_UMAC_CURRENT_PC)) + ", LMAC PC " +
-         hex(read_prph(IWX_UREG_LMAC1_CURRENT_PC)) + ", LMAC error table " +
-         hex(_lmac_error_table) + ", UMAC error table " + hex(_umac_error_table));
+         hex(read_prph(IWX_UREG_LMAC1_CURRENT_PC)));
     nic_unlock();
   }
 }

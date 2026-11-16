@@ -2,14 +2,18 @@
 /* Memory the card reads and writes by DMA, from a user-mode process.
  *
  * UMDF gives a user-mode driver register access but no DMA. Following
- * winawdl's design, the process allocates locked 2 MiB physical blocks with
- * the documented AWE call AllocateUserPhysicalPages2 (SeLockMemoryPrivilege,
- * held by an elevated administrator) and uses their physical addresses as bus
- * addresses. winawdl measured that this works with Kernel DMA Protection on.
+ * winawdl's design, the process locks physical pages with the documented AWE
+ * call AllocateUserPhysicalPages (SeLockMemoryPrivilege) and uses their
+ * physical addresses as bus addresses; winawdl measured that this works with
+ * Kernel DMA Protection on.
  *
- * Every buffer handed out lies inside one block, so it is physically
- * contiguous. The Intel 22000 family takes 64-bit addresses everywhere, so
- * unlike the Realtek case no block has to lie below 4 GiB. */
+ * winawdl asked for 2 MiB large pages, which a long-running PC may have none
+ * of. This pool takes ordinary 4 KiB pages instead: a large batch, sorted by
+ * physical address and mapped in that order, so physically adjacent frames
+ * are adjacent in the view too. A buffer larger than a page is carved from a
+ * run of adjacent frames (the largest this driver needs is 32 KiB, 8 pages);
+ * page-sized buffers take any page; pages never handed out are returned by
+ * trim(). The Intel 22000 family takes 64-bit addresses, so any frame will do. */
 #pragma once
 
 #include <cstddef>
@@ -31,21 +35,36 @@ public:
   DmaPool(const DmaPool &) = delete;
   DmaPool &operator=(const DmaPool &) = delete;
 
-  static constexpr size_t kBlockBytes = size_t{2} << 20;
+  static constexpr size_t kPageBytes = 4096;
 
-  /* Takes `blocks` locked 2 MiB blocks. */
-  bool init(size_t blocks, std::string &error);
-  /* A zeroed buffer of `size` bytes aligned to `align` (a power of two, at
-   * most 4096 apart from whole blocks). Never freed individually: the pool
-   * goes as a whole, after the card's DMA is stopped. */
+  /* Locks up to `pages` 4 KiB pages; fails below `min_pages`. */
+  bool init(size_t pages, size_t min_pages, std::string &error);
+  /* A zeroed, physically contiguous buffer aligned to `align` (at most 4096).
+   * Never freed individually: the pool goes as a whole after DMA stops. */
   DmaBuf alloc(size_t size, size_t align = 256);
-  size_t bytes_free() const;
+  /* One zeroed 4 KiB page. */
+  DmaBuf alloc_page();
+  /* Returns every page not handed out to Windows. */
+  void trim();
+  /* Longest run of adjacent frames, in pages (a diagnostic). */
+  size_t longest_run() const;
+  /* How many disjoint runs of `n` adjacent frames there are. */
+  size_t runs_of(size_t n) const;
+  size_t pages_locked() const { return _frames.size(); }
+  size_t pages_used() const { return _used_pages; }
 
 private:
+  DmaBuf page_at(size_t index);
+
   uint8_t *_view = nullptr;
-  std::vector<uintptr_t> _frames; /* first 4 KiB frame of each block */
-  size_t _block = 0;              /* block being carved */
-  size_t _used = 0;               /* bytes used in that block */
+  std::vector<uintptr_t> _frames; /* sorted; index i is mapped at _view + i * 4 KiB */
+  std::vector<bool> _taken;
+  size_t _cursor = 0;            /* frames below have been handed out or set aside */
+  size_t _back = 0;              /* single pages are taken downward from here */
+  std::vector<size_t> _spare;    /* set aside while looking for a run */
+  size_t _part = SIZE_MAX;       /* page being packed with small buffers */
+  size_t _part_used = 0;
+  size_t _used_pages = 0;
 };
 
 bool enable_lock_memory_privilege();

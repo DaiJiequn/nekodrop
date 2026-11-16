@@ -77,6 +77,9 @@ public:
   /* Handles whatever the card has delivered since the last call. Returns the
    * number of receive buffers processed. */
   int poll();
+  /* Looks for a firmware or DMA error (about one register read); on one,
+   * logs the firmware's error logs and marks the device unhealthy. */
+  void check_health();
   /* Stops DMA and resets the card. Safe to call twice. */
   void stop();
 
@@ -89,7 +92,9 @@ public:
 
 private:
   struct TxRing {
-    DmaBuf desc, bc_tbl, cmd, payload;
+    DmaBuf desc, bc_tbl, cmd;
+    std::vector<DmaBuf> payload; /* one 4 KiB page per slot */
+    std::vector<DmaBuf> cmd_slot; /* data ring: one page per slot for the TX command */
     unsigned count = 0, qid = 0, cur = 0, tail = 0, queued = 0;
   };
   struct CmdSlot {
@@ -150,6 +155,7 @@ private:
   void handle_mpdu(const uint8_t *payload, size_t len);
   void handle_tx_resp(const uint8_t *payload, size_t len);
   void dump_error_tables();
+  bool read_mem(uint32_t addr, uint32_t *out, unsigned dwords);
 
   Logger _log;
   RxHandler _on_rx;
@@ -188,4 +194,7 @@ private:
   unsigned _width = 20;
   std::array<uint8_t, 6> _address{};
   TxStats _tx_stats;
+  struct TxHist { uint16_t len; uint8_t hdrlen, fc0, fc1, a1; uint32_t rnf; uint8_t slot; };
+  TxHist _tx_hist[8] = {};
+  unsigned _tx_hist_at = 0;
 };
