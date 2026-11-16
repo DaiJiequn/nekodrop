@@ -38,6 +38,9 @@
 #include "iwx.h"
 #include "wifi_sta.h"
 #include "pipe_server.h"
+#include "kdev.h"
+
+#include <type_traits>
 #include "radio_link.h"
 
 namespace {
@@ -70,6 +73,9 @@ struct Options {
   /* Test mode: serve the pipe without touching the card, and report what the
    * client sends. Checks the radio link against awdld with no hardware. */
   bool no_card = false;
+  /* --kernel: the card runs nekodrop-wlan.sys (Windows keeps its Wi-Fi);
+   * AWDL goes through the driver's NekodropAwdl interface. */
+  bool kernel = false;
 };
 
 bool parse_rate(const std::string &s, TxRate &rate) {
@@ -110,6 +116,7 @@ bool parse_options(int argc, char **argv, Options &o) {
     } else if (a == "--data-rate") o.fixed_rate = parse_rate(value(), o.data_rate);
     else if (a == "--verbose") o.dev.verbose = true;
     else if (a == "--no-card") o.no_card = true;
+    else if (a == "--kernel") o.kernel = true;
     else if (a == "--sta-config") o.sta_config = value();
     else if (a == "--retries" || a == "--capture") value();
     else if (a == "--no-block-ack") o.no_block_ack = true;
@@ -267,7 +274,10 @@ int main(int argc, char **argv) {
       return;
     }
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
-    IwxDevice dev(log_line);
+    /* The same AWDL engine on either backend: the user-mode hardware layer,
+     * or the kernel driver's listener (--kernel). */
+    const auto run = [&](auto &dev) {
+    constexpr bool kOwnCard = std::is_same_v<std::decay_t<decltype(dev)>, IwxDevice>;
     std::string error;
     if (!dev.open(opt.dev, error)) {
       log_line("bring-up failed: " + error);
@@ -279,8 +289,12 @@ int main(int argc, char **argv) {
     StaConfig sta_cfg;
     if (!opt.sta_config.empty()) {
       std::string err;
-      if (sta_cfg.load(opt.sta_config, err)) sta = std::make_unique<WifiStation>(dev, log_line);
-      else log_line("station config: " + err);
+      if constexpr (kOwnCard) {
+        if (sta_cfg.load(opt.sta_config, err)) sta = std::make_unique<WifiStation>(dev, log_line);
+        else log_line("station config: " + err);
+      } else {
+        log_line("station config ignored: Windows runs the station on the kernel driver");
+      }
       /* The file holds the Wi-Fi password: gone once read. */
       DeleteFileA(opt.sta_config.c_str());
     }
@@ -612,6 +626,14 @@ int main(int argc, char **argv) {
     }
     if (!dev.healthy()) log_line("the card stopped answering or the firmware failed");
     dev.stop();
+    };
+    if (opt.kernel) {
+      KernelDevice kdev(log_line);
+      run(kdev);
+    } else {
+      IwxDevice idev(log_line);
+      run(idev);
+    }
     g_stop = true;
   });
 

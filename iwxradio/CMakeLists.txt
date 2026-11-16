@@ -17,7 +17,7 @@ else()
 endif()
 
 add_executable(winawdl_radio
-  src/radio_main.cpp src/iwx.cpp src/iwx_sta.cpp src/fw.cpp src/plat_win.cpp src/dma.cpp src/proxy.cpp
+  src/radio_main.cpp src/iwx.cpp src/iwx_sta.cpp src/fw.cpp src/plat_win.cpp src/kdev.cpp src/dma.cpp src/proxy.cpp
   src/crypto.cpp src/tap.cpp src/wifi_sta.cpp)
 target_compile_definitions(winawdl_radio PRIVATE ${IWX_DEFS})
 target_compile_options(winawdl_radio PRIVATE ${IWX_OPTS})
