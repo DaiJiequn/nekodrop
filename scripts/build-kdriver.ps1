@@ -37,14 +37,29 @@ $defs = '/D_AMD64_', '/D_WIN64', '/DAMD64', '/DNTDDI_VERSION=0x0A000010', '/D_WI
         '/DKMDF_VERSION_MAJOR=1', '/DKMDF_VERSION_MINOR=33',
         '/DNET_ADAPTER_CX_2_4', '/DNETADAPTER_VERSION_MAJOR=2', '/DNETADAPTER_VERSION_MINOR=4', '/DNET_VERSION_MAJOR=2', '/DNET_VERSION_MINOR=4',
         '/DWIFI_VERSION_MAJOR=1', '/DWIFI_VERSION_MINOR=2', '/DPOOL_NX_OPTIN=1', '/DPOOL_ZERO_DOWN_LEVEL_SUPPORT'
-$src = Get-ChildItem (Join-Path $repo 'kdriver') -Filter *.cpp | ForEach-Object FullName
-& $tools.Cl /nologo /c /kernel /GS- /Gy /Zp8 /W4 /WX /wd4324 /O2 /std:c++17 /EHs-c- /GR- /utf-8 /Zc:wchar_t- @defs `
-  /FIprecomp.h "/I$(Join-Path $repo 'kdriver')" "/Fo$out\" @src
+Get-ChildItem $out -Filter *.obj | Remove-Item
+$kdir = Join-Path $repo 'kdriver'
+$shared = Join-Path $repo 'iwxradio\src'
+$common = '/nologo', '/c', '/kernel', '/GS-', '/Gy', '/Zp8', '/W4', '/WX', '/wd4324', '/O2', '/std:c++17', '/EHs-c-',
+          '/GR-', '/utf-8', '/Zc:threadSafeInit-'
+# The WDF/WiFiCx glue: kernel headers only.
+$src = Get-ChildItem $kdir -Filter *.cpp | Where-Object Name -notmatch '^k(plat|proxy|dma|hal)\.cpp$' | ForEach-Object FullName
+& $tools.Cl @common /Zc:wchar_t- @defs /FIprecomp.h "/I$kdir" "/Fo$out\" @src
+if ($LASTEXITCODE -ne 0) { throw "compile failed ($LASTEXITCODE)" }
+# The hardware layer shared with the user-mode radio, with the C++ library
+# in kernel mode (no exceptions, no RTTI, non-paged allocation in kplat.cpp).
+$ucrt = Join-Path $kit "Include\$ver\ucrt"
+$env:INCLUDE = (@((Join-Path $msvc 'include'), $ucrt) + $inc) -join ';'
+$stl = '/DNEKO_KERNEL', '/D_HAS_EXCEPTIONS=0', '/D_HAS_STATIC_RTTI=0', '/D_ITERATOR_DEBUG_LEVEL=0',
+       '/D_USE_STD_VECTOR_ALGORITHMS=0', '/D_CRT_SECURE_NO_WARNINGS', '/D_NO_CRT_STDIO_INLINE', '/DNOMINMAX', '/wd4996', '/wd4244', '/wd4815', '/wd4267'
+$hw = @('iwx.cpp', 'iwx_sta.cpp', 'fw.cpp' | ForEach-Object { Join-Path $shared $_ }) +
+      @('kplat.cpp', 'kproxy.cpp', 'kdma.cpp', 'khal.cpp' | ForEach-Object { Join-Path $kdir $_ })
+& $tools.Cl @common @defs @stl "/I$kdir" "/I$shared" "/Fo$out\" @hw
 if ($LASTEXITCODE -ne 0) { throw "compile failed ($LASTEXITCODE)" }
 $objs = Get-ChildItem $out -Filter *.obj | ForEach-Object FullName
 $link = Join-Path (Split-Path $tools.Cl) 'link.exe'
 & $link /nologo /DRIVER /SUBSYSTEM:NATIVE /ENTRY:FxDriverEntry /NODEFAULTLIB "/OUT:$out\nekodrop-wlan.sys" @objs `
   ntoskrnl.lib hal.lib wmilib.lib BufferOverflowFastFailK.lib wdfldr.lib wdfdriverentry.lib `
-  netadaptercxstub.lib wificxstub.lib
+  netadaptercxstub.lib wificxstub.lib WificxTLVGenParse.lib ndis.lib
 if ($LASTEXITCODE -ne 0) { throw "link failed ($LASTEXITCODE)" }
 Get-Item (Join-Path $out 'nekodrop-wlan.sys') | Select-Object Name, Length

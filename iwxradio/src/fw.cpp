@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "fw.h"
 
+#include "plat.h"
+
 #include <cstdio>
 #include <cstring>
 
@@ -17,9 +19,9 @@ uint32_t u32_at(const uint8_t *p) {
 std::string version_string(uint32_t major, uint32_t minor, uint32_t api) {
   char buf[64];
   if (major >= 35)
-    std::snprintf(buf, sizeof(buf), "%u.%08x.%u", major, minor, api);
+    plat_snprintf(buf, sizeof(buf), "%u.%08x.%u", major, minor, api);
   else
-    std::snprintf(buf, sizeof(buf), "%u.%u.%u", major, minor, api);
+    plat_snprintf(buf, sizeof(buf), "%u.%u.%u", major, minor, api);
   return buf;
 }
 
@@ -40,17 +42,8 @@ uint8_t Firmware::cmd_version(uint8_t group, uint8_t cmd) const {
 }
 
 bool Firmware::load(const std::string &path, std::string &error) {
-  FILE *f = std::fopen(path.c_str(), "rb");
-  if (!f) {
-    error = "cannot open firmware " + path;
-    return false;
-  }
-  std::fseek(f, 0, SEEK_END);
-  const long size = std::ftell(f);
-  std::fseek(f, 0, SEEK_SET);
-  raw.resize(size > 0 ? static_cast<size_t>(size) : 0);
-  const size_t got = raw.empty() ? 0 : std::fread(raw.data(), 1, raw.size(), f);
-  std::fclose(f);
+  if (!plat_read_file(path, raw, error)) return false;
+  const size_t got = raw.size();
   if (got != raw.size() || raw.size() < sizeof(iwx_tlv_ucode_header)) {
     error = "firmware file too short";
     return false;

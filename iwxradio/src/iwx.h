@@ -229,6 +229,7 @@ private:
 
   Logger _log;
   RxHandler _on_rx;
+  std::vector<uint8_t> _unpadded; /* handle_mpdu's scratch */
   TxStatusHandler _on_tx;
   /* Frames that arrive while a command waits for its answer: the handler may
    * send commands itself, so they are delivered once no command is waiting

@@ -9,19 +9,11 @@
  */
 #include "iwx.h"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "plat.h"
 
 #include <algorithm>
-#include <chrono>
 #include <cstdio>
 #include <cstring>
-#include <thread>
 
 #include "iwxreg.h"
 
@@ -46,29 +38,9 @@ const uint8_t kNvmChannels[] = {
     108, 112, 116, 120, 124, 128, 132, 136, 140, 144, 149, 153, 157, 161, 165, 169,
     173, 177, 181};
 
-uint64_t now_us() {
-  static LARGE_INTEGER freq = [] {
-    LARGE_INTEGER f;
-    QueryPerformanceFrequency(&f);
-    return f;
-  }();
-  LARGE_INTEGER t;
-  QueryPerformanceCounter(&t);
-  return static_cast<uint64_t>(t.QuadPart) * 1000000ull / static_cast<uint64_t>(freq.QuadPart);
-}
-
-void delay_us(unsigned us) {
-  if (us >= 2000) {
-    Sleep(us / 1000);
-    return;
-  }
-  const uint64_t end = now_us() + us;
-  while (now_us() < end) YieldProcessor();
-}
-
 std::string hex(uint32_t v) {
   char b[16];
-  std::snprintf(b, sizeof(b), "0x%08x", v);
+  plat_snprintf(b, sizeof(b), "0x%08x", v);
   return b;
 }
 
@@ -569,7 +541,7 @@ bool IwxDevice::load_firmware(std::string &error) {
         wr(IWX_CSR_INT, cause);
         break;
       }
-      Sleep(1);
+      delay_us(1000);
     }
     if (!alive_cause) {
       if (nic_lock()) {
@@ -795,7 +767,7 @@ int IwxDevice::send_cmd(uint32_t id, const void *data, size_t len, bool want_res
   slot.resp.clear();
   ring.queued++;
   ring.cur = (ring.cur + 1) % IWX_TFD_QUEUE_SIZE_MAX; /* the pointer wraps at 256, not at the ring */
-  std::atomic_thread_fence(std::memory_order_seq_cst);
+  plat_fence();
   wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
 
   _cmd_depth++;
@@ -863,7 +835,7 @@ int IwxDevice::nvm_get() {
                 uint8_t(b1 >> 24), uint8_t(b1 >> 16)};
   }
   char line[160];
-  std::snprintf(line, sizeof(line),
+  plat_snprintf(line, sizeof(line),
                 "NVM: tx antennas 0x%x, rx antennas 0x%x, LAR %s, address %02x:%02x:%02x:%02x:%02x:%02x",
                 valid_tx_ant(), valid_rx_ant(), _lar_enabled ? "on" : "off", _hw_addr[0],
                 _hw_addr[1], _hw_addr[2], _hw_addr[3], _hw_addr[4], _hw_addr[5]);
@@ -1435,7 +1407,7 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
                                  frame[0], frame[1], frame[4], rnf, static_cast<uint8_t>(idx)};
   ring.cur = (ring.cur + 1) % ring.count;
   ring.queued++;
-  std::atomic_thread_fence(std::memory_order_seq_cst);
+  plat_fence();
   wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
   _tx_stats.submitted++;
   return static_cast<int>(idx);
@@ -1573,7 +1545,7 @@ void IwxDevice::handle_mpdu(const uint8_t *payload, size_t len, bool rada) {
   const uint8_t *frame = payload + desc_size;
 
   /* The firmware pads two bytes after the header of some frames. */
-  thread_local std::vector<uint8_t> unpadded;
+  std::vector<uint8_t> &unpadded = _unpadded;
   if (desc->mac_flags2 & IWX_RX_MPDU_MFLG2_PAD) {
     const size_t h = hdrlen_80211(frame, mpdu_len);
     if (!h || h + 2 > mpdu_len) return;
@@ -1611,7 +1583,7 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot
         _sta_tx_failed++;
         if (_sta_tx_fail_logged++ < 20) {
           char b[128];
-          std::snprintf(b, sizeof(b), "station: frame not acknowledged, status 0x%04x, retries %u, rate 0x%08x",
+          plat_snprintf(b, sizeof(b), "station: frame not acknowledged, status 0x%04x, retries %u, rate 0x%08x",
                         le16toh(r->status.status), r->failure_frame, le32toh(r->initial_rate));
           _log(b);
         }
@@ -1639,7 +1611,7 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot
       _tx_stats.failed++;
       if (_opt.verbose && _tx_fail_logged++ < 40) {
         char b[160];
-        std::snprintf(b, sizeof(b),
+        plat_snprintf(b, sizeof(b),
                       "tx failed: status 0x%04x, retries %u, rts fails %u, bt kills %u, rate 0x%08x, "
                       "frame_ctrl 0x%04x, bytes %u",
                       le16toh(r->status.status), r->failure_frame, r->failure_rts, r->bt_kill_count,
@@ -1721,7 +1693,7 @@ void IwxDevice::dump_error_tables() {
     const TxHist &h = _tx_hist[(_tx_hist_at + i) % 8];
     if (!h.len) continue;
     char b[128];
-    std::snprintf(b, sizeof(b), "tx history: slot %u len %u hdr %u fc %02x %02x addr1[0] %02x rate 0x%08x",
+    plat_snprintf(b, sizeof(b), "tx history: slot %u len %u hdr %u fc %02x %02x addr1[0] %02x rate 0x%08x",
                   h.slot, h.len, h.hdrlen, h.fc0, h.fc1, h.a1, h.rnf);
     _log(b);
   }

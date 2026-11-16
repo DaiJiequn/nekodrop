@@ -13,13 +13,7 @@
  */
 #include "iwx.h"
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
+#include "plat.h"
 
 #include <cstring>
 
@@ -164,7 +158,7 @@ bool IwxDevice::sta_join(const StaParams &p) {
     return false;
   }
   char b[96];
-  std::snprintf(b, sizeof(b), "station: joining %02x:%02x:%02x:%02x:%02x:%02x on channel %u%s",
+  plat_snprintf(b, sizeof(b), "station: joining %02x:%02x:%02x:%02x:%02x:%02x on channel %u%s",
                 p.bssid[0], p.bssid[1], p.bssid[2], p.bssid[3], p.bssid[4], p.bssid[5], p.channel,
                 _sta_shared_binding ? " (shared with AWDL)" : "");
   _log(b);
