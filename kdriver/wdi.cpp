@@ -78,6 +78,10 @@ static void RadioStatus(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER &hdr) {
 }
 
 void NekoWdiRun(NEKO_DEVICE *dev, NEKO_JOB *job) {
+  if (job->IoRequest) {
+    NekoAwdlRun(dev, job);
+    return;
+  }
   if (job->InLength < sizeof(WDI_MESSAGE_HEADER)) {
     WifiRequestComplete(job->Request, STATUS_INVALID_PARAMETER, 0);
     return;

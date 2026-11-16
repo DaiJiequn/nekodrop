@@ -56,6 +56,21 @@ bool khal_set_promiscuous(bool on);
 bool khal_set_listener_address(const uint8_t address[6]);
 /* Raw frame on the listener at a legacy rate (mbps_x2 = 12 is 6 Mb/s). */
 bool khal_listener_transmit(const uint8_t *frame, size_t len, unsigned mbps_x2);
+/* Any rate (kind: 0 legacy, 1 HT, 2 VHT, 3 firmware rate control); returns
+ * the ring slot for the TX-status callback, -1 on failure. */
+int khal_listener_transmit_rate(const uint8_t *frame, size_t len, unsigned kind, unsigned mbps_x2, unsigned mcs,
+                                unsigned nss, bool wide80);
+typedef void (*KhalTxStatusCallback)(void *ctx, unsigned slot, bool acked);
+void khal_set_tx_status(KhalTxStatusCallback cb, void *ctx);
+bool khal_add_rx_ba(const uint8_t peer[6], unsigned tid, uint16_t ssn, uint16_t window, uint8_t token);
+bool khal_remove_rx_ba(unsigned tid);
+uint8_t khal_rx_ba_tids();
+bool khal_promiscuous();
+unsigned khal_width();
+struct KhalTxStats {
+  uint64_t submitted, completed, acked, failed, retries, dropped_full;
+};
+void khal_tx_stats(KhalTxStats *out);
 /* IWX_NVM_CHANNEL_* flags from the last regulatory update. */
 uint32_t khal_channel_flags(uint8_t channel);
 bool khal_set_country(const char alpha2[3]);

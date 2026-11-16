@@ -34,6 +34,8 @@ struct NEKO_JOB {
   UINT16 MessageId;
   PVOID Buffer;
   UINT InLength, OutLength;
+  WDFREQUEST IoRequest;    /* a NekodropAwdl control request instead of WDI */
+  ULONG IoCode;
 };
 
 /* Scan results kept between scans (the BSS list Windows shows). */
@@ -107,6 +109,15 @@ struct NEKO_DEVICE {
   ULONGLONG LinkReportUs;
   CHAR LastRssi;
 
+  /* AWDL engine session (awdl.cpp) */
+  WDFDEVICE AwdlControl;
+  WDFQUEUE AwdlReadQueue;
+  BOOLEAN AwdlAttached;
+  volatile LONG AwdlCloseRequested;
+  LIST_ENTRY AwdlEvents;
+  ULONG AwdlEventCount;
+  ULONGLONG AwdlDropped;
+
   /* Data path */
   NETPACKETQUEUE TxQueue, RxQueue;
   NET_EXTENSION TxVa, RxVa;
@@ -147,3 +158,10 @@ NTSTATUS NekoAdapterCreate(NEKO_DEVICE *dev, NETADAPTER_INIT *init);
 void NekoDataOnFrame(NEKO_DEVICE *dev, const KhalRx *f);
 void NekoDataTransmit(NEKO_DEVICE *dev, NEKO_FRAME *f);
 void NekoRxNotify(NEKO_DEVICE *dev);
+
+/* awdl.cpp */
+NTSTATUS NekoAwdlCreate(NEKO_DEVICE *dev);
+void NekoAwdlDestroy(NEKO_DEVICE *dev);
+void NekoAwdlRun(NEKO_DEVICE *dev, NEKO_JOB *job);
+void NekoAwdlTick(NEKO_DEVICE *dev);
+void NekoAwdlOnFrame(NEKO_DEVICE *dev, const KhalRx *f);

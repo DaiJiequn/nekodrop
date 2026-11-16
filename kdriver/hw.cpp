@@ -117,6 +117,9 @@ NTSTATUS NekoHwPrepare(NEKO_DEVICE *dev, WDFCMRESLIST translated) {
   ObReferenceObjectByHandle(thread, THREAD_ALL_ACCESS, *PsThreadType, KernelMode,
                             reinterpret_cast<PVOID *>(&dev->Thread), nullptr);
   ZwClose(thread);
+  /* AirDrop's side door; Wi-Fi works without it. */
+  const NTSTATUS awdl = NekoAwdlCreate(dev);
+  if (!NT_SUCCESS(awdl)) NEKO_LOG("AWDL control device not created: 0x%08x", awdl);
   return STATUS_SUCCESS;
 }
 
@@ -128,6 +131,7 @@ void NekoHwRelease(NEKO_DEVICE *dev) {
     ObDereferenceObject(dev->Thread);
     dev->Thread = nullptr;
   }
+  NekoAwdlDestroy(dev); /* worker stopped: safe to touch the listener here */
   if (dev->HwOpen) {
     khal_close();
     dev->HwOpen = FALSE;
@@ -174,6 +178,7 @@ static void OnRx(void *ctx, const KhalRx *f) {
   auto *dev = static_cast<NEKO_DEVICE *>(ctx);
   if (f->len < 24) return;
   const UCHAR type = f->data[0] & 0x0c;
+  NekoAwdlOnFrame(dev, f); /* the AWDL engine sees everything, as on the radio pipe */
   if (type == 0x00) { /* management */
     NekoScanOnFrame(dev, f);
     NekoConnectOnFrame(dev, f);
@@ -216,6 +221,7 @@ static void NekoWorker(PVOID context) {
       NekoScanTick(dev);
       NekoConnectTick(dev);
       if (dev->RxCount) NekoRxNotify(dev);
+      NekoAwdlTick(dev);
       const ULONGLONG now = KeQueryInterruptTime() / 10;
       if (now - lastHealth > 1000000) {
         lastHealth = now;

@@ -11,6 +11,8 @@ IwxDevice *g_dev;
 KhalLogCallback g_log;
 KhalRxCallback g_rx;
 void *g_rx_ctx;
+KhalTxStatusCallback g_txs;
+void *g_txs_ctx;
 
 TxRate legacy(unsigned mbps_x2) {
   TxRate r;
@@ -48,6 +50,9 @@ bool khal_open(uint8_t channel, const char *country, KhalLogCallback log, char *
     if (!g_rx) return;
     KhalRx k{f.data, f.len, f.dbm, f.channel, f.status, f.mic_stripped};
     g_rx(g_rx_ctx, &k);
+  });
+  g_dev->set_tx_status_handler([](unsigned slot, bool acked) {
+    if (g_txs) g_txs(g_txs_ctx, slot, acked);
   });
   /* The listener answers to its own random locally administered address;
    * AWDL sets the real one later. */
@@ -143,3 +148,42 @@ void khal_sta_leave() { if (g_dev) g_dev->sta_leave(); }
 bool khal_sta_active() { return g_dev && g_dev->sta_active(); }
 unsigned khal_sta_tx_acked() { return g_dev ? g_dev->sta_tx_acked() : 0; }
 unsigned khal_sta_tx_failed() { return g_dev ? g_dev->sta_tx_failed() : 0; }
+
+int khal_listener_transmit_rate(const uint8_t *frame, size_t len, unsigned kind, unsigned mbps_x2, unsigned mcs,
+                                unsigned nss, bool wide80) {
+  if (!g_dev) return -1;
+  TxRate r;
+  r.kind = kind == 1 ? TxRate::Ht : kind == 2 ? TxRate::Vht : kind == 3 ? TxRate::Auto : TxRate::Legacy;
+  r.mbps_x2 = mbps_x2 ? mbps_x2 : 12;
+  r.mcs = mcs;
+  r.nss = nss ? nss : 1;
+  r.wide80 = wide80;
+  return g_dev->transmit_slot(frame, len, r);
+}
+void khal_set_tx_status(KhalTxStatusCallback cb, void *ctx) {
+  g_txs = cb;
+  g_txs_ctx = ctx;
+}
+bool khal_add_rx_ba(const uint8_t peer[6], unsigned tid, uint16_t ssn, uint16_t window, uint8_t token) {
+  return g_dev && g_dev->add_rx_ba(peer, tid, ssn, window, token);
+}
+bool khal_remove_rx_ba(unsigned tid) { return g_dev && g_dev->remove_rx_ba(tid); }
+uint8_t khal_rx_ba_tids() {
+  uint8_t m = 0;
+  for (unsigned t = 0; g_dev && t < 8; t++)
+    if (g_dev->rx_ba_open(t)) m |= static_cast<uint8_t>(1u << t);
+  return m;
+}
+bool khal_promiscuous() { return g_dev && g_dev->promiscuous(); }
+unsigned khal_width() { return g_dev ? g_dev->width_mhz() : 0; }
+void khal_tx_stats(KhalTxStats *out) {
+  std::memset(out, 0, sizeof(*out));
+  if (!g_dev) return;
+  const TxStats &s = g_dev->tx_stats();
+  out->submitted = s.submitted;
+  out->completed = s.completed;
+  out->acked = s.acked;
+  out->failed = s.failed;
+  out->retries = s.retries;
+  out->dropped_full = s.dropped_full;
+}

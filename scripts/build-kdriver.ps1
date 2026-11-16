@@ -60,7 +60,7 @@ $objs = Get-ChildItem $out -Filter *.obj | ForEach-Object FullName
 $link = Join-Path (Split-Path $tools.Cl) 'link.exe'
 & $link /nologo /DRIVER /SUBSYSTEM:NATIVE /ENTRY:FxDriverEntry /NODEFAULTLIB "/OUT:$out\nekodrop-wlan.sys" @objs `
   ntoskrnl.lib hal.lib wmilib.lib BufferOverflowFastFailK.lib wdfldr.lib wdfdriverentry.lib `
-  netadaptercxstub.lib wificxstub.lib WificxTLVGenParse.lib ndis.lib
+  netadaptercxstub.lib wificxstub.lib WificxTLVGenParse.lib ndis.lib wdmsec.lib
 if ($LASTEXITCODE -ne 0) { throw "link failed ($LASTEXITCODE)" }
 Get-Item (Join-Path $out 'nekodrop-wlan.sys') | Select-Object Name, Length
 
