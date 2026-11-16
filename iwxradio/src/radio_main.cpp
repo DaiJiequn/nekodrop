@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -35,6 +36,7 @@
 
 #include "awdl_policy.h"
 #include "iwx.h"
+#include "wifi_sta.h"
 #include "pipe_server.h"
 #include "radio_link.h"
 
@@ -64,6 +66,7 @@ struct Options {
   TxRate data_rate{TxRate::Legacy, 48, 0}; /* 24 Mb/s */
   bool fixed_rate = false;  /* --data-rate given: no rate ladder */
   bool no_block_ack = false;
+  std::string sta_config; /* --sta-config: join this network beside AWDL */
   /* Test mode: serve the pipe without touching the card, and report what the
    * client sends. Checks the radio link against awdld with no hardware. */
   bool no_card = false;
@@ -107,6 +110,7 @@ bool parse_options(int argc, char **argv, Options &o) {
     } else if (a == "--data-rate") o.fixed_rate = parse_rate(value(), o.data_rate);
     else if (a == "--verbose") o.dev.verbose = true;
     else if (a == "--no-card") o.no_card = true;
+    else if (a == "--sta-config") o.sta_config = value();
     else if (a == "--retries" || a == "--capture") value();
     else if (a == "--no-block-ack") o.no_block_ack = true;
     else if (a == "--no-aggregate" || a == "--no-quick-submit") {}
@@ -161,6 +165,8 @@ bool parse_radiotap(const uint8_t *p, size_t len, RadiotapInfo &info) {
   }
   return true;
 }
+
+constexpr uint16_t kStaEthernet = 0x100; /* inbox: a frame from the TAP adapter */
 
 struct Request {
   uint16_t type;
@@ -269,6 +275,15 @@ int main(int argc, char **argv) {
       g_stop = true;
       return;
     }
+    std::unique_ptr<WifiStation> sta;
+    StaConfig sta_cfg;
+    if (!opt.sta_config.empty()) {
+      std::string err;
+      if (sta_cfg.load(opt.sta_config, err)) sta = std::make_unique<WifiStation>(dev, log_line);
+      else log_line("station config: " + err);
+      /* The file holds the Wi-Fi password: gone once read. */
+      DeleteFileA(opt.sta_config.c_str());
+    }
     std::vector<uint8_t> message;
     uint8_t dev_address[6] = {};
     bool beacon_heard = false;
@@ -294,6 +309,10 @@ int main(int argc, char **argv) {
     };
     dev.set_rx_handler([&](const RxFrame &f) {
       rx_all++;
+      if (sta && sta->owns(f)) {
+        sta->on_frame(f);
+        return;
+      }
       /* Beacon hint: a beacon heard in our 80 MHz block lifts "passive". */
       if (f.len >= 36 && (f.data[0] == 0x80 || f.data[0] == 0x50) && !beacon_heard) {
         const unsigned a = awdl::block80_first(f.channel), b = awdl::block80_first(dev.channel());
@@ -354,6 +373,26 @@ int main(int argc, char **argv) {
       g_stop = true;
       dev.stop();
       return;
+    }
+    std::thread tap_thread;
+    if (sta) {
+      std::string err;
+      if (!sta->start(sta_cfg, err)) {
+        log_line("station: " + err);
+        log_line("event: wifi failed");
+        sta.reset();
+      } else {
+        tap_thread = std::thread([&] {
+          std::vector<uint8_t> eth;
+          while (!stopping()) {
+            if (!sta->tap().read(eth, 200)) {
+              Sleep(50);
+              continue;
+            }
+            if (!eth.empty() && inbox.size() < 4096) inbox.push({kStaEthernet, eth});
+          }
+        });
+      }
     }
     {
       const uint32_t cf = dev.channel_flags(opt.channel);
@@ -472,6 +511,8 @@ int main(int argc, char **argv) {
           } else {
             dev.transmit(frame, len, rate);
           }
+        } else if (req.type == kStaEthernet) {
+          if (sta) sta->on_ethernet(req.payload.data(), req.payload.size());
         } else if (req.type == RADIO_LINK_SET_ADDRESS && req.payload.size() == 6) {
           std::memcpy(dev_address, req.payload.data(), 6);
           dev.set_address(req.payload.data());
@@ -518,6 +559,17 @@ int main(int argc, char **argv) {
         }
         want_country.clear();
       }
+      if (sta) {
+        const auto before = sta->state();
+        sta->tick(now_us());
+        if (sta->state() != before) log_line(std::string("event: wifi ") + sta->state_name());
+        std::vector<uint8_t> ans;
+        while (sta->take_addba(ans)) {
+          TxRate r;
+          dev.sta_transmit(ans.data(), ans.size(), r, sta->state() == WifiStation::State::Running);
+        }
+        if (sta->state() != WifiStation::State::Running) busy = true;
+      }
       if (pump()) busy = true;
       if (inflight >= 0 || !uq.empty()) busy = true;
       if (busy) {
@@ -546,7 +598,15 @@ int main(int argc, char **argv) {
                  std::to_string(ladder.downs) + " down); BA answers " + std::to_string(ba_answers) +
                  (dev.promiscuous() ? "" : ", promiscuous off") +
                  (tx_held_passive ? "; " + std::to_string(tx_held_passive) + " held (passive channel)" : ""));
+        if (sta)
+          log_line(std::string("wifi: ") + sta->state_name() + ", " + std::to_string(sta->rx_packets()) +
+                   " packets in, " + std::to_string(sta->tx_packets()) + " out");
       }
+    }
+    if (sta) sta->stop();
+    if (tap_thread.joinable()) {
+      g_stop = true;
+      tap_thread.join();
     }
     if (!dev.healthy()) log_line("the card stopped answering or the firmware failed");
     dev.stop();

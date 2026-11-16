@@ -17,11 +17,13 @@ else()
 endif()
 
 add_executable(winawdl_radio
-  src/radio_main.cpp src/iwx.cpp src/fw.cpp src/dma.cpp src/proxy.cpp)
+  src/radio_main.cpp src/iwx.cpp src/iwx_sta.cpp src/fw.cpp src/dma.cpp src/proxy.cpp
+  src/crypto.cpp src/tap.cpp src/wifi_sta.cpp)
 target_compile_definitions(winawdl_radio PRIVATE ${IWX_DEFS})
 target_compile_options(winawdl_radio PRIVATE ${IWX_OPTS})
-target_link_libraries(winawdl_radio PRIVATE setupapi winmm advapi32)
+target_link_libraries(winawdl_radio PRIVATE setupapi winmm advapi32 bcrypt)
 
-add_executable(iwx_selftest tests/selftest.cpp src/fw.cpp)
+add_executable(iwx_selftest tests/selftest.cpp src/fw.cpp src/crypto.cpp)
+target_link_libraries(iwx_selftest PRIVATE bcrypt)
 target_compile_definitions(iwx_selftest PRIVATE ${IWX_DEFS})
 target_compile_options(iwx_selftest PRIVATE ${IWX_OPTS})

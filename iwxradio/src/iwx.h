@@ -33,10 +33,22 @@ struct RxFrame {
   int8_t dbm;          /* -127 when unknown */
   uint8_t channel;
   uint32_t rate_n_flags;
+  uint16_t status; /* IWX_RX_MPDU_RES_STATUS_*: decryption result */
+  bool mic_stripped = false; /* hardware removed the CCMP MIC (RADA) */
+};
+
+/* The network the station joins, read from Windows before the card is taken. */
+struct StaParams {
+  uint8_t bssid[6];
+  uint8_t addr[6];      /* our address: the TAP adapter's */
+  uint8_t channel;
+  unsigned width = 20;  /* PHY width while associated */
+  uint16_t beacon_int = 100;
+  bool ht = false, vht = false, mimo = false;
 };
 
 struct TxRate {
-  enum Kind { Legacy, Ht, Vht } kind = Legacy;
+  enum Kind { Legacy, Ht, Vht, Auto } kind = Legacy; /* Auto: firmware rate control (TLC) */
   unsigned mbps_x2 = 12; /* legacy rate in 500 kb/s units: 12 = 6 Mb/s */
   unsigned mcs = 0;      /* HT MCS 0..15, VHT MCS 0..9 */
   unsigned nss = 1;      /* VHT spatial streams, 1 or 2 */
@@ -94,6 +106,33 @@ public:
   /* As transmit, returning the ring slot the frame took (-1 on failure); the
    * TX-status handler is later called with that slot. */
   int transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate);
+
+  /* ---- Station beside the listener (ForbiddenItlwm's coex mode) ----
+   * MAC 1 is a BSS_STA context for the access point, on PHY 1 and binding 1,
+   * or in the listener's binding when both are on one channel; the firmware
+   * time-shares the radio between the two bindings. */
+  bool sta_join(const StaParams &p);
+  bool sta_associated(uint16_t aid, uint8_t dtim_period);
+  /* What association agreed on (HT/VHT/width), before sta_associated. */
+  void sta_join_update(const StaParams &p) {
+    _sta.ht = p.ht;
+    _sta.vht = p.vht;
+    _sta.mimo = p.mimo;
+    _sta.width = p.width;
+    _sta.beacon_int = p.beacon_int;
+  }
+  bool sta_set_key(bool group, unsigned key_index, const uint8_t key[16]);
+  /* Firmware rate control for the AP (itlwm's iwx_rs_init); afterwards
+   * frames sent with TxRate::Auto use it. */
+  bool sta_rate_control();
+  bool sta_tlc() const { return _sta_tlc; }
+  /* `encrypt`: the station's keys are installed and the frame carries the
+   * protected bit; the firmware adds the CCMP header and MIC. */
+  int sta_transmit(const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt);
+  bool sta_add_rx_ba(unsigned tid, uint16_t ssn, uint16_t window);
+  void sta_leave();
+  bool sta_active() const { return _sta_mac_added; }
+  const StaParams &sta_params() const { return _sta; }
   using TxStatusHandler = std::function<void(unsigned slot, bool acked)>;
   void set_tx_status_handler(TxStatusHandler handler) { _on_tx = std::move(handler); }
   /* Handles whatever the card has delivered since the last call. Returns the
@@ -174,8 +213,14 @@ private:
   /* Receive */
   void handle_rb(unsigned index);
   void handle_packet(const uint8_t *pkt, size_t len);
-  void handle_mpdu(const uint8_t *payload, size_t len);
+  void handle_mpdu(const uint8_t *payload, size_t len, bool rada);
   void handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot);
+  int transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt);
+  int phy_cmd(unsigned id, uint8_t channel, unsigned width, uint32_t action);
+  int binding_for(unsigned id, unsigned phy, const uint32_t *macs, unsigned nmacs, uint8_t channel,
+                  uint32_t action);
+  int sta_mac_cmd(uint32_t action, bool assoc);
+  int enable_queue(TxRing &ring, uint8_t sta_id, uint8_t tid);
   void dump_error_tables();
   bool read_mem(uint32_t addr, uint32_t *out, unsigned dwords);
 
@@ -197,7 +242,7 @@ private:
   std::vector<DmaBuf> _rx_bufs;
   std::vector<DmaBuf> _fw_sections; /* kept until the card is reset */
   unsigned _rx_cur = 0;
-  TxRing _cmdq, _dataq;
+  TxRing _cmdq, _dataq, _staq;
   std::vector<CmdSlot> _cmd_slots;
   std::vector<DmaBuf> _cmd_big; /* per slot, for commands over 316 bytes */
 
@@ -217,6 +262,12 @@ private:
   unsigned _width = 20;
   std::array<uint8_t, 6> _address{};
   TxStats _tx_stats;
+  StaParams _sta{};
+  bool _sta_phy_added = false, _sta_mac_added = false, _sta_binding_added = false,
+       _sta_sta_added = false, _sta_queue_enabled = false, _sta_shared_binding = false,
+       _sta_assoc = false, _sta_tlc = false;
+  uint16_t _sta_aid = 0;
+  uint8_t _sta_dtim = 1, _sta_ba_tids = 0;
   bool _promisc = true;
   bool _ba_station = false;
   uint8_t _ba_peer[6] = {}, _ba_tids = 0, _ba_token[8] = {};

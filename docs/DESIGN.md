@@ -52,3 +52,17 @@ AirDrop 分四层：Wi-Fi 帧收发、AWDL 协议、BLE 唤醒、AirDrop 协议�
 3. **5 GHz 发送**：world 域（`ZZ`）下 5 GHz 一般是被动信道，固件可能拒发。先在信道 6 上验证，再用 `--country CN` 之类试 149 / 44。
 4. **Block Ack**：iPhone 发来 ADDBA 时这一版不回应，它会退回逐帧发送，慢但能用。后续可以照 ForbiddenItlwm 的 stage 4 给对端建一个固件 BA 会话。
 5. **App**：winawdl 的 App 写死了 Realtek 的硬件 ID 和驱动名，现阶段用脚本启动；改 App 要装 .NET 10 SDK 重新编译。
+
+## 7. Windows 版 Intel 驱动调研（2026-11-16）
+
+本机 AX201 的原厂驱动是 Netwtw10 24.40.0.4（`oem344.inf`）。`netsh wlan show wirelesscapabilities` 报告：
+
+| 能力 | 结果 |
+|---|---|
+| Network monitor mode | 不支持 |
+| Promiscuous Mode | 不支持 |
+| IBSS | 不支持 |
+| Wi-Fi Direct Device / GO / Client | 支持 |
+| 2×2 空间流 | 支持 |
+
+驱动包里只有闭源的 `Netwtw10.sys`、打包固件 `Netwfw10.dat`（10–55 MB，内含多个固件），以及给 Intel 自家工具用的 IHV 扩展 `IntelIHVRouter10.dll`。通过 WDI/NDIS 的公开接口，既收不到也发不出 AWDL 需要的原始厂商动作帧，也没法按 AWDL 的 16 时隙表控制信道驻留，Wi-Fi Direct 是另一种协议。所以 AWDL 只能由我们自己的驱动来做。为了不断网，站点模式也由我们的驱动实现（第 2 节的“同时”模式），与 ForbiddenItlwm 在 macOS 上让系统站点和 AWDL 监听共存的方式一致。

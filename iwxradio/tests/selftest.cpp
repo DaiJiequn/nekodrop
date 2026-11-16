@@ -9,6 +9,7 @@
 #include "../src/iwxreg.h"
 #include "../src/fw.h"
 #include "../src/awdl_policy.h"
+#include "../src/crypto.h"
 #include <cstring>
 #include <vector>
 
@@ -159,6 +160,45 @@ int main(int argc, char **argv) {
     CHECK(rl.step == 3, "20 MHz tops out at HT MCS 7");
     for (int k = 0; k < 64 * 8; k++) rl.note(true, true);
     CHECK(rl.step == 5, "80 MHz reaches VHT 2x2 MCS 7");
+  }
+
+  /* WPA2 crypto against published vectors. */
+  {
+    const auto hex_eq = [](const uint8_t *p, const char *hex) {
+      for (size_t i = 0; hex[2 * i]; i++) {
+        unsigned v;
+        std::sscanf(hex + 2 * i, "%2x", &v);
+        if (p[i] != v) return false;
+      }
+      return true;
+    };
+    uint8_t pmk[32];
+    CHECK(crypto::pmk_from_passphrase("password", "IEEE", pmk) &&
+              hex_eq(pmk, "f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e"),
+          "PBKDF2 PMK matches IEEE 802.11i H.4 (\"password\"/\"IEEE\")");
+    uint8_t key20[20];
+    std::memset(key20, 0x0b, 20);
+    uint8_t prf[64];
+    const char *hi = "Hi There";
+    CHECK(crypto::prf_sha1(key20, 20, "prefix", reinterpret_cast<const uint8_t *>(hi), 8, prf, 64) &&
+              hex_eq(prf, "bcd4c650b30b9684951829e0d75f9d54b862175ed9f00606e17d8da35402ffee"
+                          "75df78c3d31e0f889f012120c0862beb67753e7439ae242edb8373698356cf5a"),
+          "PRF-512 matches IEEE 802.11i H.3 test 1");
+    uint8_t kek[16], plain[16];
+    for (int i = 0; i < 16; i++) {
+      kek[i] = static_cast<uint8_t>(i);
+      plain[i] = static_cast<uint8_t>(0x11 * i);
+    }
+    std::vector<uint8_t> wrapped, back;
+    CHECK(crypto::aes_wrap(kek, 16, plain, 16, wrapped) &&
+              hex_eq(wrapped.data(), "1fa68b0a8112b447aef34bd8fb5a7b829d3e862371d2cfe5"),
+          "AES key wrap matches RFC 3394 4.1");
+    CHECK(crypto::aes_unwrap(kek, 16, wrapped.data(), wrapped.size(), back) && back.size() == 16 &&
+              std::memcmp(back.data(), plain, 16) == 0,
+          "AES key unwrap round-trips");
+    wrapped[3] ^= 1;
+    CHECK(!crypto::aes_unwrap(kek, 16, wrapped.data(), wrapped.size(), back),
+          "AES key unwrap rejects a corrupted key");
   }
   std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
   return failures ? 1 : 0;

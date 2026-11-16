@@ -281,7 +281,8 @@ bool IwxDevice::alloc_rings(std::string &error) {
     return ok;
   };
   if (!make_ring(_cmdq, IWX_CMD_QUEUE_SIZE, IWX_DQA_CMD_QUEUE, 0) ||
-      !make_ring(_dataq, kTxQueueSize, 0, kTxPayloadSlot)) {
+      !make_ring(_dataq, kTxQueueSize, 0, kTxPayloadSlot) ||
+      !make_ring(_staq, kTxQueueSize, 0, kTxPayloadSlot)) {
     error = "out of DMA memory for the transmit rings";
     return false;
   }
@@ -1029,16 +1030,18 @@ bool IwxDevice::set_country(const std::string &alpha2) {
   return ok;
 }
 
-int IwxDevice::phy_ctxt_cmd(uint32_t action) {
-  const bool is_2ghz = _channel <= 14;
-  const uint8_t width = (_width >= 80 && !is_2ghz) ? IWX_PHY_VHT_CHANNEL_MODE80
-                        : (_width >= 40)            ? IWX_PHY_VHT_CHANNEL_MODE40
+int IwxDevice::phy_ctxt_cmd(uint32_t action) { return phy_cmd(0, _channel, _width, action); }
+
+int IwxDevice::phy_cmd(unsigned phy_id, uint8_t channel, unsigned width_mhz, uint32_t action) {
+  const bool is_2ghz = channel <= 14;
+  const uint8_t width = (width_mhz >= 80 && !is_2ghz) ? IWX_PHY_VHT_CHANNEL_MODE80
+                        : (width_mhz >= 40)            ? IWX_PHY_VHT_CHANNEL_MODE40
                                                     : IWX_PHY_VHT_CHANNEL_MODE20;
   /* The control channel's place inside the 40/80 MHz block, as Apple
    * devices use 149-161 and 36-48 (ForbiddenItlwm's iwx_get_ctrl_pos). */
   uint8_t pos = IWX_PHY_VHT_CTRL_POS_1_BELOW;
   if (width == IWX_PHY_VHT_CHANNEL_MODE80) {
-    switch (_channel) {
+    switch (channel) {
     case 36: case 149: pos = IWX_PHY_VHT_CTRL_POS_2_BELOW; break;
     case 40: case 153: pos = IWX_PHY_VHT_CTRL_POS_1_BELOW; break;
     case 44: case 157: pos = IWX_PHY_VHT_CTRL_POS_1_ABOVE; break;
@@ -1046,7 +1049,7 @@ int IwxDevice::phy_ctxt_cmd(uint32_t action) {
     default: pos = IWX_PHY_VHT_CTRL_POS_1_BELOW; break;
     }
   } else if (width == IWX_PHY_VHT_CHANNEL_MODE40) {
-    pos = (_channel % 8 == 4 || _channel == 149 || _channel == 157 || _channel <= 7)
+    pos = (channel % 8 == 4 || channel == 149 || channel == 157 || channel <= 7)
               ? IWX_PHY_VHT_CTRL_POS_1_BELOW
               : IWX_PHY_VHT_CTRL_POS_1_ABOVE;
   }
@@ -1055,7 +1058,7 @@ int IwxDevice::phy_ctxt_cmd(uint32_t action) {
   const uint32_t rxchain = (uint32_t(rx_ant) << IWX_PHY_RX_CHAIN_VALID_POS) |
                            (uint32_t(chains) << IWX_PHY_RX_CHAIN_CNT_POS) |
                            (uint32_t(chains) << IWX_PHY_RX_CHAIN_MIMO_CNT_POS);
-  const uint32_t id = IWX_FW_CMD_ID_AND_COLOR(0, 0);
+  const uint32_t id = IWX_FW_CMD_ID_AND_COLOR(phy_id, 0);
   const uint32_t lmac = (is_2ghz || !_fw.has_capa(IWX_UCODE_TLV_CAPA_CDB_SUPPORT))
                             ? IWX_LMAC_24G_INDEX
                             : IWX_LMAC_5G_INDEX;
@@ -1065,7 +1068,7 @@ int IwxDevice::phy_ctxt_cmd(uint32_t action) {
     cmd.action = htole32(action);
     cmd.lmac_id = htole32(lmac);
     cmd.ci.band = is_2ghz ? IWX_PHY_BAND_24 : IWX_PHY_BAND_5;
-    cmd.ci.channel = htole32(_channel);
+    cmd.ci.channel = htole32(channel);
     cmd.ci.width = width;
     cmd.ci.ctrl_pos = pos;
     cmd.rxchain_info = htole32(rxchain);
@@ -1076,7 +1079,7 @@ int IwxDevice::phy_ctxt_cmd(uint32_t action) {
     cmd.id_and_color = htole32(id);
     cmd.action = htole32(action);
     cmd.ci.band = is_2ghz ? IWX_PHY_BAND_24 : IWX_PHY_BAND_5;
-    cmd.ci.channel = htole32(_channel);
+    cmd.ci.channel = htole32(channel);
     cmd.ci.width = width;
     cmd.ci.ctrl_pos = pos;
     cmd.rxchain_info = htole32(rxchain);
@@ -1087,7 +1090,7 @@ int IwxDevice::phy_ctxt_cmd(uint32_t action) {
   cmd.id_and_color = htole32(id);
   cmd.action = htole32(action);
   cmd.ci.band = is_2ghz ? IWX_PHY_BAND_24 : IWX_PHY_BAND_5;
-  cmd.ci.channel = _channel;
+  cmd.ci.channel = channel;
   cmd.ci.width = width;
   cmd.ci.ctrl_pos = pos;
   cmd.rxchain_info = htole32(rxchain);
@@ -1139,13 +1142,21 @@ int IwxDevice::mac_ctxt_cmd(uint32_t action) {
 }
 
 int IwxDevice::binding_cmd(uint32_t action) {
+  /* With the station on the listener's channel, both MACs share binding 0. */
+  uint32_t macs[2] = {IWX_FW_CMD_ID_AND_COLOR(0, 0), IWX_FW_CMD_ID_AND_COLOR(1, 0)};
+  const unsigned n = (_sta_mac_added && _sta_shared_binding) ? 2 : 1;
+  return binding_for(0, 0, macs, n, _channel, action);
+}
+
+int IwxDevice::binding_for(unsigned id, unsigned phy, const uint32_t *macs, unsigned nmacs,
+                           uint8_t channel, uint32_t action) {
   iwx_binding_cmd cmd{};
-  cmd.id_and_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+  cmd.id_and_color = htole32(IWX_FW_CMD_ID_AND_COLOR(id, 0));
   cmd.action = htole32(action);
-  cmd.phy = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
-  cmd.macs[0] = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
-  for (unsigned i = 1; i < IWX_MAX_MACS_IN_BINDING; i++) cmd.macs[i] = htole32(IWX_FW_CTXT_INVALID);
-  cmd.lmac_id = htole32((_channel <= 14 || !_fw.has_capa(IWX_UCODE_TLV_CAPA_CDB_SUPPORT))
+  cmd.phy = htole32(IWX_FW_CMD_ID_AND_COLOR(phy, 0));
+  for (unsigned i = 0; i < IWX_MAX_MACS_IN_BINDING; i++)
+    cmd.macs[i] = htole32(i < nmacs ? macs[i] : IWX_FW_CTXT_INVALID);
+  cmd.lmac_id = htole32((channel <= 14 || !_fw.has_capa(IWX_UCODE_TLV_CAPA_CDB_SUPPORT))
                             ? IWX_LMAC_24G_INDEX
                             : IWX_LMAC_5G_INDEX);
   uint32_t status = 0;
@@ -1169,14 +1180,16 @@ int IwxDevice::add_monitor_sta() {
 }
 
 /* The firmware picks the queue number (TVQM); iwx_tvqm_enable_txq. */
-int IwxDevice::enable_monitor_queue() {
+int IwxDevice::enable_monitor_queue() { return enable_queue(_dataq, IWX_MONITOR_STA_ID, IWX_MGMT_TID); }
+
+int IwxDevice::enable_queue(TxRing &ring, uint8_t sta_id, uint8_t tid) {
   iwx_tx_queue_cfg_cmd cmd{};
-  cmd.sta_id = IWX_MONITOR_STA_ID;
-  cmd.tid = IWX_MGMT_TID;
+  cmd.sta_id = sta_id;
+  cmd.tid = tid;
   cmd.flags = htole16(IWX_TX_QUEUE_CFG_ENABLE_QUEUE);
-  cmd.cb_size = htole32(IWX_TFD_QUEUE_CB_SIZE(_dataq.count));
-  cmd.byte_cnt_addr = htole64(_dataq.bc_tbl.pa);
-  cmd.tfdq_addr = htole64(_dataq.desc.pa);
+  cmd.cb_size = htole32(IWX_TFD_QUEUE_CB_SIZE(ring.count));
+  cmd.byte_cnt_addr = htole64(ring.bc_tbl.pa);
+  cmd.tfdq_addr = htole64(ring.desc.pa);
   std::vector<uint8_t> resp;
   const int err = send_cmd(IWX_SCD_QUEUE_CFG, &cmd, sizeof(cmd), true, &resp);
   if (err) return err;
@@ -1185,11 +1198,11 @@ int IwxDevice::enable_monitor_queue() {
       iwx_rx_packet_payload_len(pkt) != sizeof(iwx_tx_queue_cfg_rsp))
     return EIO;
   const auto *r = reinterpret_cast<const iwx_tx_queue_cfg_rsp *>(pkt->data);
-  _dataq.qid = le16toh(r->queue_number);
-  _dataq.cur = _dataq.tail = le16toh(r->write_pointer) & (_dataq.count - 1);
-  _dataq.queued = 0;
-  _log("transmit queue " + std::to_string(_dataq.qid) + " assigned, write pointer " +
-       std::to_string(_dataq.cur));
+  ring.qid = le16toh(r->queue_number);
+  ring.cur = ring.tail = le16toh(r->write_pointer) & (ring.count - 1);
+  ring.queued = 0;
+  _log("transmit queue " + std::to_string(ring.qid) + " assigned for station " +
+       std::to_string(sta_id) + ", write pointer " + std::to_string(ring.cur));
   return 0;
 }
 
@@ -1322,9 +1335,18 @@ bool IwxDevice::set_address(const uint8_t address[6]) {
 
 int IwxDevice::transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate) {
   if (!_queue_enabled || _fw_error) return -1;
+  return transmit_on(_dataq, frame, len, rate, false);
+}
+
+int IwxDevice::sta_transmit(const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt) {
+  if (!_sta_queue_enabled || _fw_error) return -1;
+  return transmit_on(_staq, frame, len, rate, encrypt);
+}
+
+int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const TxRate &rate,
+                           bool encrypt) {
   const size_t hdrlen = hdrlen_80211(frame, len);
   if (!hdrlen || len - hdrlen > kTxPayloadSlot || hdrlen > 64) return -1;
-  TxRing &ring = _dataq;
   if (ring.queued >= ring.count - 2) {
     _tx_stats.dropped_full++;
     return -1;
@@ -1373,8 +1395,9 @@ int IwxDevice::transmit_slot(const uint8_t *frame, size_t len, const TxRate &rat
   std::memset(tx, 0, sizeof(*tx));
   tx->len = htole16(static_cast<uint16_t>(len));
   tx->offload_assist = htole16(offload_header(static_cast<unsigned>(hdrlen)));
-  tx->flags = htole32(IWX_TX_FLAGS_CMD_RATE | IWX_TX_FLAGS_ENCRYPT_DIS);
-  tx->rate_n_flags = htole32(rnf);
+  const bool fixed = rate.kind != TxRate::Auto;
+  tx->flags = htole32((fixed ? IWX_TX_FLAGS_CMD_RATE : 0u) | (encrypt ? 0u : IWX_TX_FLAGS_ENCRYPT_DIS));
+  tx->rate_n_flags = htole32(fixed ? rnf : 0u);
   std::memcpy(reinterpret_cast<uint8_t *>(tx) + sizeof(*tx), frame, hdrlen);
 
   const size_t payload_len = len - hdrlen;
@@ -1477,7 +1500,7 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
 
   switch (code) {
   case IWX_REPLY_RX_MPDU_CMD:
-    handle_mpdu(payload, plen);
+    handle_mpdu(payload, plen, (le32toh(pkt->len_n_flags) & IWX_FH_RSCSR_RADA_EN) != 0);
     break;
   case IWX_TX_CMD:
     handle_tx_resp(payload, plen, static_cast<unsigned>(idx));
@@ -1525,7 +1548,7 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
   }
 }
 
-void IwxDevice::handle_mpdu(const uint8_t *payload, size_t len) {
+void IwxDevice::handle_mpdu(const uint8_t *payload, size_t len, bool rada) {
   const size_t desc_size = IWX_RX_DESC_SIZE_V1;
   if (len < desc_size) return;
   const auto *desc = reinterpret_cast<const iwx_rx_mpdu_desc *>(payload);
@@ -1551,7 +1574,7 @@ void IwxDevice::handle_mpdu(const uint8_t *payload, size_t len) {
   const int eb = desc->v1.energy_b ? -int(desc->v1.energy_b) : -256;
   const int energy = std::max(ea, eb);
   RxFrame f{frame, mpdu_len, static_cast<int8_t>(energy < -127 ? -127 : energy), desc->v1.channel,
-            le32toh(desc->v1.rate_n_flags)};
+            le32toh(desc->v1.rate_n_flags), le16toh(desc->status), rada};
   if (_on_rx) _on_rx(f);
 }
 
@@ -1561,7 +1584,22 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot
   if (r->frame_count < 1 ||
       len < sizeof(*r) + size_t(r->frame_count - 1) * sizeof(r->status) + sizeof(uint32_t))
     return;
-  if (le16toh(r->tx_queue) != _dataq.qid || !_queue_enabled) return;
+  const unsigned queue = le16toh(r->tx_queue);
+  if (_sta_queue_enabled && queue == _staq.qid) {
+    /* The station's frames: the firmware retries them itself; only the ring
+     * is reclaimed. */
+    uint32_t ssn;
+    std::memcpy(&ssn, reinterpret_cast<const uint8_t *>(&r->status) + r->frame_count * sizeof(r->status),
+                sizeof(ssn));
+    const unsigned idx = (le32toh(ssn) & 0xfff) & (_staq.count - 1);
+    const unsigned freed = (idx + _staq.count - _staq.tail) % _staq.count;
+    if (freed <= _staq.queued) {
+      _staq.tail = idx;
+      _staq.queued -= freed;
+    }
+    return;
+  }
+  if (queue != _dataq.qid || !_queue_enabled) return;
   if (r->frame_count == 1) {
     const unsigned status = le16toh(r->status.status) & IWX_TX_STATUS_MSK;
     if (status == IWX_TX_STATUS_SUCCESS || status == IWX_TX_STATUS_DIRECT_DONE)
