@@ -40,7 +40,7 @@ public sealed class Request : Observable
     public required string Sender { get; init; }
     public required string Model { get; init; }
     public required string What { get; init; }
-    string _status = "等待你的回应";
+    string _status = L.T("req.waiting");
     double _progress;
     public string Status { get => _status; set => Set(ref _status, value); }
     public double Progress { get => _progress; set => Set(ref _progress, value); }
@@ -60,7 +60,7 @@ public sealed class AppModel : Observable
     public ObservableCollection<Request> Requests { get; } = [];
     public ObservableCollection<string> Files { get; } = [];
     public ObservableCollection<Received> ReceivedFiles { get; } = [];
-    string _status = "正在连接 nekodrop 服务…", _detail = "";
+    string _status = L.T("status.connecting"), _detail = "";
     bool _looking;
     public string Status { get => _status; set => Set(ref _status, value); }
     public string Detail { get => _detail; set => Set(ref _detail, value); }

@@ -32,7 +32,20 @@ public partial class MainWindow : Window
             A.WindowClosed();
         };
         Refresh(null, null);
+        FolderText.Text = A.Settings.SaveFolder;
     }
+
+    void ChangeFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = L.T("pick.folder"), InitialDirectory = A.Settings.SaveFolder };
+        if (dlg.ShowDialog(this) != true) return;
+        A.Settings.SaveFolder = dlg.FolderName;
+        A.Settings.Save();
+        A.Engine.Apply(A.Settings);
+        FolderText.Text = dlg.FolderName;
+    }
+
+    public void FolderChanged() => FolderText.Text = A.Settings.SaveFolder;
 
     void Refresh(object? s, NotifyCollectionChangedEventArgs? e)
     {
@@ -55,7 +68,7 @@ public partial class MainWindow : Window
 
     void Add_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = "选择要通过 AirDrop 发送的文件" };
+        var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = L.T("pick.files") };
         if (dlg.ShowDialog(this) == true)
             foreach (var f in dlg.FileNames) if (!A.Model.Files.Contains(f)) A.Model.Files.Add(f);
     }

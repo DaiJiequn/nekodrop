@@ -27,6 +27,7 @@ foreach ($s in 'Root', 'TrustedPublisher') {
 Get-NetFirewallRule -Group 'nekodrop AirDrop' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 
 'Files'
+Get-AppxPackage -AllUsers -Name nekodrop.shell -ErrorAction SilentlyContinue | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
 & (Join-Path $Target 'nekodrop.exe') --unregister
 Remove-Item $Target -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item "$env:ProgramData\nekodrop" -Recurse -Force -ErrorAction SilentlyContinue

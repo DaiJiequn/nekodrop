@@ -45,10 +45,47 @@ $now = Get-Date
 & $tools.Inf2Cat "/driver:$stage\driver" /os:10_X64 /uselocaltime | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Inf2Cat failed ($LASTEXITCODE)" }
 
+'Explorer context menu (Windows 11 first level)'
+$shellBuild = "$repo\build\shellext"
+New-Item -ItemType Directory -Force "$shellBuild\pkg\Assets" | Out-Null
+& $tools.Cl /nologo /utf-8 /O2 /EHsc /W4 /WX /LD /MT "$repo\app\shellext\shell.cpp" "/Fo$shellBuild\\" "/Fe$shellBuild\nekodrop-shell.dll" `
+  /link /DEF:"$repo\app\shellext\shell.def" shell32.lib ole32.lib shlwapi.lib advapi32.lib user32.lib | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "context menu DLL build failed ($LASTEXITCODE)" }
+Copy-Item "$shellBuild\nekodrop-shell.dll" $stage
+Copy-Item "$repo\installer\sparse\AppxManifest.xml" "$shellBuild\pkg\"
+Add-Type -AssemblyName System.Drawing
+$bmp = New-Object System.Drawing.Bitmap 150, 150
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.SmoothingMode = 'AntiAlias'; $g.TextRenderingHint = 'AntiAliasGridFit'
+$g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(0, 103, 192))), 5, 5, 140, 140)
+$font = New-Object System.Drawing.Font 'Segoe MDL2 Assets', 60
+$fmt = New-Object System.Drawing.StringFormat; $fmt.Alignment = 'Center'; $fmt.LineAlignment = 'Center'
+$g.DrawString([string][char]0xE724, $font, [System.Drawing.Brushes]::White, (New-Object System.Drawing.RectangleF 0, 4, 150, 150), $fmt)
+$bmp.Save("$shellBuild\pkg\Assets\logo.png", [System.Drawing.Imaging.ImageFormat]::Png)
+$g.Dispose(); $bmp.Dispose()
+$makeAppx = Join-Path (Split-Path $tools.SignTool) 'makeappx.exe'
+New-Item -ItemType Directory -Force "$stage\shell" | Out-Null
+& $makeAppx pack /o /nv /d "$shellBuild\pkg" /p "$stage\shell\nekodrop-shell.msix" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "makeappx failed ($LASTEXITCODE)" }
+# install.ps1 signs the package on the target PC with the certificate it makes there.
+# signtool loads its signing and APPX libraries as side-by-side assemblies from its own folder.
+$sdkBin = Split-Path $tools.SignTool
+foreach ($f in 'signtool.exe', 'signtool.exe.manifest', 'mssign32.dll', 'wintrust.dll', 'wintrust.dll.ini',
+               'appxsip.dll', 'appxpackaging.dll', 'opcservices.dll',
+               'Microsoft.Windows.Build.Signing.mssign32.dll.manifest', 'Microsoft.Windows.Build.Signing.wintrust.dll.manifest',
+               'Microsoft.Windows.Build.Appx.AppxSip.dll.manifest', 'Microsoft.Windows.Build.Appx.AppxPackaging.dll.manifest',
+               'Microsoft.Windows.Build.Appx.OpcServices.dll.manifest') {
+  Copy-Item "$sdkBin\$f" "$stage\shell\"
+}
+
 'service and client'
-dotnet publish "$repo\app\service\NekoDrop.Service.csproj" -c Release -o "$stage" --nologo -v q
+# Self-contained single files: the target PC needs no .NET runtime, and the two
+# apps cannot overwrite each other's runtime libraries in the shared folder.
+$single = '--self-contained', 'true', '-p:PublishSingleFile=true', '-p:IncludeNativeLibrariesForSelfExtract=true',
+          '-p:EnableCompressionInSingleFile=true', '-p:DebugType=none'
+dotnet publish "$repo\app\service\NekoDrop.Service.csproj" -c Release -o "$stage" --nologo -v q @single
 if ($LASTEXITCODE -ne 0) { throw 'service publish failed' }
-dotnet publish "$repo\app\client\NekoDrop.csproj" -c Release -o "$stage" --nologo -v q
+dotnet publish "$repo\app\client\NekoDrop.csproj" -c Release -o "$stage" --nologo -v q @single
 if ($LASTEXITCODE -ne 0) { throw 'client publish failed' }
 Copy-Item "$repo\installer\install.ps1", "$repo\installer\uninstall.ps1" $stage
 

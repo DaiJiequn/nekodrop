@@ -54,6 +54,9 @@ public sealed class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        L.Use(Settings.Language);
+        var snap = Array.IndexOf(_startArgs, "--snapshot");
+        if (snap >= 0 && snap + 1 < _startArgs.Length) { Snapshot(_startArgs[snap + 1]); return; }
         Shell.SetIdentity();
         try { Shell.Register(Settings.StartWithWindows); } catch (Exception) { }
         Resources.MergedDictionaries.Add(Theme.Build());
@@ -61,7 +64,7 @@ public sealed class App : Application
         Service.State += o => Dispatcher.BeginInvoke(() => OnServiceState(o));
         Service.Connected += up => Dispatcher.BeginInvoke(() =>
         {
-            if (!up) Model.Status = "nekodrop 服务未运行";
+            if (!up) Model.Status = L.T("status.noService");
         });
         Service.Start();
         Engine.Event += o => Dispatcher.BeginInvoke(() => OnEngine(o));
@@ -78,8 +81,8 @@ public sealed class App : Application
     void StartEngine()
     {
         if (Engine.Running) return;
-        try { Identity.Ensure(); } catch (Exception e) { Model.Detail = "无法创建接收证书：" + e.Message; }
-        if (!Engine.Start(Settings, out var error)) Model.Detail = "AirDrop 引擎无法启动：" + error;
+        try { Identity.Ensure(); } catch (Exception e) { Model.Detail = L.T("err.identity") + e.Message; }
+        if (!Engine.Start(Settings, out var error)) Model.Detail = L.T("err.engine") + error;
     }
 
     void CreateTray()
@@ -91,14 +94,19 @@ public sealed class App : Application
             Visible = true,
         };
         _tray.MouseClick += (_, a) => { if (a.Button == Forms.MouseButtons.Left) ShowWindow(); };
+        _tray.ContextMenuStrip = BuildMenu();
+    }
+
+    Forms.ContextMenuStrip BuildMenu()
+    {
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("打开 nekodrop", null, (_, _) => ShowWindow());
+        menu.Items.Add(L.T("tray.open"), null, (_, _) => ShowWindow());
         menu.Items.Add(new Forms.ToolStripSeparator());
-        var receive = new Forms.ToolStripMenuItem("允许接收") { CheckOnClick = true, Checked = Settings.Discoverable };
+        var receive = new Forms.ToolStripMenuItem(L.T("tray.receive")) { CheckOnClick = true, Checked = Settings.Discoverable };
         receive.CheckedChanged += (_, _) => SetDiscoverable(receive.Checked);
         menu.Items.Add(receive);
-        var mode = new Forms.ToolStripMenuItem("联网方式");
-        foreach (var (label, value) in new[] { ("同时联网和 AirDrop", "concurrent"), ("按需接管网卡", "ondemand"), ("关闭 AirDrop", "off") })
+        var mode = new Forms.ToolStripMenuItem(L.T("tray.mode"));
+        foreach (var (label, value) in new[] { (L.T("mode.concurrent.short"), "concurrent"), (L.T("mode.ondemand.short"), "ondemand"), (L.T("mode.off.short"), "off") })
         {
             var item = new Forms.ToolStripMenuItem(label) { Tag = value };
             item.Click += (_, _) => Service.SetMode(value);
@@ -110,10 +118,86 @@ public sealed class App : Application
             foreach (Forms.ToolStripMenuItem i in mode.DropDownItems) i.Checked = (string?)i.Tag == current;
         };
         menu.Items.Add(mode);
-        menu.Items.Add("设置…", null, (_, _) => new SettingsWindow().Show());
+        menu.Items.Add(L.T("tray.settings"), null, (_, _) => new SettingsWindow().Show());
         menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => Quit());
-        _tray.ContextMenuStrip = menu;
+        menu.Items.Add(L.T("tray.quit"), null, (_, _) => Quit());
+        return menu;
+    }
+
+    public MainWindow? Window => _window;
+
+    /// <summary>
+    /// --snapshot DIR [--lang zh|en]: renders the send, main and settings windows
+    /// with sample devices to DIR\*.png off screen and exits. For checking the
+    /// UI without the service, the radio or a visible window.
+    /// </summary>
+    void Snapshot(string dir)
+    {
+        var lang = Array.IndexOf(_startArgs, "--lang");
+        if (lang >= 0 && lang + 1 < _startArgs.Length) L.Use(_startArgs[lang + 1]);
+        Resources.MergedDictionaries.Add(Theme.Build());
+        Directory.CreateDirectory(dir);
+        Model.Status = L.F("status.on", 44);
+        Model.Detail = "Wi-Fi: " + L.T("wifi.connected");
+        Model.Devices.Add(new Device { Id = "a", Name = "iPhone", Model = "iPhone15,2" });
+        Model.Devices.Add(new Device { Id = "b", Name = "MacBook Air", Model = "Mac14,2", Busy = true, Progress = 0.42, Status = L.F("send.sending", 0.42) });
+        Model.Requests.Add(new Request { Id = "r", Sender = "iPhone", Model = "iPhone15,2", What = L.F("what.photos", 2) });
+        Model.ReceivedFiles.Add(new Received { Name = "IMG_0042.HEIC", Path = "", From = "iPhone" });
+        foreach (var f in _startArgs.SkipWhile(a => a != "--send").Skip(1).TakeWhile(a => !a.StartsWith("--")))
+            Model.Files.Add(f);
+        var windows = new (string Name, Window W)[] { ("send", new SendWindow()), ("main", new MainWindow()), ("settings", new SettingsWindow()) };
+        foreach (var (name, w) in windows)
+        {
+            w.WindowStartupLocation = WindowStartupLocation.Manual;
+            w.Left = -20000; w.Top = -20000; w.ShowActivated = false; w.ShowInTaskbar = false;
+            w.Show();
+            w.UpdateLayout();
+            if (w.Content is not FrameworkElement root) continue;
+            Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+            var width = (int)root.ActualWidth; var height = (int)root.ActualHeight;
+            var visual = new System.Windows.Media.DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                dc.DrawRectangle((System.Windows.Media.Brush)Resources["Window"], null, new Rect(0, 0, width, height));
+                dc.DrawRectangle(new System.Windows.Media.VisualBrush(root), null, new Rect(0, 0, width, height));
+            }
+            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            bmp.Render(visual);
+            var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using (var fs = File.Create(Path.Combine(dir, name + ".png"))) png.Save(fs);
+            w.Close();
+        }
+        Shutdown();
+    }
+
+    SendWindow? _send;
+    DateTime _lastSend = DateTime.MinValue;
+
+    /// <summary>The share sheet: what is being sent, and who to send it to.</summary>
+    public void ShowSendWindow()
+    {
+        Service.Wake();
+        if (_send is null)
+        {
+            var w = new SendWindow();
+            w.Closed += (_, _) => { if (_send == w) _send = null; if (_window is null) Engine.Look(false); };
+            _send = w;
+        }
+        _send.Refresh();
+        _send.Show();
+        if (_send.WindowState == WindowState.Minimized) _send.WindowState = WindowState.Normal;
+        _send.Activate();
+        Engine.Look(true);
+    }
+
+    /// <summary>After the language setting changes: menus, Explorer verb and open windows follow.</summary>
+    public void ApplyLanguage()
+    {
+        L.Use(Settings.Language);
+        if (_tray is not null) { var old = _tray.ContextMenuStrip; _tray.ContextMenuStrip = BuildMenu(); old?.Dispose(); }
+        try { Shell.Register(Settings.StartWithWindows); } catch (Exception) { }
+        if (_window is not null) { var w = _window; _window = null; w.Close(); ShowWindow(); }
     }
 
     public void SetDiscoverable(bool on)
@@ -127,15 +211,19 @@ public sealed class App : Application
     public void ShowWindow()
     {
         Service.Wake();
-        _window ??= new MainWindow();
-        _window.Closed += (_, _) => _window = null;
+        if (_window is null)
+        {
+            var w = new MainWindow();
+            w.Closed += (_, _) => { if (_window == w) _window = null; };
+            _window = w;
+        }
         _window.Show();
         if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
         _window.Activate();
         Engine.Look(true);
     }
 
-    public void WindowClosed() => Engine.Look(false);
+    public void WindowClosed() { if (_send is null) Engine.Look(false); }
 
     void Quit()
     {
@@ -173,8 +261,18 @@ public sealed class App : Application
             return;
         }
         var files = args.SkipWhile(a => a != "--send").Skip(1).Where(a => File.Exists(a) || Directory.Exists(a)).ToList();
-        foreach (var f in files) if (!Model.Files.Contains(f)) Model.Files.Add(f);
-        if (files.Count > 0 || !(fromStart && args.Contains("--background"))) ShowWindow();
+        if (files.Count > 0)
+        {
+            // A new right-click send replaces what was queued, except that Explorer
+            // starts one process per selected item for classic verbs: those arrive
+            // within moments of each other and add up.
+            if (DateTime.UtcNow - _lastSend > TimeSpan.FromSeconds(2)) Model.Files.Clear();
+            _lastSend = DateTime.UtcNow;
+            foreach (var f in files) if (!Model.Files.Contains(f)) Model.Files.Add(f);
+            ShowSendWindow();
+        }
+        else if (args.Contains("--send")) ShowSendWindow();
+        else if (!(fromStart && args.Contains("--background"))) ShowWindow();
     }
 
     void HandleUri(Uri uri)
@@ -199,7 +297,7 @@ public sealed class App : Application
     public void Answer(string id, bool accept)
     {
         Engine.Answer(id, accept);
-        if (_requests.TryGetValue(id, out var r)) r.Status = accept ? "正在接收…" : "已拒绝";
+        if (_requests.TryGetValue(id, out var r)) r.Status = accept ? L.T("req.receiving") : L.T("req.declined");
         if (!accept && _requests.Remove(id, out var gone)) Model.Requests.Remove(gone);
     }
 
@@ -209,7 +307,7 @@ public sealed class App : Application
         var id = Guid.NewGuid().ToString("N")[..12];
         _sendTarget[id] = d.Id;
         d.Busy = true;
-        d.Status = "正在等待对方接受…";
+        d.Status = L.T("send.asking");
         d.Progress = 0;
         Service.Touch();
         Engine.SendFiles(id, d.Id, Model.Files.ToList());
@@ -223,10 +321,10 @@ public sealed class App : Application
         var mode = (string?)o["mode"];
         Model.Status = radio switch
         {
-            "on" => $"AirDrop 已开启 · 信道 {channel}",
-            "starting" => "正在启动 AirDrop…",
-            "error" => "AirDrop 出错",
-            _ => mode == "off" ? "AirDrop 已关闭" : "AirDrop 待命（按需开启）",
+            "on" => L.F("status.on", channel),
+            "starting" => L.T("status.starting"),
+            "error" => L.T("status.error"),
+            _ => mode == "off" ? L.T("status.off") : L.T("status.standby"),
         };
         Model.Detail = radio == "error" ? (string?)o["detail"] ?? "" :
             wifi == "" ? "" : wifi.StartsWith("unsupported") ? "Wi-Fi：" + wifi[13..] : "Wi-Fi：" + WifiText(wifi);
@@ -235,9 +333,9 @@ public sealed class App : Application
 
     static string WifiText(string s) => s switch
     {
-        "connected" => "已连接（与 AirDrop 同时使用）",
-        "failed" => "连接失败，5 秒后重试",
-        "waiting for a beacon" or "authenticating" or "associating" or "4-way handshake" => "正在连接…",
+        "connected" => L.T("wifi.connected"),
+        "failed" => L.T("wifi.failed"),
+        "waiting for a beacon" or "authenticating" or "associating" or "4-way handshake" => L.T("wifi.connecting"),
         _ => s,
     };
 
@@ -251,7 +349,7 @@ public sealed class App : Application
             {
                 var d = Model.Devices.FirstOrDefault(x => x.Id == id);
                 if (d is null) Model.Devices.Add(d = new Device { Id = id });
-                d.Name = (string?)o["name"] ?? "Apple 设备";
+                d.Name = (string?)o["name"] ?? L.T("dev.apple");
                 d.Model = (string?)o["model"] ?? "";
                 break;
             }
@@ -262,7 +360,7 @@ public sealed class App : Application
             case "asked":
             {
                 Service.Touch();
-                var sender = (string?)o["sender"] ?? "某台设备";
+                var sender = (string?)o["sender"] ?? L.T("dev.someone");
                 var model = (string?)o["model"] ?? "";
                 var files = o["files"] as JsonArray;
                 var what = Describe(files);
@@ -278,7 +376,7 @@ public sealed class App : Application
                 {
                     var total = (double?)o["total"] ?? 0;
                     inc.Progress = total > 0 ? ((double?)o["done"] ?? 0) / total : 0;
-                    inc.Status = "正在接收…";
+                    inc.Status = L.T("req.receiving");
                 }
                 Service.Touch();
                 break;
@@ -293,14 +391,14 @@ public sealed class App : Application
                         var name = f is JsonObject fo ? (string?)fo["name"] ?? "" : (string?)f ?? "";
                         Model.ReceivedFiles.Insert(0, new Received { Name = name, Path = Path.Combine(folder, name), From = from });
                     }
-                Shell.DoneToast(id, $"已收到来自 {from} 的文件", "已保存到 " + folder, folder);
+                Shell.DoneToast(id, L.F("done.received", from), L.F("done.savedTo", folder), folder);
                 break;
             }
             case "lost":
                 if (_requests.Remove(id, out var lost))
                 {
                     Model.Requests.Remove(lost);
-                    Shell.DoneToast(id, $"来自 {lost.Sender} 的传输未完成", (string?)o["reason"] ?? "", null);
+                    Shell.DoneToast(id, L.F("done.lost", lost.Sender), (string?)o["reason"] ?? "", null);
                 }
                 break;
             case "send":
@@ -314,17 +412,17 @@ public sealed class App : Application
                 d.Progress = total > 0 ? done / total : d.Progress;
                 d.Status = state switch
                 {
-                    "asking" => "正在等待对方接受…",
-                    "sending" => $"正在发送 {d.Progress:P0}",
-                    "sent" or "done" => "已发送",
-                    "declined" => "对方拒绝了",
-                    "failed" => "发送失败：" + ((string?)o["reason"] ?? ""),
+                    "asking" => L.T("send.asking"),
+                    "sending" => L.F("send.sending", d.Progress),
+                    "sent" or "done" => L.T("send.sent"),
+                    "declined" => L.T("send.declined"),
+                    "failed" => L.T("send.failed") + ((string?)o["reason"] ?? ""),
                     _ => state ?? "",
                 };
                 if (state is "sent" or "done" or "declined" or "failed")
                 {
                     d.Busy = false;
-                    if (state is "sent" or "done") Shell.DoneToast(id, $"已发送到 {d.Name}", $"{Model.Files.Count} 个项目", null);
+                    if (state is "sent" or "done") Shell.DoneToast(id, L.F("done.sent", d.Name), L.F("done.items", Model.Files.Count), null);
                 }
                 Service.Touch();
                 break;
@@ -333,17 +431,17 @@ public sealed class App : Application
                 Model.Looking = (bool?)o["on"] ?? false;
                 break;
             case "link":
-                if ((bool?)o["up"] == true) Model.Detail = Model.Detail.Replace("AirDrop 引擎无法启动", "");
+                if ((bool?)o["up"] == true) Model.Detail = Model.Detail.Replace(L.T("err.engine"), "");
                 break;
             case "fatal":
-                Model.Detail = "AirDrop 引擎停止：" + ((string?)o["detail"] ?? (string?)o["reason"] ?? "");
+                Model.Detail = L.T("err.engineStopped") + ((string?)o["detail"] ?? (string?)o["reason"] ?? "");
                 break;
         }
     }
 
     static string Describe(JsonArray? files)
     {
-        if (files is null || files.Count == 0) return "一些内容";
+        if (files is null || files.Count == 0) return L.T("what.some");
         int photos = 0, videos = 0, other = 0;
         foreach (var f in files)
         {
@@ -353,9 +451,9 @@ public sealed class App : Application
             else other++;
         }
         var parts = new List<string>();
-        if (photos > 0) parts.Add($"{photos} 张照片");
-        if (videos > 0) parts.Add($"{videos} 个视频");
-        if (other > 0) parts.Add($"{other} 个文件");
-        return string.Join("、", parts);
+        if (photos > 0) parts.Add(L.F("what.photos", photos));
+        if (videos > 0) parts.Add(L.F("what.videos", videos));
+        if (other > 0) parts.Add(L.F("what.files", other));
+        return string.Join(L.T("what.join"), parts);
     }
 }

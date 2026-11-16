@@ -17,6 +17,8 @@ public sealed class Settings
     public bool StartWithWindows { get; set; } = true;
     /// <summary>Visible to everyone for 10 minutes at a time, as on an iPhone.</summary>
     public bool Discoverable { get; set; } = true;
+    /// <summary>"auto" (follow Windows), "zh" or "en".</summary>
+    public string Language { get; set; } = "auto";
 
     static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "nekodrop");
     static string FilePath => Path.Combine(Folder, "settings.json");

@@ -13,6 +13,17 @@
 param([switch]$DryRun, [string]$Target = "$env:ProgramFiles\nekodrop")
 $ErrorActionPreference = 'Stop'
 $Source = $PSScriptRoot
+# The setup runs this hidden: keep a log, and say what failed through the exit
+# code and install-error.txt, which the setup shows.
+$LogDir = Join-Path $env:ProgramData 'nekodrop'
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+Remove-Item (Join-Path $LogDir 'install-error.txt') -ErrorAction SilentlyContinue
+if (-not $DryRun) { Start-Transcript (Join-Path $LogDir 'install.log') -Force | Out-Null }
+trap {
+  $_ | Out-String | Set-Content (Join-Path $LogDir 'install-error.txt') -Encoding utf8
+  if (-not $DryRun) { Stop-Transcript | Out-Null }
+  exit 1
+}
 $CertSubject = 'CN=nekodrop driver (signed on this PC)'
 $TrustStores = 'Root', 'TrustedPublisher'
 $FirewallGroup = 'nekodrop AirDrop'
@@ -26,8 +37,6 @@ function Step($what, [scriptblock]$do) {
 if (-not (Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match 'PCI\\VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0)' })) {
   throw 'This PC has no Intel Wi-Fi 6 AX201-family card; nekodrop cannot run here.'
 }
-$runtime = & dotnet --list-runtimes 2>$null | Where-Object { $_ -match '^Microsoft\.WindowsDesktop\.App 8\.' }
-if (-not $runtime) { throw '.NET 8 Desktop Runtime is required: winget install Microsoft.DotNet.DesktopRuntime.8' }
 
 'Files'
 Step 'stop an earlier service' {
@@ -55,6 +64,17 @@ Step 'sign the register-proxy driver with a certificate made and trusted on this
     foreach ($file in 'winawdl_regproxy.cat', 'winawdl_regproxy.dll') {
       $r = Set-AuthenticodeSignature -FilePath (Join-Path $driver $file) -Certificate $cert -HashAlgorithm SHA256
       if ($r.Status -ne 'Valid') { throw "$file could not be signed: $($r.StatusMessage)" }
+    }
+    # The Explorer menu's sparse package (Windows 11 first level), same certificate.
+    # Not fatal: the classic menu under "Show more options" works without it.
+    $msix = Join-Path $Target 'shell\nekodrop-shell.msix'
+    $signtool = Join-Path $Target 'shell\signtool.exe'
+    # An earlier registration was signed by the certificate just replaced: drop it,
+    # each user's client registers the new one at its next start.
+    Get-AppxPackage -AllUsers -Name nekodrop.shell -ErrorAction SilentlyContinue | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
+    if ((Test-Path $msix) -and (Test-Path $signtool)) {
+      & $signtool sign /q /fd SHA256 /s My /sha1 $cert.Thumbprint $msix
+      if ($LASTEXITCODE -ne 0) { "    the Explorer menu package could not be signed ($LASTEXITCODE)" }
     }
   } finally {
     Remove-Item "Cert:\CurrentUser\My\$($cert.Thumbprint)" -DeleteKey
@@ -90,4 +110,5 @@ Step 'install and start NekoDropService (LocalSystem, automatic)' {
   }
   Start-Service $Service
 }
-if ($DryRun) { 'Dry run: nothing was changed.' } else { 'nekodrop is installed.' }
+if ($DryRun) { 'Dry run: nothing was changed.' } else { 'nekodrop is installed.'; Stop-Transcript | Out-Null }
+exit 0

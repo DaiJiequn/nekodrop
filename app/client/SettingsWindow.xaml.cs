@@ -17,6 +17,7 @@ public partial class SettingsWindow : Window
         FolderBox.Text = s.SaveFolder;
         AskBox.IsChecked = s.Ask;
         StartupBox.IsChecked = s.StartWithWindows;
+        LanguageBox.SelectedIndex = s.Language switch { "zh" => 1, "en" => 2, _ => 0 };
         foreach (var t in s.AlwaysAccept) TrustedList.Items.Add(t.Replace("|", " · "));
         var mode = (string?)A.Service.Last?["mode"] ?? "concurrent";
         ModeConcurrent.IsChecked = mode == "concurrent";
@@ -26,7 +27,7 @@ public partial class SettingsWindow : Window
 
     void Browse_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "选择接收文件的保存位置", InitialDirectory = FolderBox.Text };
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = L.T("pick.folder"), InitialDirectory = FolderBox.Text };
         if (dlg.ShowDialog(this) == true) FolderBox.Text = dlg.FolderName;
     }
 
@@ -43,12 +44,17 @@ public partial class SettingsWindow : Window
         s.SaveFolder = FolderBox.Text;
         s.Ask = AskBox.IsChecked == true;
         s.StartWithWindows = StartupBox.IsChecked == true;
+        var language = (LanguageBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string ?? "auto";
+        var languageChanged = language != s.Language;
+        s.Language = language;
         s.AlwaysAccept = TrustedList.Items.Cast<string>().Select(x => x.Replace(" · ", "|")).ToList();
         s.Save();
         try { Shell.Register(s.StartWithWindows); } catch (Exception) { }
         A.Engine.Apply(s);
         var mode = ModeConcurrent.IsChecked == true ? "concurrent" : ModeOnDemand.IsChecked == true ? "ondemand" : "off";
         if (mode != (string?)A.Service.Last?["mode"]) A.Service.SetMode(mode);
+        A.Window?.FolderChanged();
+        if (languageChanged) A.ApplyLanguage();
         Close();
     }
 

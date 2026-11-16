@@ -34,12 +34,14 @@ public static class Shell
         foreach (var target in new[] { @"*\shell\nekodrop", @"Directory\shell\nekodrop" })
         {
             using var key = classes.CreateSubKey(target);
-            key.SetValue("", "用 nekodrop 发送");
+            key.SetValue("", L.T("verb"));
             key.SetValue("Icon", $"\"{exe}\",0");
             key.SetValue("MultiSelectModel", "Player");
             using var cmd = key.CreateSubKey("command");
             cmd.SetValue("", $"\"{exe}\" --send \"%1\"");
         }
+        using (var app = Registry.CurrentUser.CreateSubKey(@"Software\nekodrop"))
+            app.SetValue("Language", L.Zh ? "zh" : "en");
         using (var proto = classes.CreateSubKey("nekodrop"))
         {
             proto.SetValue("", "URL:nekodrop");
@@ -58,6 +60,37 @@ public static class Shell
             if (!File.Exists(sendTo)) CreateShortcut(sendTo, exe, "--send");
         }
         catch (Exception) { }
+        _ = RegisterMenuPackage();
+    }
+
+    const string MenuPackage = "nekodrop.shell";
+
+    static IEnumerable<Windows.ApplicationModel.Package> MenuPackages() =>
+        new Windows.Management.Deployment.PackageManager().FindPackagesForUser(string.Empty)
+            .Where(p => p.Id.Name == MenuPackage);
+
+    /// <summary>
+    /// Windows 11 puts "用 nekodrop 发送" on the first level of the context menu
+    /// only for a packaged app: registers, for this user, the sparse package
+    /// that install.ps1 signed (external location = the install folder). Without
+    /// it the classic verb above still works under "Show more options".
+    /// </summary>
+    static async Task RegisterMenuPackage()
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(Exe)!;
+            var msix = Path.Combine(dir, "shell", "nekodrop-shell.msix");
+            if (!File.Exists(msix) || !File.Exists(Path.Combine(dir, "nekodrop-shell.dll"))) return;
+            if (MenuPackages().Any()) return;
+            var options = new Windows.Management.Deployment.AddPackageOptions
+            {
+                ExternalLocationUri = new Uri(dir + Path.DirectorySeparatorChar),
+                ForceAppShutdown = true,
+            };
+            await new Windows.Management.Deployment.PackageManager().AddPackageByUriAsync(new Uri(msix), options);
+        }
+        catch (Exception) { /* unsigned (a development run) or sideloading turned off */ }
     }
 
     public static void Unregister()
@@ -66,10 +99,18 @@ public static class Shell
         classes?.DeleteSubKeyTree(@"*\shell\nekodrop", false);
         classes?.DeleteSubKeyTree(@"Directory\shell\nekodrop", false);
         classes?.DeleteSubKeyTree("nekodrop", false);
+        Registry.CurrentUser.DeleteSubKeyTree(@"Software\nekodrop", false);
         using var run = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
         run?.DeleteValue("nekodrop", false);
         var sendTo = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SendTo), "nekodrop.lnk");
         if (File.Exists(sendTo)) File.Delete(sendTo);
+        try
+        {
+            var pm = new Windows.Management.Deployment.PackageManager();
+            foreach (var p in MenuPackages().ToList())
+                pm.RemovePackageAsync(p.Id.FullName).AsTask().Wait(TimeSpan.FromSeconds(30));
+        }
+        catch (Exception) { }
     }
 
     static void CreateShortcut(string path, string target, string args)
@@ -107,12 +148,12 @@ public static class Shell
         Show($"""
             <toast scenario="reminder" launch="{X("nekodrop:open")}" activationType="protocol">
               <visual><binding template="ToastGeneric">
-                <text>{X(sender)} 想通过 AirDrop 发送</text>
+                <text>{X(L.F("ask.title", sender))}</text>
                 <text>{X(what)}</text>
               </binding></visual>
               <actions>
-                <action content="接受" arguments="{accept}" activationType="protocol"/>
-                <action content="拒绝" arguments="{decline}" activationType="protocol"/>
+                <action content="{X(L.T("accept"))}" arguments="{accept}" activationType="protocol"/>
+                <action content="{X(L.T("decline"))}" arguments="{decline}" activationType="protocol"/>
               </actions>
             </toast>
             """, "ask-" + id);
