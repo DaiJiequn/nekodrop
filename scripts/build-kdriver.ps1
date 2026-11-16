@@ -63,3 +63,19 @@ $link = Join-Path (Split-Path $tools.Cl) 'link.exe'
   netadaptercxstub.lib wificxstub.lib WificxTLVGenParse.lib ndis.lib
 if ($LASTEXITCODE -ne 0) { throw "link failed ($LASTEXITCODE)" }
 Get-Item (Join-Path $out 'nekodrop-wlan.sys') | Select-Object Name, Length
+
+# Driver package: .sys + INF + firmware, catalog (signed on the target PC).
+$pkg = Join-Path $out 'package'
+if (Test-Path $pkg) { Remove-Item $pkg -Recurse -Force }
+New-Item -ItemType Directory -Force $pkg | Out-Null
+Copy-Item (Join-Path $out 'nekodrop-wlan.sys'), (Join-Path $kdir 'nekodrop-wlan.inf') $pkg
+$fw = Join-Path $repo 'third_party\ForbiddenItlwm\itlwm\firmware'
+Get-ChildItem $fw -Filter 'iwlwifi-Qu*-hr-b0-68.ucode' | Copy-Item -Destination $pkg
+Copy-Item (Join-Path $repo 'third_party\ForbiddenItlwm\iwlwifi-firmware-license') (Join-Path $pkg 'LICENSE.iwlwifi-firmware.txt')
+if (Test-Path $tools.InfVerif) {
+  & $tools.InfVerif /w (Join-Path $pkg 'nekodrop-wlan.inf') | Out-Host
+  if ($LASTEXITCODE -ne 0) { throw "InfVerif failed ($LASTEXITCODE)" }
+}
+& $tools.Inf2Cat "/driver:$pkg" /os:10_X64 /uselocaltime | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Inf2Cat failed ($LASTEXITCODE)" }
+Get-ChildItem $pkg | Select-Object Name, Length

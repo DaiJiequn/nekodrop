@@ -15,6 +15,7 @@
 #include <stdarg.h>
 
 NekoCard g_neko_card;
+static UNICODE_STRING g_firmware_dir; /* without the trailing backslash */
 
 uint64_t now_us() {
   LARGE_INTEGER freq;
@@ -42,10 +43,20 @@ void plat_fence() { KeMemoryBarrier(); }
 
 bool plat_read_file(const std::string &path, std::vector<uint8_t> &out, std::string &error) {
   /* `path` is a firmware file name; the files live in NEKO_FIRMWARE_DIR. */
-  std::string full = NEKO_FIRMWARE_DIR "\\";
   const size_t slash = path.find_last_of("/\\");
-  full += slash == std::string::npos ? path : path.substr(slash + 1);
-  std::vector<WCHAR> wide(full.begin(), full.end());
+  const std::string fname = slash == std::string::npos ? path : path.substr(slash + 1);
+  std::string full = NEKO_FIRMWARE_DIR "\\";
+  full += fname;
+  std::vector<WCHAR> wide;
+  if (g_firmware_dir.Length) {
+    /* The driver store folder the .sys was installed to (INF: DIRID 13). */
+    wide.assign(g_firmware_dir.Buffer, g_firmware_dir.Buffer + g_firmware_dir.Length / sizeof(WCHAR));
+    wide.push_back(L'\\');
+    wide.insert(wide.end(), fname.begin(), fname.end());
+    full = "(driver folder)\\" + fname;
+  } else {
+    wide.assign(full.begin(), full.end());
+  }
   wide.push_back(0);
   UNICODE_STRING name;
   RtlInitUnicodeString(&name, wide.data());
@@ -144,3 +155,19 @@ void NekoGlueSetCard(volatile UCHAR *bar, ULONG barLength, USHORT vendor, USHORT
 }
 void neko_run_close_ops();
 void NekoGlueRunCloseOps() { neko_run_close_ops(); }
+
+/* DriverEntry: firmware files sit beside the driver image. */
+void NekoGlueSetDriverPath(PDRIVER_OBJECT driver) {
+  UNICODE_STRING full{};
+  if (!NT_SUCCESS(IoQueryFullDriverPath(driver, &full)) || !full.Buffer) return;
+  USHORT n = full.Length / sizeof(WCHAR);
+  while (n && full.Buffer[n - 1] != L'\\') n--;
+  if (n > 1) {
+    g_firmware_dir.Buffer = static_cast<PWCH>(ExAllocatePool2(POOL_FLAG_NON_PAGED, n * sizeof(WCHAR), 'okeN'));
+    if (g_firmware_dir.Buffer) {
+      RtlCopyMemory(g_firmware_dir.Buffer, full.Buffer, (n - 1) * sizeof(WCHAR));
+      g_firmware_dir.Length = g_firmware_dir.MaximumLength = static_cast<USHORT>((n - 1) * sizeof(WCHAR));
+    }
+  }
+  ExFreePool(full.Buffer);
+}

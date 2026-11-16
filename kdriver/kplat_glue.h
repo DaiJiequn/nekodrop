@@ -5,3 +5,4 @@
 void NekoGlueSetCard(volatile UCHAR *bar, ULONG barLength, USHORT vendor, USHORT device, USHORT subsystem,
                      WDFDMAENABLER dma);
 void NekoGlueRunCloseOps();
+void NekoGlueSetDriverPath(PDRIVER_OBJECT driver);

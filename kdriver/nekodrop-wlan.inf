@@ -1,0 +1,89 @@
+; nekodrop-wlan.inf: the Intel Wi-Fi 6 AX201 family as a Windows Wi-Fi adapter
+; (WiFiCx) that also runs AWDL for AirDrop. Replaces Intel's driver for the
+; card while installed; Intel's package stays in the driver store.
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = Net
+ClassGuid   = {4d36e972-e325-11ce-bfc1-08002be10318}
+Provider    = %Provider%
+CatalogFile = nekodrop-wlan.cat
+DriverVer   = 11/17/2026,0.2.0.0
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+Firmware_Copy  = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+nekodrop-wlan.sys = 1,,
+iwlwifi-QuZ-a0-hr-b0-68.ucode = 1,,
+iwlwifi-Qu-b0-hr-b0-68.ucode = 1,,
+iwlwifi-Qu-c0-hr-b0-68.ucode = 1,,
+
+[Manufacturer]
+%Provider% = Models,NTamd64.10.0...22000
+
+[Models.NTamd64.10.0...22000]
+%Ax201.DeviceDesc% = Neko_Device.ndi, PCI\VEN_8086&DEV_43F0
+%Ax201.DeviceDesc% = Neko_Device.ndi, PCI\VEN_8086&DEV_A0F0
+%Ax201.DeviceDesc% = Neko_Device.ndi, PCI\VEN_8086&DEV_02F0
+%Ax201.DeviceDesc% = Neko_Device.ndi, PCI\VEN_8086&DEV_06F0
+%Ax201.DeviceDesc% = Neko_Device.ndi, PCI\VEN_8086&DEV_34F0
+%Ax201.DeviceDesc% = Neko_Device.ndi, PCI\VEN_8086&DEV_3DF0
+%Ax201.DeviceDesc% = Neko_Device.ndi, PCI\VEN_8086&DEV_4DF0
+
+[Neko_Device.ndi.NT]
+CopyFiles          = Driver_Copy, Firmware_Copy
+Characteristics    = 0x84   ; NCF_PHYSICAL | NCF_HAS_UI
+BusType            = 5      ; PCI
+AddReg             = Neko.reg
+*IfType            = 71     ; IF_TYPE_IEEE80211
+*MediaType         = 16     ; NdisMediumNative802_11
+*PhysicalMediaType = 9      ; NdisPhysicalMediumNative802_11
+
+[Driver_Copy]
+nekodrop-wlan.sys
+
+[Firmware_Copy]
+iwlwifi-QuZ-a0-hr-b0-68.ucode
+iwlwifi-Qu-b0-hr-b0-68.ucode
+iwlwifi-Qu-c0-hr-b0-68.ucode
+
+[Neko_Device.ndi.NT.Services]
+AddService = nekodrop-wlan, 0x00000002, Neko_Service
+
+[Neko_Service]
+DisplayName   = %Service.Desc%
+ServiceType   = 1   ; SERVICE_KERNEL_DRIVER
+StartType     = 3   ; SERVICE_DEMAND_START
+ErrorControl  = 1   ; SERVICE_ERROR_NORMAL
+ServiceBinary = %13%\nekodrop-wlan.sys
+
+[Neko_Device.ndi.NT.Wdf]
+KmdfService = nekodrop-wlan, Neko_Wdf
+
+[Neko_Wdf]
+KmdfLibraryVersion = 1.33
+
+[Neko.reg]
+HKR, Ndi,            Service,    0, "nekodrop-wlan"
+HKR, Ndi\Interfaces, UpperRange, 0, "ndis5"
+HKR, Ndi\Interfaces, LowerRange, 0, "wlan,ethernet"
+HKR, NetworkInterface, *IfConnectorPresent, 0x00010001, 1
+HKR, NetworkInterface, *ConnectionType,     0x00010001, 1
+HKR, NetworkInterface, *DirectionType,      0x00010001, 0
+HKR, NetworkInterface, *AccessType,         0x00010001, 2
+HKR, NetworkInterface, *HardwareLoopback,   0x00010001, 0
+HKR, , NumberOfNetworkInterfaces, 0x00010001, 5
+; 0: Native 802.11 frames on the data path (WiFiCx), 1: Ethernet frames.
+HKR, , DataFormat, 0x00010001, 0
+
+[Strings]
+Provider         = "nekodrop project"
+DiskName         = "nekodrop driver"
+Ax201.DeviceDesc = "Intel Wi-Fi 6 AX201 (nekodrop, Wi-Fi + AirDrop)"
+Service.Desc     = "nekodrop Wi-Fi and AWDL driver"

@@ -8,6 +8,7 @@
  * hardware (hw.cpp, the kernel twin of iwxradio).
  */
 #include "precomp.h"
+#include "kplat_glue.h"
 
 extern "C" DRIVER_INITIALIZE DriverEntry;
 static EVT_WDF_DRIVER_DEVICE_ADD EvtDeviceAdd;
@@ -17,6 +18,7 @@ static EVT_WIFI_DEVICE_CREATE_ADAPTER EvtCreateAdapter;
 static EVT_WIFI_DEVICE_CREATE_WIFIDIRECTDEVICE EvtCreateWifiDirectDevice;
 
 extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT driver, _In_ PUNICODE_STRING registry) {
+  NekoGlueSetDriverPath(driver);
   WDF_DRIVER_CONFIG config;
   WDF_DRIVER_CONFIG_INIT(&config, EvtDeviceAdd);
   config.DriverPoolTag = NEKO_TAG;
