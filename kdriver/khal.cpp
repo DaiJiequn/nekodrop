@@ -193,3 +193,7 @@ bool khal_umac_scan(const uint8_t *channels, size_t count, const uint8_t *ssid, 
 }
 bool khal_scan_running() { return g_dev && g_dev->scan_running(); }
 void khal_scan_abort() { if (g_dev) g_dev->scan_abort(); }
+bool khal_sta_set_mfp(bool on) { return g_dev && g_dev->sta_set_mfp(on); }
+bool khal_sta_set_igtk(unsigned key_id, const uint8_t key[16], uint64_t rsc) {
+  return g_dev && g_dev->sta_set_igtk(key_id, key, rsc);
+}

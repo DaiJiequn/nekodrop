@@ -237,6 +237,52 @@ bool IwxDevice::sta_set_key(bool group, unsigned key_index, const uint8_t key[16
   return err == 0;
 }
 
+bool IwxDevice::sta_set_mfp(bool on) {
+  if (!_sta_sta_added) return false;
+  constexpr uint32_t kMfpEn = 1u << 9; /* STA_FLG_MFP_EN (iwlwifi) */
+  iwx_add_sta_cmd cmd{};
+  cmd.sta_id = IWX_STATION_ID;
+  cmd.station_type = IWX_STA_LINK;
+  cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(1, 0));
+  cmd.add_modify = IWX_STA_MODE_MODIFY;
+  cmd.station_flags = htole32(on ? kMfpEn : 0u);
+  cmd.station_flags_msk = htole32(kMfpEn);
+  cmd.tid_disable_tx = htole16(0xffff);
+  uint32_t status = IWX_ADD_STA_SUCCESS;
+  if (!nic_lock()) return false;
+  const int err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+  nic_unlock();
+  const bool ok = !err && (status & IWX_ADD_STA_STATUS_MASK) == IWX_ADD_STA_SUCCESS;
+  _log(ok ? std::string("station: management frame protection ") + (on ? "on" : "off")
+          : "station: management frame protection refused (" + std::to_string(err) + ")");
+  return ok;
+}
+
+/* SEC_MGMT_MULTICAST_KEY_CMD_API_S_VER_2 (new TX API firmware: one 32-byte
+ * key field; iwlwifi's iwl_mvm_send_sta_igtk). */
+struct IgtkCmdV2 {
+  uint32_t ctrl_flags;
+  uint8_t igtk[32];
+  uint32_t key_id;
+  uint32_t sta_id;
+  uint64_t receive_seq_cnt;
+};
+
+bool IwxDevice::sta_set_igtk(unsigned key_id, const uint8_t key[16], uint64_t rsc) {
+  if (!_sta_sta_added || (key_id != 4 && key_id != 5)) return false;
+  IgtkCmdV2 cmd{};
+  cmd.ctrl_flags = htole32(IWX_STA_KEY_FLG_CMAC);
+  std::memcpy(cmd.igtk, key, 16);
+  cmd.key_id = htole32(key_id);
+  cmd.sta_id = htole32(IWX_STATION_ID);
+  cmd.receive_seq_cnt = htole64(rsc);
+  if (!nic_lock()) return false;
+  const int err = send_cmd(IWX_MGMT_MCAST_KEY, &cmd, sizeof(cmd), false, nullptr);
+  nic_unlock();
+  if (err) _log("station: integrity group key refused (" + std::to_string(err) + ")");
+  return err == 0;
+}
+
 bool IwxDevice::sta_add_rx_ba(unsigned tid, uint16_t ssn, uint16_t window) {
   if (!_sta_sta_added || tid >= 8) return false;
   if ((_sta_ba_tids >> tid) & 1) return true;

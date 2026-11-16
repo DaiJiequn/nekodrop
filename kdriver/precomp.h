@@ -51,7 +51,7 @@ struct NEKO_BSS {
   UCHAR Body[1024];
 };
 
-enum NEKO_CONN_STATE { ConnIdle, ConnAuth, ConnAssoc, ConnUp };
+enum NEKO_CONN_STATE { ConnIdle, ConnSae, ConnAuth, ConnAssoc, ConnUp };
 
 struct NEKO_DEVICE {
   WDFDEVICE Device;
@@ -108,6 +108,9 @@ struct NEKO_DEVICE {
   ULONGLONG ConnDeadlineUs;
   USHORT MgmtSeq;
   BOOLEAN PairwiseKey;
+  BOOLEAN ConnSaeAuth;      /* WPA3-Personal: SAE instead of open auth */
+  BOOLEAN ConnMfp;          /* 802.11w negotiated */
+  BOOLEAN ConnMfpRequired;  /* the AP requires it (or SAE does) */
   ULONGLONG LinkReportUs;
   CHAR LastRssi;
 
@@ -160,6 +163,7 @@ void NekoConnectTick(NEKO_DEVICE *dev);
 void NekoConnectOnFrame(NEKO_DEVICE *dev, const KhalRx *f);
 void NekoDisconnect(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *hdr, BOOLEAN byHost, USHORT reason);
 NTSTATUS NekoAddKeys(NEKO_DEVICE *dev, const WDI_SET_ADD_CIPHER_KEYS_PARAMETERS *p);
+NTSTATUS NekoSaeParams(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *hdr, const WDI_SET_SAE_AUTH_PARAMS_COMMAND *p);
 
 /* datapath.cpp */
 NTSTATUS NekoAdapterCreate(NEKO_DEVICE *dev, NETADAPTER_INIT *init);

@@ -93,6 +93,8 @@ bool khal_sta_join(const KhalSta *sta);
 bool khal_sta_associated(const KhalSta *agreed, uint16_t aid, uint8_t dtim);
 bool khal_sta_rate_control();
 bool khal_sta_set_key(bool group, unsigned index, const uint8_t key[16]);
+bool khal_sta_set_mfp(bool on);
+bool khal_sta_set_igtk(unsigned key_id, const uint8_t key[16], uint64_t rsc);
 /* `mgmt`: management/EAPOL at a basic rate; otherwise firmware rate control. */
 bool khal_sta_transmit(const uint8_t *frame, size_t len, bool encrypt, bool mgmt);
 bool khal_sta_add_rx_ba(unsigned tid, uint16_t ssn, uint16_t window);

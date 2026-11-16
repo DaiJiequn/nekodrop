@@ -124,6 +124,10 @@ public:
     _sta.beacon_int = p.beacon_int;
   }
   bool sta_set_key(bool group, unsigned key_index, const uint8_t key[16]);
+  /* 802.11w: management frame protection for the AP station, and the AP's
+   * integrity group key (BIP-CMAC-128, key ID 4 or 5). */
+  bool sta_set_mfp(bool on);
+  bool sta_set_igtk(unsigned key_id, const uint8_t key[16], uint64_t rsc);
   /* Firmware rate control for the AP (itlwm's iwx_rs_init); afterwards
    * frames sent with TxRate::Auto use it. */
   bool sta_rate_control();

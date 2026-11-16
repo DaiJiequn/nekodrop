@@ -155,6 +155,17 @@ void NekoWdiRun(NEKO_DEVICE *dev, NEKO_JOB *job) {
     M3(job, st);
     return;
   }
+  case WDI_SET_SAE_AUTH_PARAMS: {
+    WDI_SET_SAE_AUTH_PARAMS_COMMAND p;
+    if (ParseWdiSetSaeAuthParams(TlvLength(job), Tlv(job), &dev->Tlv, &p) != NDIS_STATUS_SUCCESS) {
+      M3(job, STATUS_INVALID_PARAMETER);
+      return;
+    }
+    const NTSTATUS st = NekoSaeParams(dev, &hdr, &p);
+    CleanupParsedWdiSetSaeAuthParams(&p);
+    M3(job, st);
+    return;
+  }
   case WDI_SET_DELETE_CIPHER_KEYS:
     M3(job, STATUS_SUCCESS); /* keys go with the station context on disconnect */
     return;

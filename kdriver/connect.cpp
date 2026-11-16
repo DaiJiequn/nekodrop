@@ -6,7 +6,12 @@
  * 2026-11-17), then WDI_INDICATION_ASSOCIATION_RESULT and the connect
  * completion. For WPA2 Windows runs the 4-way handshake over the data path
  * and installs the keys with WDI_SET_ADD_CIPHER_KEYS; the firmware does the
- * CCMP work. Deauthentication from the AP, a disconnect request or a reset
+ * CCMP work. WPA3-Personal: Windows computes SAE and hands each commit and
+ * confirm down with WDI_SET_SAE_AUTH_PARAMS; the driver sends them as
+ * authentication frames and reports the answers of the AP with
+ * WDI_INDICATION_SAE_AUTH_PARAMS_NEEDED. 802.11w is negotiated in the RSN
+ * element and enabled on the firmware station with the IGTK from Windows.
+ * Deauthentication from the AP, a disconnect request or a reset
  * tear the station down and report WDI_INDICATION_DISASSOCIATION.
  */
 #include "precomp.h"
@@ -69,9 +74,10 @@ static void SendAssoc(NEKO_DEVICE *dev) {
     /* WPA2: CCMP pairwise, the AP's group cipher, PSK or 802.1X as chosen. */
     UCHAR group[4] = {0x00, 0x0f, 0xac, 0x04};
     if (const UCHAR *rsn = NekoFindIe(ies, iesLength, 48, &l); rsn && l >= 6) RtlCopyMemory(group, rsn + 2, 4);
-    const UCHAR akm = dev->ConnWmm & 0x80 ? 1 : 2; /* high bit borrowed below: 802.1X */
+    const UCHAR akm = dev->ConnSaeAuth ? 8 : (dev->ConnWmm & 0x80) ? 1 : 2; /* SAE, 802.1X, PSK */
+    const UCHAR caps = dev->ConnMfp ? static_cast<UCHAR>(0x80 | (dev->ConnMfpRequired ? 0x40 : 0)) : 0; /* MFPC, MFPR */
     const UCHAR ie[] = {48, 20, 1, 0, group[0], group[1], group[2], group[3], 1, 0, 0x00, 0x0f, 0xac, 0x04,
-                        1,  0,  0x00, 0x0f, 0xac, akm, 0, 0};
+                        1,  0,  0x00, 0x0f, 0xac, akm, caps, 0};
     Put(body, b, cap, ie, sizeof(ie));
   }
   if (dev->ConnHt) {
@@ -114,11 +120,13 @@ static void Result(NEKO_DEVICE *dev, WDI_ASSOC_STATUS status, USHORT code) {
   r.AssociationResultParameters.AssociationStatus = status;
   r.AssociationResultParameters.StatusCode = code;
   r.AssociationResultParameters.ReAssociation = FALSE;
-  r.AssociationResultParameters.AuthAlgorithm = dev->ConnRsn ? ((dev->ConnWmm & 0x80) ? WDI_AUTH_ALGO_RSNA : WDI_AUTH_ALGO_RSNA_PSK)
-                                                             : WDI_AUTH_ALGO_80211_OPEN;
+  r.AssociationResultParameters.AuthAlgorithm =
+      dev->ConnSaeAuth ? WDI_AUTH_ALGO_WPA3_SAE
+      : dev->ConnRsn   ? ((dev->ConnWmm & 0x80) ? WDI_AUTH_ALGO_RSNA : WDI_AUTH_ALGO_RSNA_PSK)
+                       : WDI_AUTH_ALGO_80211_OPEN;
   r.AssociationResultParameters.UnicastCipherAlgorithm = dev->ConnRsn ? WDI_CIPHER_ALGO_CCMP : WDI_CIPHER_ALGO_NONE;
   r.AssociationResultParameters.MulticastDataCipherAlgorithm = dev->ConnRsn ? WDI_CIPHER_ALGO_CCMP : WDI_CIPHER_ALGO_NONE;
-  r.AssociationResultParameters.MulticastMgmtCipherAlgorithm = WDI_CIPHER_ALGO_NONE;
+  r.AssociationResultParameters.MulticastMgmtCipherAlgorithm = dev->ConnMfp ? WDI_CIPHER_ALGO_BIP : WDI_CIPHER_ALGO_NONE;
   r.AssociationResultParameters.PortAuthorized = !dev->ConnRsn;
   r.AssociationResultParameters.WMMQoSEnabled = (dev->ConnWmm & 1) != 0;
   r.AssociationResultParameters.DSInfo = WDI_DS_UNKNOWN;
@@ -185,6 +193,90 @@ static void Fail(NEKO_DEVICE *dev, WDI_ASSOC_STATUS status, USHORT code, const c
   Complete(dev, STATUS_SUCCESS); /* the task ran; the result carries the failure */
 }
 
+static void SaeIndicate(NEKO_DEVICE *dev, WDI_SAE_INDICATION_TYPE type, const UCHAR *body, ULONG length,
+                        USHORT status) {
+  WDI_INDICATION_SAE_AUTH_PARAMS_NEEDED_PARAMETERS p;
+  RtlCopyMemory(p.BssId.Address, dev->ConnBssid, 6);
+  p.SAEIndicationType = type;
+  if (type == WDI_SAE_INDICATION_TYPE_COMMIT_FRAME && length) {
+    p.Optional.SAECommitFrame_IsPresent = 1;
+    p.SAECommitFrame.ElementCount = length;
+    p.SAECommitFrame.pElements = const_cast<UCHAR *>(body);
+  } else if (type == WDI_SAE_INDICATION_TYPE_CONFIRM_FRAME && length) {
+    p.Optional.SAEConfirmFrame_IsPresent = 1;
+    p.SAEConfirmFrame.ElementCount = length;
+    p.SAEConfirmFrame.pElements = const_cast<UCHAR *>(body);
+  }
+  if (status) {
+    p.Optional.SAEStatus_IsPresent = 1;
+    p.SAEStatus = static_cast<WDI_SAE_STATUS>(status);
+  }
+  UINT8 *out = nullptr;
+  ULONG outLength = 0;
+  if (GenerateWdiIndicationSaeAuthParamsNeeded(&p, 0, &dev->Tlv, &outLength, &out) == NDIS_STATUS_SUCCESS) {
+    NekoIndicate(dev, &dev->ConnHeader, WDI_INDICATION_SAE_AUTH_PARAMS_NEEDED, 0, STATUS_SUCCESS, out, outLength);
+    FreeGenerated(out);
+  }
+  p.SAECommitFrame.pElements = p.SAEConfirmFrame.pElements = nullptr;
+  p.SAECommitFrame.ElementCount = p.SAEConfirmFrame.ElementCount = 0;
+}
+
+/* An SAE authentication frame: algorithm 3, `seq` 1 commit / 2 confirm. */
+static void SendSae(NEKO_DEVICE *dev, USHORT seq, USHORT status, const UCHAR *parts[], const ULONG lengths[], ULONG count) {
+  UCHAR f[1200];
+  ULONG n = Header(dev, f, 0xb0);
+  f[n++] = 3; f[n++] = 0;
+  f[n++] = static_cast<UCHAR>(seq); f[n++] = 0;
+  f[n++] = static_cast<UCHAR>(status); f[n++] = static_cast<UCHAR>(status >> 8);
+  for (ULONG i = 0; i < count; i++) Put(f, n, sizeof(f), parts[i], lengths[i]);
+  khal_sta_transmit(f, n, false, true);
+}
+
+NTSTATUS NekoSaeParams(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *, const WDI_SET_SAE_AUTH_PARAMS_COMMAND *p) {
+  if (dev->Conn != ConnSae || !RtlEqualMemory(p->BssId.Address, dev->ConnBssid, 6)) return STATUS_INVALID_DEVICE_STATE;
+  switch (p->SAERequestType) {
+  case WDI_SAE_REQUEST_TYPE_COMMIT_PARAMS:
+  case WDI_SAE_REQUEST_TYPE_COMMIT_H2E_PARAMS: {
+    if (!p->Optional.SAECommitParams_IsPresent) return STATUS_INVALID_PARAMETER;
+    const WDI_SAE_COMMIT_PARAMS &c = p->SAECommitParams;
+    const UCHAR group[2] = {static_cast<UCHAR>(c.FiniteCyclicGroup), static_cast<UCHAR>(c.FiniteCyclicGroup >> 8)};
+    const UCHAR *parts[4] = {group, nullptr, nullptr, nullptr};
+    ULONG lengths[4] = {2, 0, 0, 0};
+    ULONG k = 1;
+    if (c.Optional.AntiCloggingToken_IsPresent) { parts[k] = c.AntiCloggingToken.pElements; lengths[k++] = c.AntiCloggingToken.ElementCount; }
+    if (c.Optional.Scalar_IsPresent) { parts[k] = c.Scalar.pElements; lengths[k++] = c.Scalar.ElementCount; }
+    if (c.Optional.Element_IsPresent) { parts[k] = c.Element.pElements; lengths[k++] = c.Element.ElementCount; }
+    /* 126: SAE hash-to-element (WPA3 H2E). */
+    const USHORT status = p->SAERequestType == WDI_SAE_REQUEST_TYPE_COMMIT_H2E_PARAMS ? 126 : 0;
+    SendSae(dev, 1, status, parts, lengths, k);
+    dev->ConnDeadlineUs = NowUs() + 2000000;
+    NEKO_LOG("SAE: commit sent (group %u)", c.FiniteCyclicGroup);
+    return STATUS_SUCCESS;
+  }
+  case WDI_SAE_REQUEST_TYPE_CONFIRM_PARAMS: {
+    if (!p->Optional.SAEConfirmParams_IsPresent) return STATUS_INVALID_PARAMETER;
+    const UCHAR sc[2] = {static_cast<UCHAR>(p->SAEConfirmParams.SendConfirm),
+                         static_cast<UCHAR>(p->SAEConfirmParams.SendConfirm >> 8)};
+    const UCHAR *parts[2] = {sc, p->SAEConfirmParams.Confirm.pElements};
+    const ULONG lengths[2] = {2, p->SAEConfirmParams.Confirm.ElementCount};
+    SendSae(dev, 2, 0, parts, lengths, 2);
+    dev->ConnDeadlineUs = NowUs() + 2000000;
+    NEKO_LOG("SAE: confirm sent");
+    return STATUS_SUCCESS;
+  }
+  case WDI_SAE_REQUEST_TYPE_SUCCESS:
+    NEKO_LOG("SAE: done, associating");
+    dev->Conn = ConnAssoc;
+    dev->ConnTries = 1;
+    dev->ConnDeadlineUs = NowUs() + 300000;
+    SendAssoc(dev);
+    return STATUS_SUCCESS;
+  default:
+    Fail(dev, WDI_ASSOC_STATUS_FAILURE, 0, "SAE failed");
+    return STATUS_SUCCESS;
+  }
+}
+
 NTSTATUS NekoConnectStart(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *hdr, const WDI_TASK_CONNECT_PARAMETERS *p) {
   if (dev->Conn != ConnIdle) NekoDisconnect(dev, nullptr, TRUE, 3);
   if (!p->PreferredBSSEntryList.ElementCount) return STATUS_INVALID_PARAMETER;
@@ -222,8 +314,26 @@ NTSTATUS NekoConnectStart(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *hdr, const
   dev->ConnVht = dev->ConnChannel > 14 && NekoFindIe(ies, iesLength, 191, &l) != nullptr;
   dev->ConnWmm = HasWmm(ies, iesLength) ? 1 : 0;
   /* 802.1X when Windows asked for RSNA (enterprise): remembered in bit 7. */
-  for (UINT32 i = 0; i < p->ConnectParameters.AuthenticationAlgorithms.ElementCount; i++)
-    if (p->ConnectParameters.AuthenticationAlgorithms.pElements[i] == WDI_AUTH_ALGO_RSNA) dev->ConnWmm |= 0x80;
+  dev->ConnSaeAuth = FALSE;
+  for (UINT32 i = 0; i < p->ConnectParameters.AuthenticationAlgorithms.ElementCount; i++) {
+    const WDI_AUTH_ALGORITHM a = p->ConnectParameters.AuthenticationAlgorithms.pElements[i];
+    if (a == WDI_AUTH_ALGO_RSNA) dev->ConnWmm |= 0x80;
+    if (a == WDI_AUTH_ALGO_WPA3_SAE && i == 0) dev->ConnSaeAuth = TRUE;
+  }
+  /* 802.11w from the RSN capabilities of the AP (after the suite lists). */
+  USHORT rsnCaps = 0;
+  if (const UCHAR *rsn = NekoFindIe(ies, iesLength, 48, &l); rsn && l >= 8) {
+    ULONG o = 2 + 4;
+    const USHORT pc = static_cast<USHORT>(rsn[o] | rsn[o + 1] << 8);
+    o += 2 + 4u * pc;
+    if (o + 2 <= l) {
+      const USHORT ac = static_cast<USHORT>(rsn[o] | rsn[o + 1] << 8);
+      o += 2 + 4u * ac;
+      if (o + 2 <= l) rsnCaps = static_cast<USHORT>(rsn[o] | rsn[o + 1] << 8);
+    }
+  }
+  dev->ConnMfp = dev->ConnSaeAuth || (rsnCaps & 0x0080);
+  dev->ConnMfpRequired = dev->ConnSaeAuth || (rsnCaps & 0x0040);
 
   KhalSta sta = {};
   RtlCopyMemory(sta.bssid, dev->ConnBssid, 6);
@@ -236,6 +346,15 @@ NTSTATUS NekoConnectStart(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *hdr, const
   dev->ConnPending = TRUE;
   dev->PairwiseKey = FALSE;
   dev->AssocReqLength = dev->AssocRespLength = 0;
+  if (dev->ConnSaeAuth) {
+    /* Windows computes SAE: ask it for the commit. */
+    dev->Conn = ConnSae;
+    dev->ConnDeadlineUs = NowUs() + 5000000;
+    SaeIndicate(dev, WDI_SAE_INDICATION_TYPE_COMMIT_REQUEST_PARAMS_NEEDED, nullptr, 0, 0);
+    NEKO_LOG("connect: WPA3-SAE with %02x:%02x:%02x:%02x:%02x:%02x channel %u", dev->ConnBssid[0], dev->ConnBssid[1],
+             dev->ConnBssid[2], dev->ConnBssid[3], dev->ConnBssid[4], dev->ConnBssid[5], dev->ConnChannel);
+    return STATUS_SUCCESS;
+  }
   dev->Conn = ConnAuth;
   dev->ConnTries = 1;
   dev->ConnDeadlineUs = NowUs() + kStepTimeoutUs;
@@ -255,6 +374,10 @@ void NekoConnectTick(NEKO_DEVICE *dev) {
     }
     return;
   }
+  if (dev->Conn == ConnSae) {
+    if (now >= dev->ConnDeadlineUs) Fail(dev, WDI_ASSOC_STATUS_FAILURE, 0, "SAE timed out");
+    return;
+  }
   if ((dev->Conn != ConnAuth && dev->Conn != ConnAssoc) || now < dev->ConnDeadlineUs) return;
   if (dev->ConnTries >= kStepTries) {
     Fail(dev, WDI_ASSOC_STATUS_FAILURE, 0, dev->Conn == ConnAuth ? "no answer to authentication" : "no answer to association");
@@ -272,6 +395,15 @@ void NekoConnectOnFrame(NEKO_DEVICE *dev, const KhalRx *f) {
   const UCHAR sub = f->data[0] & 0xf0;
   const UCHAR *body = f->data + 24;
   const size_t bodyLength = f->len - 24;
+  if (sub == 0xb0 && dev->Conn == ConnSae && bodyLength >= 6 && body[0] == 3) {
+    const USHORT seq = static_cast<USHORT>(body[2] | body[3] << 8), status = static_cast<USHORT>(body[4] | body[5] << 8);
+    const UCHAR *rest = body + 6;
+    const ULONG restLength = static_cast<ULONG>(bodyLength - 6);
+    SaeIndicate(dev, seq == 1 ? WDI_SAE_INDICATION_TYPE_COMMIT_FRAME : WDI_SAE_INDICATION_TYPE_CONFIRM_FRAME, rest,
+                restLength, status);
+    dev->ConnDeadlineUs = NowUs() + 5000000;
+    return;
+  }
   if (sub == 0xb0 && dev->Conn == ConnAuth && bodyLength >= 6) {
     const USHORT seq = static_cast<USHORT>(body[2] | body[3] << 8), status = static_cast<USHORT>(body[4] | body[5] << 8);
     if (seq != 2) return;
@@ -316,6 +448,7 @@ void NekoConnectOnFrame(NEKO_DEVICE *dev, const KhalRx *f) {
       return;
     }
     khal_sta_rate_control();
+    if (dev->ConnMfp) khal_sta_set_mfp(true);
     dev->ConnHt = agreed.ht;
     dev->ConnVht = agreed.vht;
     dev->Conn = ConnUp;
@@ -343,7 +476,9 @@ void NekoDisconnect(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *hdr, BOOLEAN byH
     ULONG n = Header(dev, f, 0xc0);
     f[n++] = static_cast<UCHAR>(reason);
     f[n++] = static_cast<UCHAR>(reason >> 8);
-    khal_sta_transmit(f, n, false, true);
+    const bool protect = dev->ConnMfp && dev->PairwiseKey; /* 802.11w: robust frame */
+    if (protect) f[1] |= 0x40;
+    khal_sta_transmit(f, n, protect, true);
   }
   khal_sta_leave();
   dev->Conn = ConnIdle;
@@ -368,6 +503,16 @@ void NekoDisconnect(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *hdr, BOOLEAN byH
 NTSTATUS NekoAddKeys(NEKO_DEVICE *dev, const WDI_SET_ADD_CIPHER_KEYS_PARAMETERS *p) {
   for (UINT32 i = 0; i < p->SetCipherKey.ElementCount; i++) {
     const WDI_SET_ADD_CIPHER_KEYS_CONTAINER &k = p->SetCipherKey.pElements[i];
+    if (k.CipherKeyTypeInfo.CipherAlgorithm == WDI_CIPHER_ALGO_BIP && k.Optional.BIPKey_IsPresent &&
+        k.BIPKey.ElementCount == 16) {
+      const unsigned id = k.Optional.CipherKeyID_IsPresent ? k.CipherKeyID.CipherKeyID : 4;
+      ULONGLONG rsc = 0;
+      if (k.Optional.ReceiveSequenceCount_IsPresent)
+        for (int b = 5; b >= 0; b--) rsc = rsc << 8 | k.ReceiveSequenceCount.ReceiveSequenceCount[b];
+      if (!khal_sta_set_igtk(id, k.BIPKey.pElements, rsc)) return STATUS_UNSUCCESSFUL;
+      NEKO_LOG("key: integrity group key %u installed", id);
+      continue;
+    }
     if (k.CipherKeyTypeInfo.CipherAlgorithm != WDI_CIPHER_ALGO_CCMP || !k.Optional.CCMPKey_IsPresent ||
         k.CCMPKey.ElementCount != 16) {
       NEKO_LOG("key: cipher %u not supported", k.CipherKeyTypeInfo.CipherAlgorithm);

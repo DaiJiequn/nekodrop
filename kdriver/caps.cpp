@@ -5,8 +5,9 @@
  *
  * AX201: 2x2, 2.4 and 5 GHz, 802.11ax silicon; the station side of this
  * driver negotiates up to VHT (802.11ac), so that is what is reported.
- * Security: open and WPA2 (personal and enterprise; Windows runs the 4-way
- * handshake and 802.1X over the data path and hands down the keys).
+ * Security: open, WPA2 (personal and enterprise) and WPA3-Personal (SAE, run
+ * by Windows through WDI_SET_SAE_AUTH_PARAMS) with 802.11w; Windows runs the
+ * 4-way handshake and 802.1X over the data path and hands down the keys.
  */
 #include "precomp.h"
 
@@ -31,6 +32,7 @@ NTSTATUS NekoSetCapabilities(NEKO_DEVICE *dev) {
   device.NumRxStreams = 2;
   device.NumTxStreams = 2;
   device.BluetoothCoexistenceSupport = WDI_BLUETOOTH_COEXISTENCE_PERFORMANCE_MAINTAINED;
+  device.SAEAuthenticationSupported = TRUE;
   device.NumRadios = 1;
   NTSTATUS st = WifiDeviceSetDeviceCapabilities(dev->Device, &device);
   if (!NT_SUCCESS(st)) return st;
@@ -39,11 +41,15 @@ NTSTATUS NekoSetCapabilities(NEKO_DEVICE *dev) {
       {DOT11_AUTH_ALGO_80211_OPEN, DOT11_CIPHER_ALGO_NONE},
       {DOT11_AUTH_ALGO_RSNA_PSK, DOT11_CIPHER_ALGO_CCMP},
       {DOT11_AUTH_ALGO_RSNA, DOT11_CIPHER_ALGO_CCMP},
+      {DOT11_AUTH_ALGO_WPA3_SAE, DOT11_CIPHER_ALGO_CCMP},
   };
   static const DOT11_AUTH_CIPHER_PAIR multicastMgmt[] = {
       {DOT11_AUTH_ALGO_80211_OPEN, DOT11_CIPHER_ALGO_NONE},
+      {DOT11_AUTH_ALGO_RSNA_PSK, DOT11_CIPHER_ALGO_BIP},
+      {DOT11_AUTH_ALGO_RSNA, DOT11_CIPHER_ALGO_BIP},
+      {DOT11_AUTH_ALGO_WPA3_SAE, DOT11_CIPHER_ALGO_BIP},
   };
-  static RSNA_AKM_SUITE akms[] = {rsna_akm_psk, rsna_akm_1x};
+  static RSNA_AKM_SUITE akms[] = {rsna_akm_psk, rsna_akm_1x, rsna_akm_sae_pmk256};
 
   WIFI_STATION_CAPABILITIES sta;
   WIFI_STATION_CAPABILITIES_INIT(&sta);
@@ -55,7 +61,7 @@ NTSTATUS NekoSetCapabilities(NEKO_DEVICE *dev) {
   sta.WEPKeyValueMaxLength = 0;
   sta.MaxNumPerSTA = 4;
   sta.SupportedQOSFlags = 0;
-  sta.MFPCapable = FALSE;
+  sta.MFPCapable = TRUE;
   sta.NumSupportedUnicastAlgorithms = ARRAYSIZE(unicast);
   sta.UnicastAlgorithmsList = const_cast<PDOT11_AUTH_CIPHER_PAIR>(unicast);
   sta.NumSupportedMulticastDataAlgorithms = ARRAYSIZE(unicast);
