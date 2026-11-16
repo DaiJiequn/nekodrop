@@ -76,6 +76,8 @@ struct Options {
   /* --kernel: the card runs nekodrop-wlan.sys (Windows keeps its Wi-Fi);
    * AWDL goes through the driver's NekodropAwdl interface. */
   bool kernel = false;
+  /* --pcap FILE: every received frame, with radiotap, for Wireshark. */
+  std::string pcap;
 };
 
 bool parse_rate(const std::string &s, TxRate &rate) {
@@ -117,6 +119,7 @@ bool parse_options(int argc, char **argv, Options &o) {
     else if (a == "--verbose") o.dev.verbose = true;
     else if (a == "--no-card") o.no_card = true;
     else if (a == "--kernel") o.kernel = true;
+    else if (a == "--pcap") o.pcap = value();
     else if (a == "--sta-config") o.sta_config = value();
     else if (a == "--retries" || a == "--capture") value();
     else if (a == "--no-block-ack") o.no_block_ack = true;
@@ -135,6 +138,46 @@ bool parse_options(int argc, char **argv, Options &o) {
 
 /* The fields of a radiotap header this daemon reads: total length, the rate
  * and the MCS index if given. Walks only the standard fields up to MCS. */
+/* A pcap file of 802.11 frames with radiotap headers (link type 127). */
+class PcapWriter {
+public:
+  bool open(const std::string &path) {
+    _f = std::fopen(path.c_str(), "wb");
+    if (!_f) return false;
+    const uint32_t magic = 0xa1b2c3d4, snap = 65535, link = 127;
+    const uint16_t major = 2, minor = 4;
+    const int32_t zone = 0;
+    const uint32_t sigfigs = 0;
+    std::fwrite(&magic, 4, 1, _f);
+    std::fwrite(&major, 2, 1, _f);
+    std::fwrite(&minor, 2, 1, _f);
+    std::fwrite(&zone, 4, 1, _f);
+    std::fwrite(&sigfigs, 4, 1, _f);
+    std::fwrite(&snap, 4, 1, _f);
+    std::fwrite(&link, 4, 1, _f);
+    return true;
+  }
+  void write(const uint8_t *radiotap, size_t rlen, const uint8_t *frame, size_t flen) {
+    if (!_f) return;
+    FILETIME ft;
+    GetSystemTimePreciseAsFileTime(&ft);
+    const uint64_t t = ((uint64_t(ft.dwHighDateTime) << 32) | ft.dwLowDateTime) / 10 - 11644473600000000ull;
+    const uint32_t hdr[4] = {static_cast<uint32_t>(t / 1000000), static_cast<uint32_t>(t % 1000000),
+                             static_cast<uint32_t>(rlen + flen), static_cast<uint32_t>(rlen + flen)};
+    std::fwrite(hdr, sizeof(hdr), 1, _f);
+    std::fwrite(radiotap, 1, rlen, _f);
+    std::fwrite(frame, 1, flen, _f);
+    if (++_n % 64 == 0) std::fflush(_f);
+  }
+  ~PcapWriter() {
+    if (_f) std::fclose(_f);
+  }
+
+private:
+  FILE *_f = nullptr;
+  uint64_t _n = 0;
+};
+
 struct RadiotapInfo {
   size_t length = 0;
   bool has_rate = false, has_mcs = false;
@@ -299,6 +342,9 @@ int main(int argc, char **argv) {
       DeleteFileA(opt.sta_config.c_str());
     }
     std::vector<uint8_t> message;
+    PcapWriter capture;
+    const bool capture_on = !opt.pcap.empty() && capture.open(opt.pcap);
+    if (!opt.pcap.empty()) log_line(capture_on ? "capturing to " + opt.pcap : "cannot write " + opt.pcap);
     uint8_t dev_address[6] = {};
     bool beacon_heard = false;
     uint64_t tx_held_passive = 0;
@@ -364,6 +410,13 @@ int main(int argc, char **argv) {
         } else if (awdl::parse_delba(f.data, f.len, dev_address, &sender, &tid) && sender) {
           delba_pending.push_back(tid);
         }
+      }
+      if (capture_on) {
+        uint8_t rt[10] = {0, 0, 10, 0};
+        const uint32_t present = (1u << 1) | (1u << 5);
+        std::memcpy(rt + 4, &present, 4);
+        rt[9] = static_cast<uint8_t>(f.dbm);
+        capture.write(rt, sizeof(rt), f.data, f.len);
       }
       if (!client_connected || f.len < 24) return;
       if (have_filter) {
