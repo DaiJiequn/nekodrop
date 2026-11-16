@@ -53,6 +53,14 @@ iwlwifi-QuZ-a0-hr-b0-68.ucode
 iwlwifi-Qu-b0-hr-b0-68.ucode
 iwlwifi-Qu-c0-hr-b0-68.ucode
 
+[Neko_Device.ndi.NT.HW]
+AddReg = Neko.Msi
+
+[Neko.Msi]
+; One MSI message: the card runs in MSI mode (not MSI-X).
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MSISupported,       0x00010001, 1
+HKR, "Interrupt Management\MessageSignaledInterruptProperties", MessageNumberLimit, 0x00010001, 1
+
 [Neko_Device.ndi.NT.Services]
 AddService = nekodrop-wlan, 0x00000002, Neko_Service
 

@@ -47,6 +47,9 @@ static NTSTATUS EvtDeviceAdd(_In_ WDFDRIVER, _Inout_ PWDFDEVICE_INIT init) {
   NEKO_DEVICE *ctx = NekoGetDevice(device);
   ctx->Device = device;
   NekoInitQueues(ctx);
+  /* Without an interrupt the worker simply polls. */
+  const NTSTATUS irq = NekoIrqCreate(ctx);
+  if (!NT_SUCCESS(irq)) NEKO_LOG("no interrupt: 0x%08x (polling)", irq);
 
   WIFI_DEVICE_CONFIG wifi;
   WIFI_DEVICE_CONFIG_INIT(&wifi, WDI_VERSION_LATEST, NekoWdiSendCommand, EvtCreateAdapter,

@@ -109,6 +109,11 @@ struct NEKO_DEVICE {
   ULONGLONG LinkReportUs;
   CHAR LastRssi;
 
+  /* Receive interrupts (irq.cpp) */
+  WDFINTERRUPT Interrupt;
+  BOOLEAN IrqEnabled;
+  volatile LONG IrqCount;
+
   /* AWDL engine session (awdl.cpp) */
   WDFDEVICE AwdlControl;
   WDFQUEUE AwdlReadQueue;
@@ -166,3 +171,8 @@ void NekoAwdlDestroy(NEKO_DEVICE *dev);
 void NekoAwdlRun(NEKO_DEVICE *dev, NEKO_JOB *job);
 void NekoAwdlTick(NEKO_DEVICE *dev);
 void NekoAwdlOnFrame(NEKO_DEVICE *dev, const KhalRx *f);
+
+/* irq.cpp */
+NTSTATUS NekoIrqCreate(NEKO_DEVICE *dev);
+void NekoIrqEnable(NEKO_DEVICE *dev);
+void NekoIrqDisable(NEKO_DEVICE *dev);

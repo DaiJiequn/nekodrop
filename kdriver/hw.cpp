@@ -112,6 +112,7 @@ NTSTATUS NekoHwPrepare(NEKO_DEVICE *dev, WDFCMRESLIST translated) {
   NEKO_LOG("firmware up, address %02x:%02x:%02x:%02x:%02x:%02x", dev->Address[0], dev->Address[1],
            dev->Address[2], dev->Address[3], dev->Address[4], dev->Address[5]);
 
+  NekoIrqEnable(dev);
   st = NekoSetCapabilities(dev);
   if (!NT_SUCCESS(st)) return st;
 
@@ -144,6 +145,7 @@ void NekoHwRelease(NEKO_DEVICE *dev) {
     ExFreePoolWithTag(job, NEKO_TAG);
   }
   NekoAwdlDestroy(dev); /* worker stopped: safe to touch the listener here */
+  NekoIrqDisable(dev);
   if (dev->HwOpen) {
     khal_close();
     dev->HwOpen = FALSE;
@@ -201,9 +203,9 @@ static void OnRx(void *ctx, const KhalRx *f) {
 static void NekoWorker(PVOID context) {
   auto *dev = static_cast<NEKO_DEVICE *>(context);
   khal_set_rx(OnRx, dev);
-  ULONGLONG lastHealth = 0;
+  ULONGLONG lastHealth = 0, lastIrqUs = 0;
+  LONG irqSeen = 0;
   LARGE_INTEGER timeout;
-  timeout.QuadPart = -10000; /* 1 ms */
   while (!dev->Stop) {
     /* WDI requests */
     for (;;) {
@@ -241,6 +243,13 @@ static void NekoWorker(PVOID context) {
       }
       if (got) continue; /* more may be waiting */
     }
+    /* 1 ms polls until interrupts prove they arrive, then 10 ms as a safety net. */
+    const ULONGLONG nowUs = KeQueryInterruptTime() / 10;
+    if (dev->IrqCount != irqSeen) {
+      irqSeen = dev->IrqCount;
+      lastIrqUs = nowUs;
+    }
+    timeout.QuadPart = (lastIrqUs && nowUs - lastIrqUs < 2000000) ? -100000 : -10000;
     KeWaitForSingleObject(&dev->Wake, Executive, KernelMode, FALSE, &timeout);
   }
   khal_set_rx(nullptr, nullptr);
