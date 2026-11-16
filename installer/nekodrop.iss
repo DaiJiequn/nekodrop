@@ -19,7 +19,6 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\nekodrop.exe
 
 [Languages]
-Name: "chs"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [Files]
@@ -31,8 +30,8 @@ Name: "{autoprograms}\nekodrop"; Filename: "{app}\nekodrop.exe"; AppUserModelID:
 
 [Run]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{tmp}\nekodrop-stage\install.ps1"" -Target ""{app}"""; \
-  StatusMsg: "正在安装驱动、服务和防火墙规则…"; Flags: runhidden waituntilterminated
-Filename: "{app}\nekodrop.exe"; Description: "启动 nekodrop"; Flags: postinstall nowait skipifsilent runasoriginaluser
+  StatusMsg: "Installing the driver, service and firewall rules..."; Flags: runhidden waituntilterminated
+Filename: "{app}\nekodrop.exe"; Description: "Start nekodrop"; Flags: postinstall nowait skipifsilent runasoriginaluser
 
 [UninstallRun]
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\uninstall.ps1"" -Target ""{app}"""; \
