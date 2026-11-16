@@ -249,7 +249,6 @@ void NekoAwdlTick(NEKO_DEVICE *dev) {
 }
 
 NTSTATUS NekoAwdlCreate(NEKO_DEVICE *dev) {
-  InitializeListHead(&dev->AwdlEvents);
   PWDFDEVICE_INIT init = WdfControlDeviceInitAllocate(WdfDeviceGetDriver(dev->Device), &SDDL_DEVOBJ_SYS_ALL_ADM_ALL);
   if (!init) return STATUS_INSUFFICIENT_RESOURCES;
   DECLARE_CONST_UNICODE_STRING(name, NEKO_AWDL_DEVICE_NAME);

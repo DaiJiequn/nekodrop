@@ -57,6 +57,16 @@ static void ReadSettings(NEKO_DEVICE *dev) {
   }
 }
 
+/* EvtDeviceAdd: before anything can queue work. */
+void NekoInitQueues(NEKO_DEVICE *dev) {
+  KeInitializeEvent(&dev->Wake, SynchronizationEvent, FALSE);
+  KeInitializeSpinLock(&dev->Lock);
+  InitializeListHead(&dev->Jobs);
+  InitializeListHead(&dev->TxFrames);
+  InitializeListHead(&dev->RxFrames);
+  InitializeListHead(&dev->AwdlEvents);
+}
+
 NTSTATUS NekoHwPrepare(NEKO_DEVICE *dev, WDFCMRESLIST translated) {
   const ULONG count = WdfCmResourceListGetCount(translated);
   for (ULONG i = 0; i < count && !dev->Bar; i++) {
@@ -105,11 +115,6 @@ NTSTATUS NekoHwPrepare(NEKO_DEVICE *dev, WDFCMRESLIST translated) {
   st = NekoSetCapabilities(dev);
   if (!NT_SUCCESS(st)) return st;
 
-  KeInitializeEvent(&dev->Wake, SynchronizationEvent, FALSE);
-  KeInitializeSpinLock(&dev->Lock);
-  InitializeListHead(&dev->Jobs);
-  InitializeListHead(&dev->TxFrames);
-  InitializeListHead(&dev->RxFrames);
   dev->Stop = 0;
   HANDLE thread;
   st = PsCreateSystemThread(&thread, THREAD_ALL_ACCESS, nullptr, nullptr, nullptr, NekoWorker, dev);
@@ -131,6 +136,13 @@ void NekoHwRelease(NEKO_DEVICE *dev) {
     ObDereferenceObject(dev->Thread);
     dev->Thread = nullptr;
   }
+  /* Requests the worker never got to: fail them so nobody waits forever. */
+  while (!IsListEmpty(&dev->Jobs)) {
+    auto *job = CONTAINING_RECORD(RemoveHeadList(&dev->Jobs), NEKO_JOB, Link);
+    if (job->IoRequest) WdfRequestComplete(job->IoRequest, STATUS_DEVICE_REMOVED);
+    else WifiRequestComplete(job->Request, STATUS_DEVICE_NOT_READY, 0);
+    ExFreePoolWithTag(job, NEKO_TAG);
+  }
   NekoAwdlDestroy(dev); /* worker stopped: safe to touch the listener here */
   if (dev->HwOpen) {
     khal_close();
@@ -141,7 +153,6 @@ void NekoHwRelease(NEKO_DEVICE *dev) {
   /* Drop whatever is still queued. */
   LIST_ENTRY *lists[] = {&dev->TxFrames, &dev->RxFrames};
   for (LIST_ENTRY *l : lists) {
-    if (!l->Flink) continue;
     while (!IsListEmpty(l)) NekoFrameFree(CONTAINING_RECORD(RemoveHeadList(l), NEKO_FRAME, Link));
   }
   ExSetTimerResolution(0, FALSE);

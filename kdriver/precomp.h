@@ -125,6 +125,7 @@ struct NEKO_DEVICE {
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(NEKO_DEVICE, NekoGetDevice);
 
 /* device.cpp */
+void NekoInitQueues(NEKO_DEVICE *dev);
 NTSTATUS NekoHwPrepare(NEKO_DEVICE *dev, WDFCMRESLIST translated);
 void NekoHwRelease(NEKO_DEVICE *dev);
 NTSTATUS NekoSetCapabilities(NEKO_DEVICE *dev);

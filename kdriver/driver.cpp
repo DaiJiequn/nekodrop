@@ -46,6 +46,7 @@ static NTSTATUS EvtDeviceAdd(_In_ WDFDRIVER, _Inout_ PWDFDEVICE_INIT init) {
   if (!NT_SUCCESS(status)) return status;
   NEKO_DEVICE *ctx = NekoGetDevice(device);
   ctx->Device = device;
+  NekoInitQueues(ctx);
 
   WIFI_DEVICE_CONFIG wifi;
   WIFI_DEVICE_CONFIG_INIT(&wifi, WDI_VERSION_LATEST, NekoWdiSendCommand, EvtCreateAdapter,
