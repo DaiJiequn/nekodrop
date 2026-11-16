@@ -75,18 +75,26 @@ awdld and the AirDrop engine talk to the radio pipe exactly as before.
 
 ## Status (2026-11-17: built and statically checked, not yet loaded)
 
-- [x] builds: KMDF 1.33 + NetAdapterCx 2.4 + WiFiCx 1.2, 214 KB; imports only
+- [x] builds: KMDF 1.33 + NetAdapterCx 2.4 + WiFiCx 1.2, 230 KB; imports only
       ntoskrnl, HAL and WDFLDR; INF passes InfVerif; catalog generated
 - [x] hardware layer shared with the user-mode radio (hardware-proven code)
-- [x] capabilities, radio state, reset, scan (probe + passive dwell), BSS list
+- [x] capabilities, radio state, reset, BSS list
+- [x] scan: firmware UMAC scan (v14, adaptive dwell, between the station's and
+      the listener's slots); channel visiting as a fallback if the firmware
+      refuses it
 - [x] connect: auth, assoc (RSN/HT/VHT/WMM), association result, link state,
       deauth/disassoc, disconnect; CCMP keys from Windows (WPA2 personal and
       enterprise)
+- [x] WPA3-Personal: SAE run by Windows (WDI_SET_SAE_AUTH_PARAMS), commit and
+      confirm frames sent and reported by the driver, H2E status 126
+- [x] 802.11w: MFPC/MFPR in the RSN element, MFP on the firmware station, IGTK
+      (BIP-CMAC-128) through MGMT_MCAST_KEY, protected deauthentication
 - [x] data path: Native 802.11 frames (DataFormat=1 switches to Ethernet)
+- [x] MSI receive interrupts wake the worker (1 ms polling stays as a fallback
+      and relaxes to 10 ms once interrupts arrive)
 - [x] AWDL control device, `--kernel` engine backend, service integration
 - [x] `--pcap` capture of everything the listener receives
 - [ ] loaded on hardware (needs test signing on)
-- [ ] WPA3-SAE (OS-driven SAE auth frames) and 802.11w (MFP/BIP)
-- [ ] firmware (UMAC) background scan instead of channel visiting
-- [ ] interrupts (MSI-X) instead of the 1 ms poll
-- [ ] other Intel generations: hal_iwm (7260/8260/9260/9560), hal_iwn
+- [ ] other Intel generations: hal_iwm (7260/8260/9260/9560), hal_iwn. This is
+      a second hardware layer (older firmware API, different TX/RX rings), not
+      a configuration; it can only be checked on such a card.
