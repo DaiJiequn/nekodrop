@@ -74,7 +74,8 @@ public sealed class Supervisor : IDisposable
         // A config the radio never read (it deletes it once read) holds the
         // Wi-Fi key: never leave one behind across a restart.
         try { File.Delete(Path.Combine(ServiceConfig.Folder, "run", "sta.conf")); } catch (Exception) { }
-        if (_cfg.Mode == NetMode.Concurrent) Start("boot (concurrent mode)");
+        if (KernelDriver) Start("boot (kernel driver: Windows keeps Wi-Fi)");
+        else if (_cfg.Mode == NetMode.Concurrent) Start("boot (concurrent mode)");
         else EnsureVendorDriver();
         _ = Task.Run(() => Watchdog(_cts.Token));
     }
@@ -139,7 +140,8 @@ public sealed class Supervisor : IDisposable
         {
             KillDaemons();
             string? staConf = null;
-            if (_cfg.Mode == NetMode.Concurrent)
+            var kernel = KernelDriver;
+            if (!kernel && _cfg.Mode == NetMode.Concurrent)
             {
                 var why = "";
                 var cardFree = !(Card.Find() is { } c && Card.TakenByProxy(c));
@@ -166,9 +168,12 @@ public sealed class Supervisor : IDisposable
                     lock (_lock) _wifi = "unsupported: " + why;
                 }
             }
-            TakeCard();
+            // With nekodrop-wlan.sys the card stays where it is: Windows runs
+            // the station, the radio only drives AWDL through the driver.
+            if (!kernel) TakeCard();
             var width = channel <= 14 ? 20 : 80;
             var args = new List<string> { channel.ToString(), "--width", width.ToString() };
+            if (kernel) args.Add("--kernel");
             if (_cfg.Country != "") args.AddRange(["--country", _cfg.Country]);
             if (staConf is not null) args.AddRange(["--sta-config", staConf]);
             _radio = Spawn(Path.Combine(_root, "radio", "nekodrop-radio.exe"), args, OnRadioLine);
@@ -338,6 +343,9 @@ public sealed class Supervisor : IDisposable
             Thread.Sleep(100);
         }
     }
+
+    /// <summary>The card runs nekodrop's kernel Wi-Fi driver (nekodrop-wlan.sys).</summary>
+    static bool KernelDriver => Card.Find() is { } k && Card.ByKernelDriver(k);
 
     void EnsureVendorDriver()
     {

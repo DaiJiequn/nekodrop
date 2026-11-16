@@ -45,6 +45,10 @@ public static class Card
     public static bool TakenByProxy(Info card) =>
         string.Equals(card.Service, ProxyService, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>The card is bound to nekodrop-wlan.sys: Windows' Wi-Fi and AWDL on one driver.</summary>
+    public static bool ByKernelDriver(Info card) =>
+        string.Equals(card.Service, "nekodrop-wlan", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Binds `inf` to the card, whatever ranks higher.</summary>
     /// <summary>
     /// Binds `inf` to the card, whatever ranks higher. The call has been seen to
