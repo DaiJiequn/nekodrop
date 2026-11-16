@@ -1,0 +1,61 @@
+# Values shared by the driver packaging, take-card and give-card scripts.
+# Adapted from winawdl's scripts\driver-settings.ps1 for Intel AX201 cards.
+$repoRoot = Split-Path $PSScriptRoot -Parent
+
+$DriverSettings = @{
+  InfName      = 'winawdl_regproxy.inf'
+  BuildDir     = "$repoRoot\driver\regproxy\build"
+  PackageDir   = "$repoRoot\driver\regproxy\build\package"
+  PackageFiles = @('winawdl_regproxy.inf', 'winawdl_regproxy.dll')
+  CertSubject  = 'CN=winairdrop driver signing (local test)'
+  CertFile     = 'winairdrop-signing.cer'
+  # The Qu/QuZ CNVi parts (AX201 and its Killer twins) this build can drive.
+  DeviceIds    = @('43F0', 'A0F0', '02F0', '06F0', '34F0', '3DF0', '4DF0')
+  TrustStores  = @('Root', 'TrustedPublisher')
+}
+
+function Get-PublishedPackages {
+  $store = [xml](pnputil /enum-drivers /format xml | Out-String)
+  $store.PnpUtil.Driver |
+    Where-Object { $_.OriginalName -eq $DriverSettings.InfName -and
+                   $_.ProviderName -eq 'winairdrop project' } |
+    ForEach-Object { $_.DriverName }
+}
+
+function Get-WifiCard {
+  Get-PnpDevice -PresentOnly |
+    Where-Object {
+      $id = $_.InstanceId
+      $id -like 'PCI\VEN_8086&DEV_*' -and
+        ($DriverSettings.DeviceIds | Where-Object { $id -like "PCI\VEN_8086&DEV_$_*" })
+    } |
+    Select-Object -First 1
+}
+
+function Get-WifiCardHardwareId {
+  $card = Get-WifiCard
+  if (-not $card) { return $null }
+  # The generic ID the INF matches, e.g. PCI\VEN_8086&DEV_43F0.
+  ($card.InstanceId -split '&SUBSYS')[0]
+}
+
+function Show-WifiCardDriver {
+  $card = Get-WifiCard
+  if (-not $card) { 'Intel AX201-family Wi-Fi card not found.'; return }
+  $service = (Get-PnpDeviceProperty -InstanceId $card.InstanceId `
+                -KeyName DEVPKEY_Device_Service).Data
+  $inf = (Get-PnpDeviceProperty -InstanceId $card.InstanceId `
+            -KeyName DEVPKEY_Device_DriverInfPath).Data
+  "Wi-Fi card: $($card.FriendlyName)"
+  "  status $($card.Status), problem code $($card.ConfigManagerErrorCode)"
+  "  service $service, driver package $inf"
+}
+
+# True when some network other than the Wi-Fi card is up, so taking the card
+# does not cut this PC off.
+function Test-OtherNetwork {
+  $card = Get-WifiCard
+  $others = Get-NetAdapter -Physical -ErrorAction SilentlyContinue |
+    Where-Object { $_.Status -eq 'Up' -and $_.PnPDeviceID -ne $card.InstanceId }
+  [bool]$others
+}
