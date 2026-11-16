@@ -19,7 +19,7 @@ public sealed class App : Application
         if (args.Contains("--unregister")) { Shell.Unregister(); return 0; }
         var pipeName = "nekodrop-ui-" + WindowsIdentity.GetCurrent().User?.Value;
         using var single = new Mutex(true, @"Local\nekodrop-ui", out var first);
-        if (!first)
+        if (!first && !args.Contains("--snapshot"))
         {
             // Hand the arguments (files to send, a notification's answer) to the running copy.
             try
@@ -126,6 +126,29 @@ public sealed class App : Application
 
     public MainWindow? Window => _window;
 
+    async Task LiveSnapshot(string dir, (string Name, Window W)[] windows)
+    {
+        foreach (var (name, w) in windows)
+        {
+            w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            w.Topmost = true;
+            w.Show();
+            w.Activate();
+            await Task.Delay(1500);
+            var src = PresentationSource.FromVisual(w);
+            var m = src?.CompositionTarget?.TransformToDevice ?? System.Windows.Media.Matrix.Identity;
+            int x = (int)(w.Left * m.M11), y = (int)(w.Top * m.M22);
+            int cw = (int)(w.ActualWidth * m.M11), ch = (int)(w.ActualHeight * m.M22);
+            using (var bmp = new System.Drawing.Bitmap(cw, ch))
+            {
+                using (var g = System.Drawing.Graphics.FromImage(bmp)) g.CopyFromScreen(x, y, 0, 0, bmp.Size);
+                bmp.Save(Path.Combine(dir, name + "-live.png"), System.Drawing.Imaging.ImageFormat.Png);
+            }
+            w.Close();
+        }
+        Shutdown();
+    }
+
     /// <summary>
     /// --snapshot DIR [--lang zh|en]: renders the send, main and settings windows
     /// with sample devices to DIR\*.png off screen and exits. For checking the
@@ -146,6 +169,12 @@ public sealed class App : Application
         foreach (var f in _startArgs.SkipWhile(a => a != "--send").Skip(1).TakeWhile(a => !a.StartsWith("--")))
             Model.Files.Add(f);
         var windows = new (string Name, Window W)[] { ("send", new SendWindow()), ("main", new MainWindow()), ("settings", new SettingsWindow()) };
+        if (_startArgs.Contains("--live"))
+        {
+            // On screen, captured from the screen: shows the real backdrop (Mica).
+            _ = LiveSnapshot(dir, windows);
+            return;
+        }
         foreach (var (name, w) in windows)
         {
             w.WindowStartupLocation = WindowStartupLocation.Manual;

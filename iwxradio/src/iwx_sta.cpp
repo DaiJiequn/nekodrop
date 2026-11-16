@@ -319,10 +319,27 @@ bool IwxDevice::sta_rate_control() {
 void IwxDevice::sta_leave() {
   if (!_sta_phy_added && !_sta_mac_added && !_sta_binding_added && !_sta_sta_added) return;
   if (!_fw_error && nic_lock()) {
+    /* iwlwifi's teardown order: queue, station, quota, binding, MAC, PHY.
+     * A station removed with its queue still enabled, or a time quota naming
+     * a binding that is gone, asserts the firmware at the next join. */
+    if (_sta_queue_enabled) {
+      iwx_tx_queue_cfg_cmd q{};
+      q.sta_id = IWX_STATION_ID;
+      q.tid = IWX_MGMT_TID;
+      q.flags = 0; /* disable (iwl_mvm_disable_txq, TVQM) */
+      send_cmd(IWX_SCD_QUEUE_CFG, &q, sizeof(q), false, nullptr);
+    }
     if (_sta_sta_added) {
       iwx_rm_sta_cmd rm{};
       rm.sta_id = IWX_STATION_ID;
       send_cmd(IWX_REMOVE_STA, &rm, sizeof(rm), false, nullptr);
+    }
+    if (_sta_binding_added && !_sta_shared_binding && !_fw.has_capa(IWX_UCODE_TLV_CAPA_DYNAMIC_QUOTA)) {
+      iwx_time_quota_cmd tq{};
+      for (unsigned i = 0; i < IWX_MAX_BINDINGS; i++) tq.quotas[i].id_and_color = htole32(IWX_FW_CTXT_INVALID);
+      tq.quotas[0].id_and_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+      tq.quotas[0].quota = htole32(IWX_MAX_QUOTA);
+      send_cmd(IWX_TIME_QUOTA_CMD, &tq, sizeof(tq), false, nullptr);
     }
     if (_sta_binding_added) {
       if (_sta_shared_binding) {
