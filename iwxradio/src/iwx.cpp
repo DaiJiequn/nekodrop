@@ -668,15 +668,10 @@ bool IwxDevice::run_init_sequence(std::string &error) {
     iwx_device_power_cmd power{};
     err = send_cmd(IWX_POWER_TABLE_CMD, &power, sizeof(power), false, nullptr);
   }
-  if (!err && _lar_enabled) {
-    err = update_mcc(_opt.country);
-    if (err && _opt.country != "ZZ") {
-      _log("country " + _opt.country + " refused (" + std::to_string(err) +
-           "), keeping the card's own");
-      err = update_mcc("ZZ");
-    }
-  }
+  if (!err && _lar_enabled) err = update_mcc("ZZ", -1, nullptr);
   nic_unlock();
+  if (!err && _opt.country != "ZZ" && !set_country(_opt.country))
+    _log("the firmware did not take country " + _opt.country);
   if (err) {
     error = "firmware init commands failed (" + std::to_string(err) + ")";
     return false;
@@ -872,11 +867,13 @@ int IwxDevice::nvm_get() {
   return 0;
 }
 
-int IwxDevice::update_mcc(const std::string &alpha2) {
+int IwxDevice::update_mcc(const std::string &alpha2, int source, std::string *got) {
   iwx_mcc_update_cmd cmd{};
   const char c0 = alpha2.size() > 0 ? alpha2[0] : 'Z', c1 = alpha2.size() > 1 ? alpha2[1] : 'Z';
   cmd.mcc = htole16(static_cast<uint16_t>(c0 << 8 | c1));
-  if (_fw.has_api(IWX_UCODE_TLV_API_WIFI_MCC_UPDATE) || _fw.has_capa(IWX_UCODE_TLV_CAPA_LAR_MULTI_MCC))
+  if (source >= 0)
+    cmd.source_id = static_cast<uint8_t>(source);
+  else if (_fw.has_api(IWX_UCODE_TLV_API_WIFI_MCC_UPDATE) || _fw.has_capa(IWX_UCODE_TLV_CAPA_LAR_MULTI_MCC))
     cmd.source_id = (c0 == 'Z' && c1 == 'Z') ? IWX_MCC_SOURCE_GET_CURRENT : IWX_MCC_SOURCE_ME;
   else
     cmd.source_id = IWX_MCC_SOURCE_OLD_FW;
@@ -891,18 +888,145 @@ int IwxDevice::update_mcc(const std::string &alpha2) {
   const uint32_t n = le32toh(r->n_channels);
   if (plen != sizeof(*r) + n * sizeof(uint32_t)) return EIO;
   const uint16_t mcc = le16toh(r->mcc);
-  std::string summary = std::string("regulatory domain ") + char(mcc >> 8) + char(mcc & 0xff) + ":";
+  const std::string domain{char(mcc >> 8), char(mcc & 0xff)};
+  if (got) *got = domain;
+  std::string summary = "regulatory: asked " + alpha2 + " (source " + std::to_string(cmd.source_id) +
+                        "), firmware says " + domain + " (source " + std::to_string(r->source_id) +
+                        ", status " + std::to_string(le32toh(r->status)) + "):";
   for (uint32_t i = 0; i < n && i < nitems(kNvmChannels); i++) {
     const uint8_t ch = kNvmChannels[i];
-    if (ch != 6 && ch != 44 && ch != 149) continue;
+    if (ch != 6 && ch != 36 && ch != 44 && ch != 149) continue;
     const uint32_t flags = le32toh(r->channels[i]);
+    _chan_flags[ch] = flags;
     summary += " ch" + std::to_string(ch) + "=" +
                (!(flags & IWX_NVM_CHANNEL_VALID) ? "off"
                 : (flags & IWX_NVM_CHANNEL_ACTIVE) ? "active"
-                                                    : "passive");
+                                                    : "passive") +
+               ((flags & IWX_NVM_CHANNEL_80MHZ) ? "/80" : "");
   }
   _log(summary);
   return 0;
+}
+
+bool IwxDevice::set_promiscuous(bool on) {
+  if (on == _promisc) return true;
+  _promisc = on;
+  if (!_mac_added) return true;
+  if (!nic_lock()) return false;
+  const int err = mac_ctxt_cmd(IWX_FW_CTXT_ACTION_MODIFY);
+  nic_unlock();
+  if (err) _log("promiscuous change failed (" + std::to_string(err) + ")");
+  return err == 0;
+}
+
+bool IwxDevice::add_rx_ba(const uint8_t peer[6], unsigned tid, uint16_t ssn, uint16_t window,
+                          uint8_t token) {
+  if (tid >= 8 || !_mac_added) return false;
+  if (!nic_lock()) return false;
+  constexpr uint8_t kBaStation = 3; /* ForbiddenItlwm's kAwdlBaStationId */
+  int err = 0;
+  uint32_t status = 0;
+  if (_ba_station && std::memcmp(_ba_peer, peer, 6) != 0) {
+    /* A new peer: the old station and its sessions go. */
+    iwx_rm_sta_cmd rm{};
+    rm.sta_id = kBaStation;
+    send_cmd(IWX_REMOVE_STA, &rm, sizeof(rm), false, nullptr);
+    _ba_station = false;
+    _ba_tids = 0;
+  }
+  if (!_ba_station) {
+    iwx_add_sta_cmd cmd{};
+    cmd.sta_id = kBaStation;
+    cmd.station_type = IWX_STA_LINK;
+    cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+    std::memcpy(cmd.addr, peer, 6);
+    cmd.tid_disable_tx = htole16(0xffff);
+    cmd.station_flags = htole32((_width >= 80 && _channel > 14 ? IWX_STA_FLG_FAT_EN_80MHZ
+                                                               : IWX_STA_FLG_FAT_EN_20MHZ) |
+                                IWX_STA_FLG_MIMO_EN_MIMO2);
+    cmd.station_flags_msk = htole32(IWX_STA_FLG_FAT_EN_MSK | IWX_STA_FLG_MIMO_EN_MSK);
+    status = IWX_ADD_STA_SUCCESS;
+    err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+    if (err || (status & IWX_ADD_STA_STATUS_MASK) != IWX_ADD_STA_SUCCESS) {
+      nic_unlock();
+      _log("Block Ack: peer station refused (err " + std::to_string(err) + ", status " +
+           hex(status) + ")");
+      return false;
+    }
+    _ba_station = true;
+    std::memcpy(_ba_peer, peer, 6);
+  }
+  /* A new token is a new session with its own start: drop the old one first. */
+  if (((_ba_tids >> tid) & 1) && _ba_token[tid] != token) {
+    iwx_add_sta_cmd cmd{};
+    cmd.sta_id = kBaStation;
+    cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+    cmd.add_modify = IWX_STA_MODE_MODIFY;
+    cmd.remove_immediate_ba_tid = static_cast<uint8_t>(tid);
+    cmd.modify_mask = IWX_STA_MODIFY_REMOVE_BA_TID;
+    status = IWX_ADD_STA_SUCCESS;
+    send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+    _ba_tids &= static_cast<uint8_t>(~(1u << tid));
+  }
+  if (!((_ba_tids >> tid) & 1)) {
+    iwx_add_sta_cmd cmd{};
+    cmd.sta_id = kBaStation;
+    cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+    cmd.add_modify = IWX_STA_MODE_MODIFY;
+    cmd.add_immediate_ba_tid = static_cast<uint8_t>(tid);
+    cmd.add_immediate_ba_ssn = htole16(ssn);
+    cmd.rx_ba_window = htole16(window);
+    cmd.modify_mask = IWX_STA_MODIFY_ADD_BA_TID;
+    status = IWX_ADD_STA_SUCCESS;
+    err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+    if (err || (status & IWX_ADD_STA_STATUS_MASK) != IWX_ADD_STA_SUCCESS ||
+        !(status & IWX_ADD_STA_BAID_VALID_MASK)) {
+      nic_unlock();
+      _log("Block Ack: session refused (err " + std::to_string(err) + ", status " + hex(status) + ")");
+      return false;
+    }
+    _ba_tids |= static_cast<uint8_t>(1u << tid);
+    _ba_token[tid] = token;
+    _log("Block Ack: receive session open, tid " + std::to_string(tid) + ", window " +
+         std::to_string(window));
+  }
+  nic_unlock();
+  return true;
+}
+
+bool IwxDevice::remove_rx_ba(unsigned tid) {
+  if (tid >= 8 || !((_ba_tids >> tid) & 1)) return true;
+  if (!nic_lock()) return false;
+  iwx_add_sta_cmd cmd{};
+  cmd.sta_id = 3;
+  cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+  cmd.add_modify = IWX_STA_MODE_MODIFY;
+  cmd.remove_immediate_ba_tid = static_cast<uint8_t>(tid);
+  cmd.modify_mask = IWX_STA_MODIFY_REMOVE_BA_TID;
+  uint32_t status = IWX_ADD_STA_SUCCESS;
+  const int err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+  nic_unlock();
+  _ba_tids &= static_cast<uint8_t>(~(1u << tid));
+  return err == 0;
+}
+
+bool IwxDevice::set_country(const std::string &alpha2) {
+  if (!_lar_enabled || alpha2.size() != 2) return false;
+  if (!nic_lock()) return false;
+  /* As ForbiddenItlwm answers a country learned from Wi-Fi: with the Wi-Fi
+   * source. Other sources are tried after it. */
+  bool ok = false;
+  /* Measured on an AX201 (firmware 68): only the BIOS source is taken; the
+   * Wi-Fi, ME and MCC-API sources answer status 4 and change nothing. */
+  for (int source : {int(IWX_MCC_SOURCE_BIOS), int(IWX_MCC_SOURCE_WIFI)}) {
+    std::string got;
+    if (update_mcc(alpha2, source, &got) == 0 && got == alpha2) {
+      ok = true;
+      break;
+    }
+  }
+  nic_unlock();
+  return ok;
 }
 
 int IwxDevice::phy_ctxt_cmd(uint32_t action) {
@@ -995,9 +1119,10 @@ int IwxDevice::mac_ctxt_cmd(uint32_t action) {
     cmd.ofdm_rates = htole32(0x15); /* 6, 12, 24 */
     cmd.qos_flags = htole32(IWX_MAC_QOS_FLG_TGN);
   }
-  cmd.filter_flags = htole32(IWX_MAC_FILTER_IN_PROMISC | IWX_MAC_FILTER_IN_CONTROL_AND_MGMT |
-                             IWX_MAC_FILTER_ACCEPT_GRP | IWX_MAC_FILTER_IN_BEACON |
-                             IWX_MAC_FILTER_IN_PROBE_REQUEST | IWX_MAC_FILTER_IN_CRC32);
+  cmd.filter_flags = htole32((_promisc ? IWX_MAC_FILTER_IN_PROMISC : 0u) |
+                             IWX_MAC_FILTER_IN_CONTROL_AND_MGMT | IWX_MAC_FILTER_ACCEPT_GRP |
+                             IWX_MAC_FILTER_IN_BEACON | IWX_MAC_FILTER_IN_PROBE_REQUEST |
+                             IWX_MAC_FILTER_IN_CRC32);
   if (_opt.mac_type == MacType::Ibss) {
     cmd.ibss.bi = htole32(100);
     cmd.ibss.bi_reciprocal = htole32(iwx_reciprocal(100));
@@ -1195,14 +1320,14 @@ bool IwxDevice::set_address(const uint8_t address[6]) {
 
 /* ---------------------------------------------------------------- transmit */
 
-bool IwxDevice::transmit(const uint8_t *frame, size_t len, const TxRate &rate) {
-  if (!_queue_enabled || _fw_error) return false;
+int IwxDevice::transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate) {
+  if (!_queue_enabled || _fw_error) return -1;
   const size_t hdrlen = hdrlen_80211(frame, len);
-  if (!hdrlen || len - hdrlen > kTxPayloadSlot || hdrlen > 64) return false;
+  if (!hdrlen || len - hdrlen > kTxPayloadSlot || hdrlen > 64) return -1;
   TxRing &ring = _dataq;
   if (ring.queued >= ring.count - 2) {
     _tx_stats.dropped_full++;
-    return false;
+    return -1;
   }
   const unsigned idx = ring.cur & (ring.count - 1);
   auto *cmd = reinterpret_cast<iwx_device_cmd *>(ring.cmd_slot[idx].va);
@@ -1219,7 +1344,12 @@ bool IwxDevice::transmit(const uint8_t *frame, size_t len, const TxRate &rate) {
   uint32_t rnf = (1u << ant_idx) << IWX_RATE_MCS_ANT_POS;
   const uint8_t tx_ver = cmd_version(IWX_LONG_GROUP, IWX_TX_CMD);
   const bool new_format = tx_ver > 8 && tx_ver != IWX_FW_CMD_VER_UNKNOWN;
-  if (rate.kind == TxRate::Ht) {
+  if (rate.kind == TxRate::Vht && new_format) {
+    const unsigned mcs = std::min(rate.mcs, 9u);
+    rnf = (rate.nss > 1 ? IWX_RATE_MCS_ANT_AB_MSK : rnf) | IWX_RATE_MCS_VHT_MSK |
+          (rate.wide80 && _width >= 80 ? IWX_RATE_MCS_CHAN_WIDTH_80 : 0u) |
+          (rate.nss > 1 ? IWX_RATE_MCS_NSS_MSK : 0u) | mcs;
+  } else if (rate.kind == TxRate::Ht || rate.kind == TxRate::Vht) {
     const unsigned mcs = std::min(rate.mcs, 15u);
     if (mcs > 7) rnf = IWX_RATE_MCS_ANT_AB_MSK;
     if (new_format)
@@ -1282,7 +1412,7 @@ bool IwxDevice::transmit(const uint8_t *frame, size_t len, const TxRate &rate) {
   std::atomic_thread_fence(std::memory_order_seq_cst);
   wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
   _tx_stats.submitted++;
-  return true;
+  return static_cast<int>(idx);
 }
 
 /* ------------------------------------------------------------------ receive */
@@ -1350,7 +1480,7 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
     handle_mpdu(payload, plen);
     break;
   case IWX_TX_CMD:
-    handle_tx_resp(payload, plen);
+    handle_tx_resp(payload, plen, static_cast<unsigned>(idx));
     break;
   case IWX_ALIVE: {
     if (plen == sizeof(iwx_alive_resp_v4)) {
@@ -1425,7 +1555,7 @@ void IwxDevice::handle_mpdu(const uint8_t *payload, size_t len) {
   if (_on_rx) _on_rx(f);
 }
 
-void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len) {
+void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot) {
   if (len < sizeof(iwx_tx_resp)) return;
   const auto *r = reinterpret_cast<const iwx_tx_resp *>(payload);
   if (r->frame_count < 1 ||
@@ -1436,9 +1566,21 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len) {
     const unsigned status = le16toh(r->status.status) & IWX_TX_STATUS_MSK;
     if (status == IWX_TX_STATUS_SUCCESS || status == IWX_TX_STATUS_DIRECT_DONE)
       _tx_stats.acked++;
-    else
+    else {
       _tx_stats.failed++;
+      if (_opt.verbose && _tx_fail_logged++ < 40) {
+        char b[160];
+        std::snprintf(b, sizeof(b),
+                      "tx failed: status 0x%04x, retries %u, rts fails %u, bt kills %u, rate 0x%08x, "
+                      "frame_ctrl 0x%04x, bytes %u",
+                      le16toh(r->status.status), r->failure_frame, r->failure_rts, r->bt_kill_count,
+                      le32toh(r->initial_rate), le16toh(r->frame_ctrl), le16toh(r->byte_cnt));
+        _log(b);
+      }
+    }
     _tx_stats.retries += r->failure_frame;
+    if (_on_tx)
+      _on_tx(slot, status == IWX_TX_STATUS_SUCCESS || status == IWX_TX_STATUS_DIRECT_DONE);
   }
   uint32_t ssn;
   std::memcpy(&ssn, reinterpret_cast<const uint8_t *>(&r->status) + r->frame_count * sizeof(r->status),

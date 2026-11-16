@@ -8,6 +8,9 @@
 
 #include "../src/iwxreg.h"
 #include "../src/fw.h"
+#include "../src/awdl_policy.h"
+#include <cstring>
+#include <vector>
 
 static int failures = 0;
 
@@ -83,6 +86,79 @@ int main(int argc, char **argv) {
         failures++;
       }
     }
+  }
+
+  /* AWDL policy (ported from ForbiddenItlwm), on a captured iPhone frame. */
+  {
+#define CHECK(cond, what)                                                                   \
+  do {                                                                                      \
+    if (cond) std::printf("ok   %s\n", what);                                               \
+    else {                                                                                  \
+      std::printf("FAIL %s\n", what);                                                       \
+      failures++;                                                                           \
+    }                                                                                       \
+  } while (0)
+    /* TLV 18 as an iPhone in Japan sent it on 2026-11-16, and TLV 12 "JP". */
+    const uint8_t tlv18[] = {0x0f, 0x03, 0x00, 0x03, 0xff, 0xff, 0x2c, 0x80, 0x2c, 0x80, 0x2c, 0x80,
+                             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x80, 0x06, 0x51,
+                             0x2c, 0x80, 0x2c, 0x80, 0x2c, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                             0x2c, 0x80, 0x00, 0x00, 0x00};
+    std::vector<uint8_t> f(40, 0);
+    f[0] = 0xd0; f[24] = 0x7f; f[25] = 0x00; f[26] = 0x17; f[27] = 0xf2; f[28] = 0x08;
+    f.push_back(18); f.push_back(sizeof(tlv18)); f.push_back(0);
+    f.insert(f.end(), tlv18, tlv18 + sizeof(tlv18));
+    const uint8_t tlv12[] = {12, 4, 0, 0, 0, 'J', 'P'};
+    f.insert(f.end(), tlv12, tlv12 + sizeof(tlv12));
+    CHECK(awdl::is_awdl_action(f.data(), f.size()), "AWDL action frame recognised");
+    uint8_t seq[16];
+    CHECK(awdl::peer_sequence(f.data(), f.size(), seq), "channel sequence parsed");
+    CHECK(awdl::peer_channel(seq) == 44, "iPhone in Japan: peer 5 GHz channel is 44");
+    char c[3];
+    CHECK(awdl::peer_country(f.data(), f.size(), c) && std::string(c) == "JP", "peer country JP");
+    awdl::PeerCountry pc;
+    bool changed = false;
+    for (int k = 0; k < 5; k++) changed |= pc.note(c);
+    CHECK(changed && std::string(pc.confirmed) == "JP", "country confirmed after 5 frames");
+    uint8_t s149[16] = {149, 149, 149, 0, 0, 0, 0, 0, 6, 149, 149, 149, 0, 0, 0, 0};
+    CHECK(awdl::peer_channel(s149) == 149, "sequence naming 149 gives 149");
+    uint8_t wifi44[16] = {149, 149, 0, 0, 0, 0, 44, 44, 149, 149, 0, 0, 0, 0, 44, 44};
+    CHECK(awdl::peer_channel(wifi44) == 149, "44 only in Wi-Fi slots, 149 named: 149");
+
+    /* ADDBA request -> response round trip. */
+    const uint8_t own[6] = {0x02, 1, 2, 3, 4, 5}, peer[6] = {0x66, 0x71, 0xa5, 0xbe, 0xeb, 0xb3};
+    uint8_t req[33] = {};
+    req[0] = 0xd0;
+    std::memcpy(req + 4, own, 6);
+    std::memcpy(req + 10, peer, 6);
+    req[24] = 3; req[25] = 0; req[26] = 7;
+    const uint16_t params = uint16_t(2 | (5 << 2) | (64 << 6));
+    req[27] = uint8_t(params); req[28] = uint8_t(params >> 8);
+    req[31] = uint8_t(123 << 4); req[32] = uint8_t(123 >> 4);
+    awdl::AddbaRequest r;
+    CHECK(awdl::parse_addba_request(req, sizeof(req), own, &r) && r.tid == 5 && r.window == 64 &&
+              r.ssn == 123 && r.token == 7 && r.immediate,
+          "ADDBA request parsed (tid 5, window 64, ssn 123)");
+    uint8_t ans[33];
+    awdl::build_addba_response(ans, r, own, 9);
+    CHECK(ans[25] == 1 && ans[26] == 7 && std::memcmp(ans + 4, peer, 6) == 0 &&
+              (((ans[29] | ans[30] << 8) >> 2) & 15) == 5,
+          "ADDBA response built for the same token and tid");
+
+    awdl::BaFilter bf;
+    bf.note(1000000, 0);
+    CHECK(bf.note(2000001, 40) && bf.off, "busy data turns promiscuous off");
+    bf.note(3000002, 41); bf.note(4000003, 42);
+    CHECK(bf.note(5000004, 43) && !bf.off, "three quiet seconds turn it back on");
+
+    awdl::RateLadder rl;
+    for (int k = 0; k < 64; k++) rl.note(true, false);
+    CHECK(rl.step == 1, "64 clean frames step the rate up");
+    for (int k = 0; k < 64; k++) rl.note(k % 3 != 0, false);
+    CHECK(rl.step == 0, "a third lost steps it back down");
+    for (int k = 0; k < 64 * 8; k++) rl.note(true, false);
+    CHECK(rl.step == 3, "20 MHz tops out at HT MCS 7");
+    for (int k = 0; k < 64 * 8; k++) rl.note(true, true);
+    CHECK(rl.step == 5, "80 MHz reaches VHT 2x2 MCS 7");
   }
   std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
   return failures ? 1 : 0;

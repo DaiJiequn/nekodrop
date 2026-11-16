@@ -36,9 +36,11 @@ struct RxFrame {
 };
 
 struct TxRate {
-  enum Kind { Legacy, Ht } kind = Legacy;
+  enum Kind { Legacy, Ht, Vht } kind = Legacy;
   unsigned mbps_x2 = 12; /* legacy rate in 500 kb/s units: 12 = 6 Mb/s */
-  unsigned mcs = 0;      /* HT MCS 0..15 */
+  unsigned mcs = 0;      /* HT MCS 0..15, VHT MCS 0..9 */
+  unsigned nss = 1;      /* VHT spatial streams, 1 or 2 */
+  bool wide80 = false;   /* VHT at 80 MHz */
 };
 
 struct TxStats {
@@ -71,9 +73,29 @@ public:
   bool start_monitor(uint8_t channel, unsigned width_mhz, const uint8_t address[6]);
   bool set_channel(uint8_t channel, unsigned width_mhz);
   bool set_address(const uint8_t address[6]);
+  /* A Block Ack receive session with `peer` (ForbiddenItlwm's awdlBaHandle):
+   * a firmware station for the peer, bound to the listener, and an immediate
+   * BA agreement on `tid`. The firmware then answers aggregates by itself. */
+  bool add_rx_ba(const uint8_t peer[6], unsigned tid, uint16_t ssn, uint16_t window, uint8_t token);
+  bool remove_rx_ba(unsigned tid);
+  bool rx_ba_open(unsigned tid) const { return tid < 8 && (_ba_tids >> tid) & 1; }
+  /* Promiscuous receive on the listener on/off (off while a BA session is busy). */
+  bool set_promiscuous(bool on);
+  bool promiscuous() const { return _promisc; }
+  /* Asks the firmware for a regulatory domain ("CN", "US"...). True if taken. */
+  bool set_country(const std::string &alpha2);
+  /* IWX_NVM_CHANNEL_* flags the firmware last reported for a channel (6, 36, 44, 149). */
+  uint32_t channel_flags(uint8_t channel) const { return _chan_flags[channel]; }
   /* Queues one frame (802.11 header first, no FCS). False if the ring is full
    * or the frame is malformed. */
-  bool transmit(const uint8_t *frame, size_t len, const TxRate &rate);
+  bool transmit(const uint8_t *frame, size_t len, const TxRate &rate) {
+    return transmit_slot(frame, len, rate) >= 0;
+  }
+  /* As transmit, returning the ring slot the frame took (-1 on failure); the
+   * TX-status handler is later called with that slot. */
+  int transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate);
+  using TxStatusHandler = std::function<void(unsigned slot, bool acked)>;
+  void set_tx_status_handler(TxStatusHandler handler) { _on_tx = std::move(handler); }
   /* Handles whatever the card has delivered since the last call. Returns the
    * number of receive buffers processed. */
   int poll();
@@ -142,7 +164,7 @@ private:
   uint8_t valid_tx_ant() const;
   uint8_t valid_rx_ant() const;
   int nvm_get();
-  int update_mcc(const std::string &alpha2);
+  int update_mcc(const std::string &alpha2, int source, std::string *got);
   int phy_ctxt_cmd(uint32_t action);
   int mac_ctxt_cmd(uint32_t action);
   int binding_cmd(uint32_t action);
@@ -153,12 +175,13 @@ private:
   void handle_rb(unsigned index);
   void handle_packet(const uint8_t *pkt, size_t len);
   void handle_mpdu(const uint8_t *payload, size_t len);
-  void handle_tx_resp(const uint8_t *payload, size_t len);
+  void handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot);
   void dump_error_tables();
   bool read_mem(uint32_t addr, uint32_t *out, unsigned dwords);
 
   Logger _log;
   RxHandler _on_rx;
+  TxStatusHandler _on_tx;
   Options _opt;
   RegProxy _proxy;
   DmaPool _dma;
@@ -194,7 +217,12 @@ private:
   unsigned _width = 20;
   std::array<uint8_t, 6> _address{};
   TxStats _tx_stats;
+  bool _promisc = true;
+  bool _ba_station = false;
+  uint8_t _ba_peer[6] = {}, _ba_tids = 0, _ba_token[8] = {};
+  uint32_t _chan_flags[256] = {};
   struct TxHist { uint16_t len; uint8_t hdrlen, fc0, fc1, a1; uint32_t rnf; uint8_t slot; };
   TxHist _tx_hist[8] = {};
   unsigned _tx_hist_at = 0;
+  unsigned _tx_fail_logged = 0;
 };

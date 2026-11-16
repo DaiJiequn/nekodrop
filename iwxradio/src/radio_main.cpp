@@ -33,6 +33,7 @@
 #include <thread>
 #include <vector>
 
+#include "awdl_policy.h"
 #include "iwx.h"
 #include "pipe_server.h"
 #include "radio_link.h"
@@ -61,6 +62,8 @@ struct Options {
   unsigned width = 0; /* 0: 80 on 5 GHz, 20 on 2.4 GHz, as winawdl */
   IwxDevice::Options dev;
   TxRate data_rate{TxRate::Legacy, 48, 0}; /* 24 Mb/s */
+  bool fixed_rate = false;  /* --data-rate given: no rate ladder */
+  bool no_block_ack = false;
   /* Test mode: serve the pipe without touching the card, and report what the
    * client sends. Checks the radio link against awdld with no hardware. */
   bool no_card = false;
@@ -101,11 +104,12 @@ bool parse_options(int argc, char **argv, Options &o) {
       else if (t == "ibss") o.dev.mac_type = IwxDevice::MacType::Ibss;
       else if (t == "sta") o.dev.mac_type = IwxDevice::MacType::Sta;
       else return false;
-    } else if (a == "--data-rate") parse_rate(value(), o.data_rate);
+    } else if (a == "--data-rate") o.fixed_rate = parse_rate(value(), o.data_rate);
     else if (a == "--verbose") o.dev.verbose = true;
     else if (a == "--no-card") o.no_card = true;
     else if (a == "--retries" || a == "--capture") value();
-    else if (a == "--no-block-ack" || a == "--no-aggregate" || a == "--no-quick-submit") {}
+    else if (a == "--no-block-ack") o.no_block_ack = true;
+    else if (a == "--no-aggregate" || a == "--no-quick-submit") {}
     else if (!a.empty() && std::isdigit(static_cast<unsigned char>(a[0])) && !o.channel)
       o.channel = static_cast<uint8_t>(std::atoi(a.c_str()));
     else return false;
@@ -267,17 +271,67 @@ int main(int argc, char **argv) {
     }
     std::vector<uint8_t> message;
     uint8_t dev_address[6] = {};
+    bool beacon_heard = false;
+    uint64_t tx_held_passive = 0;
+    uint8_t peer_seq[16] = {};
+    unsigned peer5g = 0;
+    awdl::PeerCountry peer_country;
+    std::string want_country, have_country = opt.dev.country;
     uint64_t rx_all = 0, rx_awdl = 0, rx_to_us = 0;
+    uint32_t rx_data_to_us = 0;
     int8_t awdl_dbm = -127;
+    std::deque<awdl::AddbaRequest> addba_pending;
+    std::deque<uint8_t> delba_pending;
+    const auto now_us = [] {
+      static LARGE_INTEGER f = [] {
+        LARGE_INTEGER v;
+        QueryPerformanceFrequency(&v);
+        return v;
+      }();
+      LARGE_INTEGER t;
+      QueryPerformanceCounter(&t);
+      return static_cast<uint64_t>(t.QuadPart) * 1000000ull / static_cast<uint64_t>(f.QuadPart);
+    };
     dev.set_rx_handler([&](const RxFrame &f) {
       rx_all++;
-      /* AWDL action frame: category 127 (vendor), Apple OUI 00:17:f2, type 8. */
-      if (f.len >= 30 && f.data[0] == 0xd0 && f.data[24] == 0x7f && f.data[25] == 0x00 &&
-          f.data[26] == 0x17 && f.data[27] == 0xf2 && f.data[28] == 0x08) {
+      /* Beacon hint: a beacon heard in our 80 MHz block lifts "passive". */
+      if (f.len >= 36 && (f.data[0] == 0x80 || f.data[0] == 0x50) && !beacon_heard) {
+        const unsigned a = awdl::block80_first(f.channel), b = awdl::block80_first(dev.channel());
+        if ((a && a == b) || f.channel == dev.channel()) {
+          beacon_heard = true;
+          log_line("beacon heard on channel " + std::to_string(f.channel) + ": transmitting allowed here");
+        }
+      }
+      if (awdl::is_awdl_action(f.data, f.len)) {
         rx_awdl++;
         awdl_dbm = f.dbm;
+        uint8_t seq[16];
+        if (awdl::peer_sequence(f.data, f.len, seq) && std::memcmp(seq, peer_seq, 16) != 0) {
+          std::memcpy(peer_seq, seq, 16);
+          const unsigned ch = awdl::peer_channel(seq);
+          if (ch && ch != peer5g) {
+            peer5g = ch;
+            log_line("event: peer-channel " + std::to_string(ch));
+          }
+        }
+        char c[3];
+        if (awdl::peer_country(f.data, f.len, c) && peer_country.note(c)) {
+          log_line("event: peer-country " + std::string(peer_country.confirmed));
+          want_country = peer_country.confirmed; /* applied from the main loop */
+        }
       }
-      if (f.len >= 10 && std::memcmp(f.data + 4, dev_address, 6) == 0) rx_to_us++;
+      if (f.len >= 10 && std::memcmp(f.data + 4, dev_address, 6) == 0) {
+        rx_to_us++;
+        if ((f.data[0] & 0x0c) == 0x08) rx_data_to_us++;
+        awdl::AddbaRequest req;
+        bool sender = false;
+        uint8_t tid = 0;
+        if (awdl::parse_addba_request(f.data, f.len, dev_address, &req)) {
+          if (addba_pending.size() < 16) addba_pending.push_back(req);
+        } else if (awdl::parse_delba(f.data, f.len, dev_address, &sender, &tid) && sender) {
+          delba_pending.push_back(tid);
+        }
+      }
       if (!client_connected || f.len < 24) return;
       if (have_filter) {
         std::lock_guard<std::mutex> l(filter_mutex);
@@ -301,10 +355,95 @@ int main(int argc, char **argv) {
       dev.stop();
       return;
     }
+    {
+      const uint32_t cf = dev.channel_flags(opt.channel);
+      log_line(std::string("event: channel ") + std::to_string(opt.channel) + " " +
+               (opt.channel <= 14 || (cf & (1u << 3)) ? "active" : "passive"));
+    }
+
+    /* Host-side resend (ForbiddenItlwm's ResendState): frames to one station
+     * go out one at a time; a failed one is sent again, with the retry flag,
+     * for up to 400 ms, since the peer may be on another channel. */
+    struct Unicast {
+      std::vector<uint8_t> frame;
+      TxRate rate;
+      bool data;
+    };
+    std::deque<Unicast> uq;
+    int inflight = -1;
+    unsigned attempts = 0;
+    uint64_t first_us = 0, not_before_us = 0, sent_us = 0;
+    uint64_t resent = 0, gave_up = 0, uq_dropped = 0;
+    awdl::RateLadder ladder;
+    const bool wide80 = opt.channel > 14 && opt.width >= 80;
+    const auto data_rate = [&]() -> TxRate {
+      if (opt.fixed_rate) return opt.data_rate;
+      const unsigned st = ladder.step;
+      TxRate r;
+      if (st == 0) {
+        r.kind = TxRate::Legacy;
+        r.mbps_x2 = 48;
+      } else if (st <= 3) {
+        r.kind = TxRate::Ht;
+        r.mcs = awdl::kRateMcs[st];
+      } else {
+        r.kind = TxRate::Vht;
+        r.mcs = awdl::kRateMcs[st];
+        r.nss = 2;
+        r.wide80 = true;
+      }
+      return r;
+    };
+    dev.set_tx_status_handler([&](unsigned slot, bool acked) {
+      if (inflight < 0 || slot != static_cast<unsigned>(inflight) || uq.empty()) return;
+      inflight = -1;
+      const uint64_t now = now_us();
+      if (uq.front().data && attempts == 1) ladder.note(acked, wide80);
+      if (acked) {
+        uq.pop_front();
+        attempts = 0;
+        return;
+      }
+      if (now - first_us >= awdl::kResendWindowUS || attempts >= awdl::kResendMaxAttempts) {
+        uq.pop_front();
+        attempts = 0;
+        gave_up++;
+        return;
+      }
+      uq.front().frame[1] |= 0x08; /* retry */
+      not_before_us = now + awdl::resend_backoff_us(attempts);
+      resent++;
+    });
+    const auto pump = [&] {
+      const uint64_t now = now_us();
+      if (inflight >= 0) {
+        if (now - sent_us < 1000000) return false;
+        inflight = -1; /* no status in a second: do not stall behind it */
+      }
+      if (uq.empty() || now < not_before_us) return false;
+      if (!attempts) {
+        first_us = now;
+        if (uq.front().data) uq.front().rate = data_rate();
+      }
+      const int slot = dev.transmit_slot(uq.front().frame.data(), uq.front().frame.size(),
+                                         uq.front().rate);
+      if (slot < 0) return false;
+      inflight = slot;
+      attempts++;
+      sent_us = now;
+      return true;
+    };
+    const auto may_send = [&] {
+      const uint32_t cf = dev.channel_flags(dev.channel());
+      return dev.channel() <= 14 || (cf & (1u << 3)) || beacon_heard;
+    };
+    awdl::BaFilter ba_filter;
+    uint16_t mgmt_seq = 0;
+    uint64_t ba_answers = 0;
     ready = true;
     log_line("ready on channel " + std::to_string(opt.channel) + ", waiting for a client");
 
-    uint64_t idle_rounds = 0, last_report = GetTickCount64();
+    uint64_t idle_rounds = 0, last_report = GetTickCount64(), last_health = 0;
     Request req;
     while (!stopping() && dev.healthy()) {
       bool busy = dev.poll() > 0;
@@ -316,13 +455,23 @@ int main(int argc, char **argv) {
           const uint8_t *frame = req.payload.data() + rt.length;
           const size_t len = req.payload.size() - rt.length;
           if (len < 10) continue;
-          TxRate rate{TxRate::Legacy, 12, 0};
-          const bool unicast = len >= 10 && !(frame[4] & 1);
+          TxRate rate;
+          const bool unicast = !(frame[4] & 1);
           const bool data = (frame[0] & 0x0c) == 0x08;
-          if (rt.has_mcs) rate = {TxRate::Ht, 0, rt.mcs};
-          else if (rt.has_rate && rt.rate_x2) rate = {TxRate::Legacy, rt.rate_x2, 0};
-          else if (unicast && data) rate = opt.data_rate;
-          dev.transmit(frame, len, rate);
+          if (rt.has_mcs) {
+            rate.kind = TxRate::Ht;
+            rate.mcs = rt.mcs;
+          } else if (rt.has_rate && rt.rate_x2) {
+            rate.mbps_x2 = rt.rate_x2;
+          }
+          if (!may_send()) {
+            tx_held_passive++; /* no initiating on a passive channel */
+          } else if (unicast) {
+            if (uq.size() >= 1024) uq_dropped++;
+            else uq.push_back({std::vector<uint8_t>(frame, frame + len), rate, data});
+          } else {
+            dev.transmit(frame, len, rate);
+          }
         } else if (req.type == RADIO_LINK_SET_ADDRESS && req.payload.size() == 6) {
           std::memcpy(dev_address, req.payload.data(), 6);
           dev.set_address(req.payload.data());
@@ -336,6 +485,41 @@ int main(int argc, char **argv) {
           dev.set_channel(ch, ch <= 14 ? 20 : opt.width);
         }
       }
+      /* Block Ack: open the firmware session, then answer from our queue. The
+       * peer repeats its request until it hears an answer. */
+      while (!addba_pending.empty()) {
+        const awdl::AddbaRequest r = addba_pending.front();
+        addba_pending.pop_front();
+        if (!r.immediate || opt.no_block_ack) continue;
+        if (!dev.add_rx_ba(r.peer, r.tid, r.ssn, r.window, r.token)) continue;
+        uint8_t answer[awdl::kAddbaResponseLength];
+        awdl::build_addba_response(answer, r, dev_address, ++mgmt_seq);
+        if (may_send()) {
+          uq.push_front({std::vector<uint8_t>(answer, answer + sizeof(answer)), TxRate{}, false});
+          ba_answers++;
+        }
+      }
+      while (!delba_pending.empty()) {
+        dev.remove_rx_ba(delba_pending.front());
+        delba_pending.pop_front();
+      }
+      /* Promiscuous receive off while a session's data is busy. */
+      bool any_ba = false;
+      for (unsigned t = 0; t < 8; t++) any_ba |= dev.rx_ba_open(t);
+      if (any_ba && ba_filter.note(now_us(), rx_data_to_us)) dev.set_promiscuous(!ba_filter.off);
+      if (!any_ba && !dev.promiscuous()) {
+        ba_filter = awdl::BaFilter{};
+        dev.set_promiscuous(true);
+      }
+      if (!want_country.empty() && want_country != have_country) {
+        if (dev.set_country(want_country)) {
+          have_country = want_country;
+          log_line("event: country " + have_country);
+        }
+        want_country.clear();
+      }
+      if (pump()) busy = true;
+      if (inflight >= 0 || !uq.empty()) busy = true;
       if (busy) {
         idle_rounds = 0;
       } else if (++idle_rounds > 200) {
@@ -344,7 +528,6 @@ int main(int argc, char **argv) {
         SwitchToThread();
       }
       const uint64_t now = GetTickCount64();
-      static uint64_t last_health = 0;
       if (now - last_health >= 1000) {
         last_health = now;
         dev.check_health();
@@ -355,10 +538,14 @@ int main(int argc, char **argv) {
         log_line("rx: " + std::to_string(rx_all) + " frames, " + std::to_string(rx_awdl) +
                  " AWDL action frames (last " + std::to_string(awdl_dbm) + " dBm), " +
                  std::to_string(rx_to_us) + " addressed to us");
-        log_line("tx: " + std::to_string(s.submitted) + " submitted, " +
-                 std::to_string(s.acked) + " done, " + std::to_string(s.failed) + " failed, " +
-                 std::to_string(s.retries) + " retries, " + std::to_string(s.dropped_full) +
-                 " dropped (ring full)");
+        log_line("tx: " + std::to_string(s.submitted) + " submitted, " + std::to_string(s.acked) +
+                 " done, " + std::to_string(s.failed) + " failed; unicast: " + std::to_string(resent) +
+                 " resent, " + std::to_string(gave_up) + " given up, " + std::to_string(uq.size()) +
+                 " waiting, " + std::to_string(uq_dropped) + " dropped; rate step " +
+                 std::to_string(ladder.step) + " (" + std::to_string(ladder.ups) + " up, " +
+                 std::to_string(ladder.downs) + " down); BA answers " + std::to_string(ba_answers) +
+                 (dev.promiscuous() ? "" : ", promiscuous off") +
+                 (tx_held_passive ? "; " + std::to_string(tx_held_passive) + " held (passive channel)" : ""));
       }
     }
     if (!dev.healthy()) log_line("the card stopped answering or the firmware failed");
