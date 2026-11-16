@@ -61,6 +61,9 @@ struct Options {
   unsigned width = 0; /* 0: 80 on 5 GHz, 20 on 2.4 GHz, as winawdl */
   IwxDevice::Options dev;
   TxRate data_rate{TxRate::Legacy, 48, 0}; /* 24 Mb/s */
+  /* Test mode: serve the pipe without touching the card, and report what the
+   * client sends. Checks the radio link against awdld with no hardware. */
+  bool no_card = false;
 };
 
 bool parse_rate(const std::string &s, TxRate &rate) {
@@ -100,6 +103,7 @@ bool parse_options(int argc, char **argv, Options &o) {
       else return false;
     } else if (a == "--data-rate") parse_rate(value(), o.data_rate);
     else if (a == "--verbose") o.dev.verbose = true;
+    else if (a == "--no-card") o.no_card = true;
     else if (a == "--retries" || a == "--capture") value();
     else if (a == "--no-block-ack" || a == "--no-aggregate" || a == "--no-quick-submit") {}
     else if (!a.empty() && std::isdigit(static_cast<unsigned char>(a[0])) && !o.channel)
@@ -213,6 +217,45 @@ int main(int argc, char **argv) {
 
   /* The device thread owns the card: bring-up, receive polling, sending. */
   std::thread device_thread([&] {
+    if (opt.no_card) {
+      ready = true;
+      log_line("test mode: no card; counting what the client sends");
+      uint64_t tx = 0, action = 0, data = 0, other = 0, last = GetTickCount64();
+      Request req;
+      while (!stopping()) {
+        while (inbox.pop(req)) {
+          if (req.type == RADIO_LINK_TX) {
+            RadiotapInfo rt;
+            if (!parse_radiotap(req.payload.data(), req.payload.size(), rt)) {
+              log_line("TX with a malformed radiotap header");
+              continue;
+            }
+            const uint8_t fc = req.payload.size() > rt.length ? req.payload[rt.length] : 0;
+            tx++;
+            if (fc == 0xd0) action++;
+            else if ((fc & 0x0c) == 0x08) data++;
+            else other++;
+          } else if (req.payload.size() == 6) {
+            char b[64];
+            std::snprintf(b, sizeof(b), "%s %02x:%02x:%02x:%02x:%02x:%02x",
+                          req.type == RADIO_LINK_SET_ADDRESS ? "address" : "bssid filter",
+                          req.payload[0], req.payload[1], req.payload[2], req.payload[3],
+                          req.payload[4], req.payload[5]);
+            log_line(b);
+          } else if (req.type == RADIO_LINK_SET_CHANNEL && req.payload.size() == 1) {
+            log_line("channel " + std::to_string(req.payload[0]));
+          }
+        }
+        if (GetTickCount64() - last >= 2000) {
+          last = GetTickCount64();
+          log_line("client sent " + std::to_string(tx) + " frames: " + std::to_string(action) +
+                   " action, " + std::to_string(data) + " data, " + std::to_string(other) +
+                   " other");
+        }
+        Sleep(5);
+      }
+      return;
+    }
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
     IwxDevice dev(log_line);
     std::string error;
