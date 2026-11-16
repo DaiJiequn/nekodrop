@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyDescriptionAttribute("nekodrop: AirDrop on the built-in Intel Wi-Fi card (service)")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("0.1.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.0+1207cba1f52665814b67ee690a5df66a3502276f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.1.0+357bea9132512810feb36dba16ab75cd3ec744da")]
 [assembly: System.Reflection.AssemblyProductAttribute("nekodrop")]
 [assembly: System.Reflection.AssemblyTitleAttribute("NekoDropService")]
 [assembly: System.Reflection.AssemblyVersionAttribute("0.1.0.0")]

@@ -2,7 +2,7 @@
 ; User-mode register proxy for Intel Wi-Fi 6 AX201-family (Qu/QuZ CNVi) cards.
 ; Adapted from winawdl's RTL8852CE proxy. Matches only the generic device IDs,
 ; which rank below Intel's own (with SUBSYS), so adding it takes over nothing:
-; scripts	ake-card.ps1 binds it to the card explicitly, give-card.ps1 undoes it.
+; NekoDropService (or scripts	ake-card.ps1) binds it to the card explicitly.
 
 [Version]
 Signature   = "$Windows NT$"

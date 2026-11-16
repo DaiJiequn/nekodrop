@@ -69,6 +69,9 @@ public sealed class Supervisor : IDisposable
     /// <summary>Called once when the service starts.</summary>
     public void Boot()
     {
+        // A config the radio never read (it deletes it once read) holds the
+        // Wi-Fi key: never leave one behind across a restart.
+        try { File.Delete(Path.Combine(ServiceConfig.Folder, "run", "sta.conf")); } catch (Exception) { }
         if (_cfg.Mode == NetMode.Concurrent) Start("boot (concurrent mode)");
         else EnsureVendorDriver();
         _ = Task.Run(() => Watchdog(_cts.Token));
@@ -150,6 +153,7 @@ public sealed class Supervisor : IDisposable
         }
         catch (Exception e)
         {
+            try { File.Delete(Path.Combine(ServiceConfig.Folder, "run", "sta.conf")); } catch (Exception) { }
             Say("start failed: " + e.Message);
             lock (_lock) { State = RadioState.Error; _detail = e.Message; }
             Publish();

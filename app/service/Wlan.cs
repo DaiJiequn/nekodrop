@@ -17,7 +17,7 @@ public static class Wlan
                                  string? PskHex, bool Open);
 
     /// <summary>Null when not connected; Security says what kept it from being usable.</summary>
-    public static Network? Current(out string why)
+    public static Network? Current(out string why, bool readKey = true)
     {
         why = "";
         if (WlanOpenHandle(2, IntPtr.Zero, out _, out var h) != 0) { why = "WLAN service unavailable"; return null; }
@@ -34,7 +34,7 @@ public static class Wlan
                     var guid = Marshal.PtrToStructure<Guid>(item);
                     var state = Marshal.ReadInt32(item + 16 + 512);
                     if (state != 1 /* wlan_interface_state_connected */) continue;
-                    return Query(h, guid, out why);
+                    return Query(h, guid, out why, readKey);
                 }
                 why = "Wi-Fi is not connected";
                 return null;
@@ -44,7 +44,7 @@ public static class Wlan
         finally { WlanCloseHandle(h, IntPtr.Zero); }
     }
 
-    static Network? Query(IntPtr h, Guid guid, out string why)
+    static Network? Query(IntPtr h, Guid guid, out string why, bool readKey)
     {
         why = "";
         if (WlanQueryInterface(h, ref guid, 7 /* current_connection */, IntPtr.Zero, out _, out var p, out _) != 0)
@@ -91,6 +91,7 @@ public static class Wlan
             why = $"{security} is not supported beside AirDrop (WPA2-Personal with AES only)";
             return new Network(ssid, bssid, channel, security, null, null, false);
         }
+        if (!readKey) return new Network(ssid, bssid, channel, security, null, null, false);
         uint flags = 4; // WLAN_PROFILE_GET_PLAINTEXT_KEY
         if (WlanGetProfile(h, ref guid, profile, IntPtr.Zero, out var xmlPtr, ref flags, out _) != 0)
         {
@@ -126,6 +127,7 @@ public static class Wlan
         if (n.Open) lines.Add("open=1");
         else if (n.PskHex is not null) lines.Add($"psk={n.PskHex}");
         else lines.Add($"passphrase={n.Passphrase}");
+        if (File.Exists(path)) File.Delete(path);
         File.WriteAllLines(path, lines);
         var acl = new System.Security.AccessControl.FileSecurity();
         acl.SetAccessRuleProtection(true, false);

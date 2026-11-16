@@ -3,6 +3,35 @@
 // memory, creating the AWDL adapter and reading the Wi-Fi profile need no UAC.
 using NekoDrop.Service;
 
+// --give-back: hand the card to Intel's driver and exit (uninstall, recovery).
+if (args.Contains("--give-back"))
+{
+    using var s = new Supervisor();
+    s.Stop("--give-back", giveBack: true);
+    return;
+}
+
+// --status: what the service would work with (no keys are read or printed).
+if (args.Contains("--status"))
+{
+    var card = Card.Find();
+    Console.WriteLine(card is null ? "card: none found"
+        : $"card: {card.InstanceId}{Environment.NewLine}  driver service {card.Service}, INF {card.InfPath}, taken by nekodrop: {Card.TakenByProxy(card)}");
+    var net = Wlan.Current(out var why, readKey: false);
+    Console.WriteLine(net is null ? $"wifi: {why}"
+        : $"wifi: \"{net.Ssid}\" {net.Bssid} channel {net.Channel}, {net.Security}{(why == "" ? "" : " - " + why)}");
+    var cfg = ServiceConfig.Load();
+    Console.WriteLine($"mode {cfg.Mode}, start channel {cfg.StartChannel}, country \"{cfg.Country}\", peer channel {cfg.PeerChannel}");
+    return;
+}
+
+// The service owns the card and reads the Wi-Fi key: only as LocalSystem.
+if (!System.Security.Principal.WindowsIdentity.GetCurrent().IsSystem)
+{
+    Console.Error.WriteLine("NekoDropService runs as a Windows service (LocalSystem). Use --status or --give-back here.");
+    return;
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(o => o.ServiceName = "NekoDropService");
 builder.Services.AddSingleton<Supervisor>();

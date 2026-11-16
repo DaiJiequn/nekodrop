@@ -2,3 +2,5 @@
 /build/
 /driver/regproxy/build/
 /.claude/
+/app/*/bin/
+/app/*/obj/
