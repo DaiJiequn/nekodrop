@@ -5,13 +5,15 @@
 #   1. remembers which INF the card uses now (Intel's), for kdriver-restore.ps1
 #   2. signs the package with a certificate made here, trusts it, deletes its key
 #   3. adds the package to the driver store and binds it to the card
-# Log: build\kdriver\install.log. Undo: scripts\kdriver-restore.ps1.
-param([string]$Package = (Join-Path (Split-Path $PSScriptRoot -Parent) 'build\kdriver\package'))
+# Log: %ProgramData%\nekodrop\kdriver-install.log. Undo: kdriver-restore.ps1.
+# The package: beside this script when installed, else the build output.
+param([string]$Package = $(if (Test-Path (Join-Path $PSScriptRoot 'nekodrop-wlan.inf')) { $PSScriptRoot }
+                          else { Join-Path (Split-Path $PSScriptRoot -Parent) 'build\kdriver\package' }))
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $state = Join-Path $env:ProgramData 'nekodrop'
 New-Item -ItemType Directory -Force $state | Out-Null
-Start-Transcript (Join-Path $repo 'build\kdriver\install.log') -Force | Out-Null
+Start-Transcript (Join-Path $state 'kdriver-install.log') -Force | Out-Null
 try {
   $boot = bcdedit /enum '{current}' | Out-String
   if ($boot -notmatch 'testsigning\s+Yes') {

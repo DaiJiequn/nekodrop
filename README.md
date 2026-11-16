@@ -22,6 +22,7 @@
 | 联网同时 AirDrop（站点模式：认证、关联、WPA2 四次握手、固件密钥、TLC 速率控制、TAP 桥接） | 已实现，加密对 IEEE/RFC 官方向量 5/5 通过，**未上机** |
 | Windows 服务、托盘客户端、系统通知、设置、中英双语 | 已实现；三个窗口（发送、主界面、设置）中英文离屏渲染检查通过；服务的网卡检测和 Wi-Fi 读取已在本机验证 |
 | 右键“用 nekodrop 发送” | Windows 11 第一级菜单（IExplorerCommand + 稀疏包，安装时用本机证书签名）和经典菜单/发送到；点击后弹出发送窗口选设备。签名已验证，**注册待安装后实测** |
+| **内核 Wi-Fi 驱动 `nekodrop-wlan.sys`**（WiFiCx：Windows 自带 Wi-Fi 开关照常可用，同时跑 AirDrop） | 已编译，静态检查通过（导入表只有 ntoskrnl/HAL/WDFLDR，INF 校验通过）；扫描、WPA2 连接、数据通路、AWDL 接口都已实现；**待开测试签名后实机加载**，见 [docs/KERNEL.md](docs/KERNEL.md) |
 | 一键安装包 `nekodrop-0.1.0-setup.exe` | 自带 .NET 运行时、Python、驱动、TAP、服务，中英文安装界面，失败会弹出原因和日志位置 |
 
 ## 结构

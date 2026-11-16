@@ -78,6 +78,12 @@ foreach ($f in 'signtool.exe', 'signtool.exe.manifest', 'mssign32.dll', 'wintrus
   Copy-Item "$sdkBin\$f" "$stage\shell\"
 }
 
+'kernel Wi-Fi driver (installed separately: needs test signing)'
+& "$PSScriptRoot\build-kdriver.ps1" | Out-Null
+New-Item -ItemType Directory -Force "$stage\kdriver" | Out-Null
+Copy-Item "$repo\build\kdriver\package\*" "$stage\kdriver\"
+Copy-Item "$PSScriptRoot\kdriver-install.ps1", "$PSScriptRoot\kdriver-restore.ps1" "$stage\kdriver\"
+
 'service and client'
 # Self-contained single files: the target PC needs no .NET runtime, and the two
 # apps cannot overwrite each other's runtime libraries in the shared folder.
