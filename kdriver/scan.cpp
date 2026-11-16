@@ -97,8 +97,17 @@ void NekoScanStart(NEKO_DEVICE *dev, const WDI_MESSAGE_HEADER *hdr, const WDI_SC
   dev->ScanIndex = 0;
   dev->Scanning = TRUE;
   g_scanStartUs = NowUs();
+  /* Firmware scan first: the station and the AWDL listener keep their channels. */
+  dev->ScanFirmware = !dev->NoFirmwareScan &&
+                      khal_umac_scan(dev->ScanChannels, dev->ScanCount, dev->ScanSsid, dev->ScanSsidLength, dev->Address);
+  if (!dev->ScanFirmware) dev->NoFirmwareScan = TRUE;
+  NEKO_LOG("scan: %lu channels%s, %s", dev->ScanCount, dev->ScanSsidLength ? " (directed)" : "",
+           dev->ScanFirmware ? "firmware" : "visiting");
+  if (dev->ScanFirmware) {
+    dev->ScanDwellEndUs = NowUs() + 15000000; /* a guard: the firmware reports the end */
+    return;
+  }
   khal_set_promiscuous(true);
-  NEKO_LOG("scan: %lu channels%s", dev->ScanCount, dev->ScanSsidLength ? " (directed)" : "");
   Visit(dev);
 }
 
@@ -159,28 +168,37 @@ static void ReportResults(NEKO_DEVICE *dev, ULONGLONG since) {
   NEKO_LOG("scan: %lu networks", reported);
 }
 
+static void Finish(NEKO_DEVICE *dev, NTSTATUS status);
+
 void NekoScanTick(NEKO_DEVICE *dev) {
   if (!dev->Scanning) return;
+  if (dev->ScanFirmware) {
+    if (khal_scan_running() && NowUs() < dev->ScanDwellEndUs) return;
+    if (khal_scan_running()) khal_scan_abort();
+    Finish(dev, STATUS_SUCCESS);
+    return;
+  }
   if (NowUs() < dev->ScanDwellEndUs) return;
   if (++dev->ScanIndex < dev->ScanCount) {
     Visit(dev);
     return;
   }
+  Finish(dev, STATUS_SUCCESS);
+}
+
+static void Finish(NEKO_DEVICE *dev, NTSTATUS status) {
   dev->Scanning = FALSE;
-  khal_set_channel(dev->HomeChannel, dev->HomeChannel > 14 ? 80 : 20);
-  ReportResults(dev, g_scanStartUs);
+  if (!dev->ScanFirmware) khal_set_channel(dev->HomeChannel, dev->HomeChannel > 14 ? 80 : 20);
+  dev->ScanFirmware = FALSE;
+  if (status == STATUS_SUCCESS) ReportResults(dev, g_scanStartUs);
   g_scanStartUs = 0;
-  NekoIndicate(dev, &dev->ScanHeader, WDI_INDICATION_SCAN_COMPLETE, dev->ScanHeader.TransactionId, STATUS_SUCCESS,
-               nullptr, 0);
+  NekoIndicate(dev, &dev->ScanHeader, WDI_INDICATION_SCAN_COMPLETE, dev->ScanHeader.TransactionId, status, nullptr, 0);
 }
 
 void NekoScanAbort(NEKO_DEVICE *dev) {
   if (!dev->Scanning) return;
-  dev->Scanning = FALSE;
-  g_scanStartUs = 0;
-  khal_set_channel(dev->HomeChannel, dev->HomeChannel > 14 ? 80 : 20);
-  NekoIndicate(dev, &dev->ScanHeader, WDI_INDICATION_SCAN_COMPLETE, dev->ScanHeader.TransactionId,
-               STATUS_REQUEST_ABORTED, nullptr, 0);
+  if (dev->ScanFirmware) khal_scan_abort();
+  Finish(dev, STATUS_REQUEST_ABORTED);
 }
 
 void NekoScanOnFrame(NEKO_DEVICE *dev, const KhalRx *f) {

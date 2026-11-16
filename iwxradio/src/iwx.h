@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -138,6 +139,14 @@ public:
   const StaParams &sta_params() const { return _sta; }
   using TxStatusHandler = std::function<void(unsigned slot, bool acked)>;
   void set_tx_status_handler(TxStatusHandler handler) { _on_tx = std::move(handler); }
+  /* Firmware scan (iwx_scan.cpp): the firmware visits `channels` between the
+   * station's and listener's slots; beacons and probe responses arrive through
+   * the receive handler; scan_running() turns false at IWX_SCAN_COMPLETE_UMAC.
+   * `ssid` (may be empty) makes it an active, directed scan. */
+  bool umac_scan(const uint8_t *channels, size_t count, const uint8_t *ssid, size_t ssid_len,
+                 const uint8_t address[6]);
+  bool scan_running() const { return _scan_running; }
+  void scan_abort();
   /* Handles whatever the card has delivered since the last call. Returns the
    * number of receive buffers processed. */
   int poll();
@@ -229,6 +238,8 @@ private:
 
   Logger _log;
   RxHandler _on_rx;
+  bool _scan_configured = false, _scan_running = false;
+  bool scan_config();
   std::vector<uint8_t> _unpadded; /* handle_mpdu's scratch */
   TxStatusHandler _on_tx;
   /* Frames that arrive while a command waits for its answer: the handler may

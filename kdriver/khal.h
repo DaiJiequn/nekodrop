@@ -75,6 +75,11 @@ void khal_tx_stats(KhalTxStats *out);
 uint32_t khal_channel_flags(uint8_t channel);
 bool khal_set_country(const char alpha2[3]);
 
+/* Firmware scan: the firmware visits the channels between our slots. */
+bool khal_umac_scan(const uint8_t *channels, size_t count, const uint8_t *ssid, size_t ssid_len, const uint8_t address[6]);
+bool khal_scan_running();
+void khal_scan_abort();
+
 /* Station (MAC 1) */
 struct KhalSta {
   uint8_t bssid[6];

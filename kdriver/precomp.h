@@ -78,6 +78,8 @@ struct NEKO_DEVICE {
 
   /* Scan task */
   BOOLEAN Scanning;
+  BOOLEAN ScanFirmware;     /* the firmware runs this scan (UMAC) */
+  BOOLEAN NoFirmwareScan;   /* the firmware refused once: visit channels */
   WDI_MESSAGE_HEADER ScanHeader;
   UCHAR ScanChannels[64];
   ULONG ScanCount, ScanIndex;

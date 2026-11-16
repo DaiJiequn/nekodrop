@@ -187,3 +187,9 @@ void khal_tx_stats(KhalTxStats *out) {
   out->retries = s.retries;
   out->dropped_full = s.dropped_full;
 }
+
+bool khal_umac_scan(const uint8_t *channels, size_t count, const uint8_t *ssid, size_t ssid_len, const uint8_t address[6]) {
+  return g_dev && g_dev->umac_scan(channels, count, ssid, ssid_len, address);
+}
+bool khal_scan_running() { return g_dev && g_dev->scan_running(); }
+void khal_scan_abort() { if (g_dev) g_dev->scan_abort(); }

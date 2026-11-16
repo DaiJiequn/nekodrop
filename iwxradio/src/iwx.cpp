@@ -1508,6 +1508,15 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
   case IWX_INIT_COMPLETE_NOTIF:
     _init_complete = true;
     break;
+  case IWX_SCAN_COMPLETE_UMAC:
+  case IWX_WIDE_ID(IWX_LONG_GROUP, IWX_SCAN_COMPLETE_UMAC):
+    if (_scan_running) {
+      _scan_running = false;
+      if (plen >= sizeof(iwx_umac_scan_complete))
+        _log("scan: firmware scan done, status " +
+             std::to_string(reinterpret_cast<const iwx_umac_scan_complete *>(payload)->status));
+    }
+    break;
   case IWX_REPLY_ERROR: {
     if (plen >= sizeof(iwx_error_resp)) {
       const auto *r = reinterpret_cast<const iwx_error_resp *>(payload);
