@@ -245,7 +245,8 @@ public sealed class Supervisor : IDisposable
                     _ = Task.Run(async () =>
                     {
                         await Task.Delay(TimeSpan.FromSeconds(30));
-                        if (State == RadioState.On && _channel > 14 && _rxToUs == 0)
+                        // A connected station proves the channel is usable: no bouncing back to 6.
+                        if (State == RadioState.On && _channel > 14 && _rxToUs == 0 && _wifi != "connected")
                         {
                             Say($"channel {_channel} stayed passive: back to {_cfg.StartChannel}");
                             lock (_lock) _cfg.PeerChannel = 0;

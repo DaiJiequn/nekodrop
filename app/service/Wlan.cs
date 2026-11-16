@@ -187,6 +187,8 @@ public static class Wlan
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "sta.conf");
         var lines = new List<string> { $"ssid={n.Ssid}", $"bssid={n.Bssid}", $"channel={n.Channel}" };
+        // nekodrop's own TAP adapter (installer: DHCP on), never another VPN's.
+        lines.Add("tap=nekodrop");
         if (n.Open) lines.Add("open=1");
         else if (n.PskHex is not null) lines.Add($"psk={n.PskHex}");
         else lines.Add($"passphrase={n.Passphrase}");
