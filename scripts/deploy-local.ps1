@@ -17,6 +17,9 @@ try {
   Start-Sleep 1
   Copy-Item "$repo\build\stage\nekodrop.exe" "$Target\" -Force
   Copy-Item "$repo\build\stage\airdrop\*.py" "$Target\airdrop\" -Force
+  # The receiver's spare ports (8772-8779) beside 8771.
+  Get-NetFirewallRule -DisplayName 'nekodrop AirDrop receiver' -ErrorAction SilentlyContinue |
+    Set-NetFirewallRule -LocalPort 8771-8779
   Set-Service NekoDropService -StartupType Automatic
   Start-Service NekoDropService
   Get-Item "$Target\radio\nekodrop-radio.exe", "$Target\NekoDropService.exe" | Select-Object Name, LastWriteTime

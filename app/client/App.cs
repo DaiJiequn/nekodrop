@@ -68,6 +68,8 @@ public sealed class App : Application
         });
         Service.Start();
         Engine.Event += o => Dispatcher.BeginInvoke(() => OnEngine(o));
+        Engine.Event += o => EngineLog(o.ToJsonString());
+        Engine.Log += EngineLog;
         if (Settings.Discoverable) StartEngine();
         _wake.AirDropNearby += () => Dispatcher.BeginInvoke(() =>
         {
@@ -86,10 +88,30 @@ public sealed class App : Application
         if (Engine.Running) return;
         try { Identity.Ensure(); } catch (Exception e) { Model.Detail = L.T("err.identity") + e.Message; }
         _engineIf = AwdlIndex();
+        _notReceivingSince = null;
         if (!Engine.Start(Settings, out var error)) Model.Detail = L.T("err.engine") + error;
     }
 
     int _engineIf = -1;
+
+    static readonly object EngineLogLock = new();
+
+    /// <summary>The engine's events and stderr, kept in %LocalAppData%\nekodrop\engine.log (1 MB, one old copy).</summary>
+    static void EngineLog(string line)
+    {
+        try
+        {
+            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "nekodrop");
+            var path = Path.Combine(dir, "engine.log");
+            lock (EngineLogLock)
+            {
+                Directory.CreateDirectory(dir);
+                if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024) File.Move(path, path + ".old", true);
+                File.AppendAllText(path, DateTime.Now.ToString("HH:mm:ss.fff ") + line + Environment.NewLine);
+            }
+        }
+        catch (Exception) { }
+    }
 
     /// <summary>awdl0's interface index (-1 when absent): a new one means awdld re-created it.</summary>
     static int AwdlIndex()
@@ -118,12 +140,15 @@ public sealed class App : Application
         {
             StartEngine();
         }
-        else if (now != _engineIf)
+        else if (now != _engineIf
+                 || _notReceivingSince is { } since && DateTime.UtcNow - since > TimeSpan.FromSeconds(30))
         {
             Engine.Dispose();
             StartEngine();
         }
     }
+
+    DateTime? _notReceivingSince;
 
     void CreateTray()
     {
@@ -462,6 +487,10 @@ public sealed class App : Application
         var id = (string?)o["id"] ?? "";
         switch (ev)
         {
+            case "receiving":
+                /* Not receiving (ports or mDNS held, a socket error): the watchdog starts over after a while. */
+                _notReceivingSince = (bool?)o["on"] == true ? null : _notReceivingSince ?? DateTime.UtcNow;
+                break;
             case "peer":
             {
                 var d = Model.Devices.FirstOrDefault(x => x.Id == id);
