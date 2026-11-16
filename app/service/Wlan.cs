@@ -44,6 +44,69 @@ public static class Wlan
         finally { WlanCloseHandle(h, IntPtr.Zero); }
     }
 
+    /// <summary>
+    /// Asks Windows to join the saved profiles in preference order, for when the
+    /// card is free but Windows is not connected (e.g. the user is on USB
+    /// tethering): the station needs the network's channel, BSSID and key, which
+    /// are only read from a live connection. Returns once one connects or after
+    /// `perProfile` each.
+    /// </summary>
+    public static Network? ConnectSaved(out string why, TimeSpan perProfile)
+    {
+        why = "no saved Wi-Fi profile in range";
+        if (WlanOpenHandle(2, IntPtr.Zero, out _, out var h) != 0) { why = "WLAN service unavailable"; return null; }
+        try
+        {
+            if (WlanEnumInterfaces(h, IntPtr.Zero, out var listPtr) != 0) { why = "no WLAN interface"; return null; }
+            Guid guid;
+            try
+            {
+                if (Marshal.ReadInt32(listPtr) == 0) { why = "no WLAN interface"; return null; }
+                guid = Marshal.PtrToStructure<Guid>(listPtr + 8);
+            }
+            finally { WlanFreeMemory(listPtr); }
+            if (WlanGetProfileList(h, ref guid, IntPtr.Zero, out var profiles) != 0) return null;
+            var names = new List<string>();
+            try
+            {
+                // WLAN_PROFILE_INFO_LIST: count, index, then WCHAR[256] + flags (516 bytes) each.
+                int n = Marshal.ReadInt32(profiles);
+                for (int i = 0; i < n; i++)
+                    names.Add(Marshal.PtrToStringUni(profiles + 8 + i * 516, 256).TrimEnd('\0'));
+            }
+            finally { WlanFreeMemory(profiles); }
+            foreach (var name in names)
+            {
+                var p = new WLAN_CONNECTION_PARAMETERS { wlanConnectionMode = 0, strProfile = name, dot11BssType = 1 };
+                if (WlanConnect(h, ref guid, ref p, IntPtr.Zero) != 0) continue;
+                var end = DateTime.UtcNow + perProfile;
+                while (DateTime.UtcNow < end)
+                {
+                    Thread.Sleep(500);
+                    var net = Query(h, guid, out var w, true);
+                    if (net is not null && (net.Open || net.Passphrase is not null || net.PskHex is not null)) return net;
+                    if (net is not null && w != "") { why = w; break; }
+                }
+            }
+            return null;
+        }
+        finally { WlanCloseHandle(h, IntPtr.Zero); }
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    struct WLAN_CONNECTION_PARAMETERS
+    {
+        public int wlanConnectionMode;
+        [MarshalAs(UnmanagedType.LPWStr)] public string strProfile;
+        public IntPtr pDot11Ssid;
+        public IntPtr pDesiredBssidList;
+        public int dot11BssType;
+        public uint dwFlags;
+    }
+
+    [DllImport("wlanapi.dll")] static extern int WlanGetProfileList(IntPtr handle, ref Guid iface, IntPtr reserved, out IntPtr list);
+    [DllImport("wlanapi.dll")] static extern int WlanConnect(IntPtr handle, ref Guid iface, ref WLAN_CONNECTION_PARAMETERS p, IntPtr reserved);
+
     static Network? Query(IntPtr h, Guid guid, out string why, bool readKey)
     {
         why = "";

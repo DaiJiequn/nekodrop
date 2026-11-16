@@ -86,7 +86,10 @@ bool IwxDevice::sta_join(const StaParams &p) {
   if (!_queue_enabled) return false; /* the listener comes first */
   sta_leave();
   _sta = p;
-  _sta_shared_binding = (p.channel == _channel);
+  /* Always its own PHY and binding: sharing the listener's binding left
+   * authentication unanswered on a passive channel (hardware, 2026-11-17),
+   * while a separate PHY on the same 5 GHz channel joins fine. */
+  _sta_shared_binding = false;
   if (!nic_lock()) return false;
   int err = 0;
   if (!_sta_shared_binding) {
@@ -322,13 +325,8 @@ void IwxDevice::sta_leave() {
     /* iwlwifi's teardown order: queue, station, quota, binding, MAC, PHY.
      * A station removed with its queue still enabled, or a time quota naming
      * a binding that is gone, asserts the firmware at the next join. */
-    if (_sta_queue_enabled) {
-      iwx_tx_queue_cfg_cmd q{};
-      q.sta_id = IWX_STATION_ID;
-      q.tid = IWX_MGMT_TID;
-      q.flags = 0; /* disable (iwl_mvm_disable_txq, TVQM) */
-      send_cmd(IWX_SCD_QUEUE_CFG, &q, sizeof(q), false, nullptr);
-    }
+    /* The TVQM queue needs no command: the firmware frees a removed
+     * station's queues (iwl_mvm_disable_txq with the new TX API). */
     if (_sta_sta_added) {
       iwx_rm_sta_cmd rm{};
       rm.sta_id = IWX_STATION_ID;

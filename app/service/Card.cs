@@ -46,10 +46,21 @@ public static class Card
         string.Equals(card.Service, ProxyService, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Binds `inf` to the card, whatever ranks higher.</summary>
-    public static void Bind(string hardwareId, string inf)
+    /// <summary>
+    /// Binds `inf` to the card, whatever ranks higher. The call has been seen to
+    /// block for minutes (hardware, 2026-11-17); after `timeout` the caller goes
+    /// on and checks which driver owns the card.
+    /// </summary>
+    public static void Bind(string hardwareId, string inf, TimeSpan? timeout = null)
     {
-        if (!UpdateDriverForPlugAndPlayDevicesW(IntPtr.Zero, hardwareId, inf, INSTALLFLAG_FORCE, out _))
-            throw new Win32Exception(Marshal.GetLastWin32Error(), $"binding {Path.GetFileName(inf)} failed");
+        var call = Task.Run(() =>
+        {
+            if (!UpdateDriverForPlugAndPlayDevicesW(IntPtr.Zero, hardwareId, inf, INSTALLFLAG_FORCE, out _))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), $"binding {Path.GetFileName(inf)} failed");
+        });
+        if (!call.Wait(timeout ?? TimeSpan.FromSeconds(45)))
+            return; /* still running; the device state decides */
+        if (call.Exception is { } e) throw e.InnerException ?? e;
     }
 
     static string InstanceId(IntPtr set, ref SP_DEVINFO_DATA data)

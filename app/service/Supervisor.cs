@@ -119,8 +119,20 @@ public sealed class Supervisor : IDisposable
         Publish();
     }
 
+    /// <summary>One launch at a time: the watchdog, a wake, a mode change and a channel move
+    /// used to start radios concurrently and kill each other's (hardware, 2026-11-17).</summary>
+    readonly SemaphoreSlim _launchGate = new(1, 1);
+
     void Launch(int channel)
     {
+        _launchGate.Wait();
+        try { LaunchLocked(channel); }
+        finally { _launchGate.Release(); }
+    }
+
+    void LaunchLocked(int channel)
+    {
+        if (!_wanted) return;
         lock (_lock) { State = RadioState.Starting; _channel = channel; _detail = ""; }
         Publish();
         try
@@ -130,7 +142,17 @@ public sealed class Supervisor : IDisposable
             if (_cfg.Mode == NetMode.Concurrent)
             {
                 var why = "";
-                var fresh = Card.Find() is { } c && Card.TakenByProxy(c) ? null : Wlan.Current(out why);
+                var cardFree = !(Card.Find() is { } c && Card.TakenByProxy(c));
+                var fresh = cardFree ? Wlan.Current(out why) : null;
+                // Not connected (USB tethering, or Intel's driver just got the card back):
+                // let Windows join a saved network once, to read what the station needs.
+                for (int i = 0; cardFree && fresh is null && _net is null && i < 4; i++)
+                {
+                    if (i == 0) Say("Wi-Fi: Windows is not connected; joining a saved network to read it");
+                    fresh = Wlan.ConnectSaved(out why, TimeSpan.FromSeconds(15));
+                    if (fresh is null && why == "no WLAN interface") Thread.Sleep(5000);
+                    else break;
+                }
                 if (fresh is not null) _net = fresh;
                 var net = fresh ?? _net;
                 if (net is not null && (net.Open || net.Passphrase is not null || net.PskHex is not null))
@@ -256,8 +278,13 @@ public sealed class Supervisor : IDisposable
 
     void Relaunch(int channel)
     {
-        KillDaemons();
-        Launch(channel);
+        _launchGate.Wait();
+        try
+        {
+            KillDaemons();
+            LaunchLocked(channel);
+        }
+        finally { _launchGate.Release(); }
     }
 
     async Task Watchdog(CancellationToken ct)
@@ -268,7 +295,7 @@ public sealed class Supervisor : IDisposable
             if (!_wanted) continue;
             var radioDown = _radio is null || _radio.HasExited;
             var awdldDown = State == RadioState.On && (_awdld is null || _awdld.HasExited);
-            if ((radioDown || awdldDown) && State != RadioState.Starting)
+            if ((radioDown || awdldDown) && State != RadioState.Starting && _launchGate.CurrentCount > 0)
             {
                 if (++_restarts > 5)
                 {
@@ -303,7 +330,7 @@ public sealed class Supervisor : IDisposable
         Say($"taking the card from {Path.GetFileName(card.InfPath)}");
         Card.Bind(card.HardwareId, inf);
         // The proxy's device interface appears once the UMDF host has started.
-        for (int i = 0; i < 50; i++)
+        for (int i = 0; i < 300; i++)
         {
             var now = Card.Find();
             if (now is not null && Card.TakenByProxy(now)) return;
