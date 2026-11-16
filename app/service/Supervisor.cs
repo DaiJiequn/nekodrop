@@ -21,6 +21,11 @@ public sealed class Supervisor : IDisposable
     readonly ServiceConfig _cfg = ServiceConfig.Load();
     Process? _radio, _awdld;
     int _channel;
+    /// <summary>The network last read from Windows; once the card is ours the WLAN service sees nothing.</summary>
+    Wlan.Network? _net;
+    /// <summary>AWDL channels the station can share (one binding, no air-time split), as upstream follows the infrastructure channel.</summary>
+    static bool SharableChannel(int ch) => ch is 6 or 44 or 149;
+    int StationChannel => _cfg.Mode == NetMode.Concurrent && _net is not null && SharableChannel(_net.Channel) ? _net.Channel : 0;
     string _wifi = "";
     string _detail = "";
     bool _wanted;
@@ -127,9 +132,18 @@ public sealed class Supervisor : IDisposable
             string? staConf = null;
             if (_cfg.Mode == NetMode.Concurrent)
             {
-                var net = Wlan.Current(out var why);
+                var why = "";
+                var fresh = Card.Find() is { } c && Card.TakenByProxy(c) ? null : Wlan.Current(out why);
+                if (fresh is not null) _net = fresh;
+                var net = fresh ?? _net;
                 if (net is not null && (net.Open || net.Passphrase is not null || net.PskHex is not null))
                 {
+                    if (SharableChannel(net.Channel) && channel != net.Channel)
+                    {
+                        Say($"AirDrop follows the Wi-Fi channel {net.Channel}");
+                        channel = net.Channel;
+                        lock (_lock) _channel = channel;
+                    }
                     staConf = Wlan.WriteStaConfig(net);
                     Say($"Wi-Fi: joining \"{net.Ssid}\" ({net.Security}, channel {net.Channel}) beside AirDrop");
                 }
@@ -209,7 +223,8 @@ public sealed class Supervisor : IDisposable
                 if (int.TryParse(value, out var ch) && (ch == 44 || ch == 149))
                 {
                     lock (_lock) { _cfg.PeerChannel = ch; _cfg.Save(); }
-                    if (_channel != ch) _ = Task.Run(() => MoveWhenIdle(ch));
+                    // Beside a station on a sharable channel AirDrop stays with it.
+                    if (_channel != ch && StationChannel == 0) _ = Task.Run(() => MoveWhenIdle(ch));
                 }
                 break;
             case "channel":
@@ -218,7 +233,7 @@ public sealed class Supervisor : IDisposable
                     _ = Task.Run(async () =>
                     {
                         await Task.Delay(TimeSpan.FromSeconds(30));
-                        if (State == RadioState.On && _channel > 14 && _rxToUs == 0)
+                        if (State == RadioState.On && _channel > 14 && _rxToUs == 0 && StationChannel != _channel)
                         {
                             Say($"channel {_channel} stayed passive: back to {_cfg.StartChannel}");
                             lock (_lock) _cfg.PeerChannel = 0;

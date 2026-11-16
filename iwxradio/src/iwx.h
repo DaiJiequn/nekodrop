@@ -19,6 +19,7 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <string>
 #include <vector>
@@ -126,6 +127,8 @@ public:
    * frames sent with TxRate::Auto use it. */
   bool sta_rate_control();
   bool sta_tlc() const { return _sta_tlc; }
+  unsigned sta_tx_acked() const { return _sta_tx_acked; }
+  unsigned sta_tx_failed() const { return _sta_tx_failed; }
   /* `encrypt`: the station's keys are installed and the frame carries the
    * protected bit; the firmware adds the CCMP header and MIC. */
   int sta_transmit(const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt);
@@ -227,6 +230,16 @@ private:
   Logger _log;
   RxHandler _on_rx;
   TxStatusHandler _on_tx;
+  /* Frames that arrive while a command waits for its answer: the handler may
+   * send commands itself, so they are delivered once no command is waiting
+   * (otherwise poll() re-enters and the same receive buffer is handled again). */
+  struct DeferredRx {
+    std::vector<uint8_t> frame;
+    RxFrame meta;
+  };
+  std::deque<DeferredRx> _deferred_rx;
+  unsigned _cmd_depth = 0;
+  void deliver_deferred();
   Options _opt;
   RegProxy _proxy;
   DmaPool _dma;
@@ -268,6 +281,7 @@ private:
        _sta_assoc = false, _sta_tlc = false;
   uint16_t _sta_aid = 0;
   uint8_t _sta_dtim = 1, _sta_ba_tids = 0;
+  unsigned _sta_tx_acked = 0, _sta_tx_failed = 0, _sta_tx_fail_logged = 0;
   bool _promisc = true;
   bool _ba_station = false;
   uint8_t _ba_peer[6] = {}, _ba_tids = 0, _ba_token[8] = {};

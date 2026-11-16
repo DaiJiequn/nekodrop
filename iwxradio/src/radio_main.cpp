@@ -600,7 +600,9 @@ int main(int argc, char **argv) {
                  (tx_held_passive ? "; " + std::to_string(tx_held_passive) + " held (passive channel)" : ""));
         if (sta)
           log_line(std::string("wifi: ") + sta->state_name() + ", " + std::to_string(sta->rx_packets()) +
-                   " packets in, " + std::to_string(sta->tx_packets()) + " out");
+                   " packets in, " + std::to_string(sta->tx_packets()) + " out; frames to the AP " +
+                   std::to_string(dev.sta_tx_acked()) + " acknowledged, " + std::to_string(dev.sta_tx_failed()) +
+                   " not");
       }
     }
     if (sta) sta->stop();

@@ -798,7 +798,10 @@ int IwxDevice::send_cmd(uint32_t id, const void *data, size_t len, bool want_res
   std::atomic_thread_fence(std::memory_order_seq_cst);
   wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
 
-  if (!wait_for([&] { return !slot.pending; }, timeout_ms)) {
+  _cmd_depth++;
+  const bool answered = wait_for([&] { return !slot.pending; }, timeout_ms);
+  _cmd_depth--;
+  if (!answered) {
     _log("firmware command " + hex(id) + " timed out");
     slot.pending = false;
     return _fw_error ? EIO : ETIMEDOUT;
@@ -1440,8 +1443,18 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
 
 /* ------------------------------------------------------------------ receive */
 
+void IwxDevice::deliver_deferred() {
+  while (_cmd_depth == 0 && !_deferred_rx.empty()) {
+    DeferredRx d = std::move(_deferred_rx.front());
+    _deferred_rx.pop_front();
+    d.meta.data = d.frame.data();
+    if (_on_rx) _on_rx(d.meta);
+  }
+}
+
 int IwxDevice::poll() {
   if (!_rx_stat) return 0;
+  if (_cmd_depth == 0) deliver_deferred();
   const auto *stat = reinterpret_cast<volatile iwx_rb_status *>(_rx_stat.va);
   uint16_t hw = le16toh(stat->closed_rb_num) & 0xfff;
   hw &= IWX_RX_MQ_RING_COUNT - 1;
@@ -1575,6 +1588,10 @@ void IwxDevice::handle_mpdu(const uint8_t *payload, size_t len, bool rada) {
   const int energy = std::max(ea, eb);
   RxFrame f{frame, mpdu_len, static_cast<int8_t>(energy < -127 ? -127 : energy), desc->v1.channel,
             le32toh(desc->v1.rate_n_flags), le16toh(desc->status), rada};
+  if (_cmd_depth) {
+    if (_deferred_rx.size() < 1024) _deferred_rx.push_back({std::vector<uint8_t>(frame, frame + mpdu_len), f});
+    return;
+  }
   if (_on_rx) _on_rx(f);
 }
 
@@ -1587,7 +1604,21 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot
   const unsigned queue = le16toh(r->tx_queue);
   if (_sta_queue_enabled && queue == _staq.qid) {
     /* The station's frames: the firmware retries them itself; only the ring
-     * is reclaimed. */
+     * is reclaimed. Failures are logged, they mean the AP never acknowledged. */
+    if (r->frame_count == 1) {
+      const unsigned status = le16toh(r->status.status) & IWX_TX_STATUS_MSK;
+      if (status != IWX_TX_STATUS_SUCCESS && status != IWX_TX_STATUS_DIRECT_DONE) {
+        _sta_tx_failed++;
+        if (_sta_tx_fail_logged++ < 20) {
+          char b[128];
+          std::snprintf(b, sizeof(b), "station: frame not acknowledged, status 0x%04x, retries %u, rate 0x%08x",
+                        le16toh(r->status.status), r->failure_frame, le32toh(r->initial_rate));
+          _log(b);
+        }
+      } else {
+        _sta_tx_acked++;
+      }
+    }
     uint32_t ssn;
     std::memcpy(&ssn, reinterpret_cast<const uint8_t *>(&r->status) + r->frame_count * sizeof(r->status),
                 sizeof(ssn));
