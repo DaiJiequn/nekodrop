@@ -13,8 +13,12 @@ namespace NekoDrop.Service;
 /// </summary>
 public static class Card
 {
-    /// <summary>The Qu/QuZ CNVi parts the radio can drive (AX201 and its Killer twins).</summary>
-    public static readonly string[] DeviceIds = ["43F0", "A0F0", "02F0", "06F0", "34F0", "3DF0", "4DF0"];
+    /// <summary>
+    /// The PCI device IDs the radio can drive (iwxradio/src/cards.h): Qu/QuZ
+    /// CNVi (AX201, 9560 class), the AX200, and the AX210 family.
+    /// </summary>
+    public static readonly string[] DeviceIds = ["43F0", "A0F0", "02F0", "06F0", "34F0", "3DF0", "4DF0",
+                                                 "2723", "2725", "7A70", "7AF0", "51F0", "51F1", "54F0", "7F70"];
     const string ProxyService = "WUDFRd";
 
     public sealed record Info(string InstanceId, string HardwareId, string Service, string InfPath);

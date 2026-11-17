@@ -7,6 +7,7 @@
 #include <string>
 
 #include "../src/iwxreg.h"
+#include "../src/cards.h"
 #include "../src/fw.h"
 #include "../src/awdl_policy.h"
 #include "../src/crypto.h"
@@ -42,13 +43,54 @@ int main(int argc, char **argv) {
   EXPECT_SIZE(iwx_mcc_update_cmd, 28);
   EXPECT_SIZE(iwx_alive_resp_v4, 0x74);
   EXPECT_SIZE(iwx_tx_resp, 44);
+  /* AX210 family */
+  EXPECT_SIZE(iwx_tx_cmd_gen3, 28);          /* TX_CMD_API_S_VER_8 */
+  EXPECT_SIZE(iwx_rx_transfer_desc, 16);
+  EXPECT_SIZE(iwx_rx_completion_desc, 32);
+  EXPECT_SIZE(iwx_gen3_bc_tbl, 2048);
+  EXPECT_SIZE(iwx_context_info_gen3, 104);   /* IPC_CONTEXT_INFO_S */
+  EXPECT_SIZE(iwx_alive_resp_v5, 0x74 + 12); /* v4 + sku_id */
+
+  /* Card selection (cards.h), with register values as iwx keeps them. */
+  struct CardCase { uint16_t dev; uint32_t hw_rev, rf_id; const char *fw; bool ax210, integrated; };
+  const CardCase cases[] = {
+      {0x43F0, 0x354, 0x0010a100, "iwlwifi-QuZ-a0-hr-b0-68.ucode", false, true}, /* this project's AX201 */
+      {0xA0F0, 0x334, 0x0010a100, "iwlwifi-Qu-b0-hr-b0-68.ucode", false, true},
+      {0x34F0, 0x338, 0x0010a100, "iwlwifi-Qu-c0-hr-b0-68.ucode", false, true},
+      {0x02F0, 0x354, 0x00108000, "iwlwifi-QuZ-a0-jf-b0-68.ucode", false, true},  /* 9560 on QuZ */
+      {0x2723, 0x340, 0x0010a100, "iwlwifi-cc-a0-68.ucode", false, false},        /* AX200 */
+      {0x2725, 0x420, 0x0010d000, "iwlwifi-ty-a0-gf-a0-68.ucode", true, true},     /* AX210 */
+      {0x7AF0, 0x370, 0x0010d000, "iwlwifi-so-a0-gf-a0-68.ucode", true, true},     /* AX211 */
+      {0x51F0, 0x370, 0x1010d000, "iwlwifi-so-a0-gf4-a0-68.ucode", true, true},    /* AX411 */
+      {0x2726, 0x420, 0x0010d000, nullptr, true, true},                             /* SnJ: no firmware */
+      {0x1234, 0x354, 0x0010a100, nullptr, false, true},
+  };
+  for (const auto &k : cases) {
+    const CardInfo c = cards::select(k.dev, k.hw_rev, k.rf_id);
+    const bool ok = k.fw ? (c.known && c.firmware == k.fw && c.ax210 == k.ax210 && c.integrated == k.integrated)
+                         : !c.known;
+    std::printf("%s card %04x rev %03x rf %08x -> %s%s\n", ok ? "ok  " : "FAIL", k.dev, k.hw_rev, k.rf_id,
+                c.known ? c.firmware.c_str() : "unsupported: ", c.known ? "" : c.why.c_str());
+    if (!ok) failures++;
+  }
+  {
+    const CardInfo c = cards::select(0x43F0, 0x354, 0x0010a100);
+    if (c.xtal_latency != 12000 || c.ltr_delay != IWX_SOC_FLAGS_LTR_APPLY_DELAY_2500 || !c.low_latency_xtal || !c.tested) {
+      std::printf("FAIL the tested AX201 lost its transport parameters\n");
+      failures++;
+    }
+  }
   std::printf("info IWX_RX_DESC_SIZE_V1 = %zu, sizeof(iwx_context_info) = %zu, "
               "sizeof(iwx_mac_ctx_cmd) = %zu\n",
               (size_t)IWX_RX_DESC_SIZE_V1, sizeof(iwx_context_info), sizeof(iwx_mac_ctx_cmd));
 
   if (argc > 1) {
     const char *names[] = {"iwlwifi-Qu-b0-hr-b0-68.ucode", "iwlwifi-Qu-c0-hr-b0-68.ucode",
-                           "iwlwifi-QuZ-a0-hr-b0-68.ucode"};
+                           "iwlwifi-QuZ-a0-hr-b0-68.ucode", "iwlwifi-Qu-b0-jf-b0-68.ucode",
+                           "iwlwifi-Qu-c0-jf-b0-68.ucode", "iwlwifi-QuZ-a0-jf-b0-68.ucode",
+                           "iwlwifi-cc-a0-68.ucode", "iwlwifi-so-a0-gf-a0-68.ucode",
+                           "iwlwifi-so-a0-gf4-a0-68.ucode", "iwlwifi-so-a0-hr-b0-68.ucode",
+                           "iwlwifi-so-a0-jf-b0-68.ucode", "iwlwifi-ty-a0-gf-a0-68.ucode"};
     for (const char *name : names) {
       Firmware fw;
       std::string error;
@@ -82,6 +124,11 @@ int main(int argc, char **argv) {
                   fw.has_capa(IWX_UCODE_TLV_CAPA_CDB_SUPPORT),
                   fw.has_capa(IWX_UCODE_TLV_CAPA_ULTRA_HB_CHANNELS),
                   fw.has_api(IWX_UCODE_TLV_API_REGULATORY_NVM_INFO));
+      const bool ax210 = std::strncmp(name, "iwlwifi-so-", 11) == 0 || std::strncmp(name, "iwlwifi-ty-", 11) == 0;
+      if (ax210 && !fw.iml_len) {
+        std::printf("FAIL %s: an AX210-family firmware without an image loader\n", name);
+        failures++;
+      }
       if (largest > (2u << 20)) {
         std::printf("FAIL a section is larger than one 2 MiB DMA block\n");
         failures++;

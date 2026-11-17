@@ -1,5 +1,6 @@
 ; SPDX-License-Identifier: MIT
-; User-mode register proxy for Intel Wi-Fi 6 AX201-family (Qu/QuZ CNVi) cards.
+; User-mode register proxy for the Intel Wi-Fi 6/6E cards nekodrop's radio drives:
+; AX201 and 9560-class on Qu/QuZ, AX200, and the AX210 family (AX210/AX211/AX411).
 ; Adapted from winawdl's RTL8852CE proxy. Matches only the generic device IDs,
 ; which rank below Intel's own (with SUBSYS), so adding it takes over nothing:
 ; NekoDropService (or scripts	ake-card.ps1) binds it to the card explicitly.
@@ -31,6 +32,14 @@ HKR,,Icon,,"-5"
 %DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_34F0
 %DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_3DF0
 %DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_4DF0
+%DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_2723
+%DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_2725
+%DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_7A70
+%DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_7AF0
+%DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_51F0
+%DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_51F1
+%DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_54F0
+%DeviceDesc% = RegProxy, PCI\VEN_8086&DEV_7F70
 
 [SourceDisksNames]
 1 = %DiskName%
@@ -75,5 +84,5 @@ ServiceBinary      = %13%\winawdl_regproxy.dll
 [Strings]
 Provider   = "winairdrop project"
 ClassName  = "winawdl user-space radios"
-DeviceDesc = "Intel AX201 user-space register proxy (winairdrop)"
+DeviceDesc = "Intel Wi-Fi user-space register proxy (nekodrop)"
 DiskName   = "winawdl register proxy"

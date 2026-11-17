@@ -143,14 +143,14 @@ void IwxDevice::nic_unlock() {
 /* The two accesses of a peripheral read go in one proxy call. */
 uint32_t IwxDevice::read_prph(uint32_t addr) {
   std::vector<RegOp> ops{
-      {IWX_HBUS_TARG_PRPH_RADDR, (addr & 0x000fffff) | (3u << 24), 1},
+      {IWX_HBUS_TARG_PRPH_RADDR, (addr & (gen3() ? 0x00ffffffu : 0x000fffffu)) | (3u << 24), 1},
       {IWX_HBUS_TARG_PRPH_RDAT, 0, 0}};
   return _proxy.batch(ops) ? ops[1].value : 0xffffffffu;
 }
 
 void IwxDevice::write_prph(uint32_t addr, uint32_t value) {
   std::vector<RegOp> ops{
-      {IWX_HBUS_TARG_PRPH_WADDR, (addr & 0x000fffff) | (3u << 24), 1},
+      {IWX_HBUS_TARG_PRPH_WADDR, (addr & (gen3() ? 0x00ffffffu : 0x000fffffu)) | (3u << 24), 1},
       {IWX_HBUS_TARG_PRPH_WDAT, value, 1}};
   _proxy.batch(ops);
 }
@@ -184,25 +184,21 @@ bool IwxDevice::identify(std::string &error) {
   /* 8000 family and later: the step is in bits 0-1; keep the old layout. */
   _hw_rev = (_hw_rev_raw & 0xfff0) | (IWX_CSR_HW_REV_STEP(_hw_rev_raw << 2) << 2);
   _hw_rf_id = rd(IWX_CSR_HW_RF_ID);
-  const uint32_t mac_type = CSR_HW_REV_TYPE(_hw_rev);
-  /* 0x33 = Qu, 0x35 = QuZ: the AX201 (CNVi) and AX200-class Qu parts. */
-  if (mac_type != 0x33 && mac_type != 0x35) {
-    error = "unsupported Intel MAC type " + hex(mac_type) +
-            " (this build knows Qu and QuZ, the AX201 family)";
+  /* The card's family, transport parameters and firmware (iwx_attach's
+   * iwx_devices / iwl_dev_info_table walk, cards.h). */
+  _card = cards::select(static_cast<uint16_t>(_proxy.device()), _hw_rev, _hw_rf_id);
+  _log("card " + hex(_proxy.vendor()) + ":" + hex(_proxy.device()) + " subsystem " +
+       hex(_proxy.subsystem()) + ", hw_rev " + hex(_hw_rev_raw) + " rf_id " + hex(_hw_rf_id));
+  if (!_card.known) {
+    error = "unsupported card: " + _card.why;
     return false;
   }
-  if (_hw_rev == CSR_HW_REV_TYPE_QUZ)
-    _fw_name = "iwlwifi-QuZ-a0-hr-b0-68.ucode";
-  else if (_hw_rev == CSR_HW_REV_TYPE_QU_C0)
-    _fw_name = "iwlwifi-Qu-c0-hr-b0-68.ucode";
-  else
-    _fw_name = "iwlwifi-Qu-b0-hr-b0-68.ucode";
-  /* The AX201 is a CNVi: the MAC half sits in the chipset. 0x2723 (AX200)
-   * would be discrete, but it is a "cc" part this build does not load. */
-  _integrated = true;
-  _log("card " + hex(_proxy.vendor()) + ":" + hex(_proxy.device()) + " subsystem " +
-       hex(_proxy.subsystem()) + ", hw_rev " + hex(_hw_rev_raw) + " rf_id " + hex(_hw_rf_id) +
-       ", firmware " + _fw_name);
+  _fw_name = _card.firmware;
+  _integrated = _card.integrated;
+  _log(_card.name + (_card.ax210 ? " (AX210 family" : " (22000 family") +
+       (_integrated ? ", integrated)" : ", discrete)") + ", firmware " + _fw_name +
+       (_card.pnvm.empty() ? "" : " + " + _card.pnvm) +
+       (_card.tested ? "" : "; this card has not been tested with nekodrop"));
   return true;
 }
 
@@ -212,32 +208,33 @@ bool IwxDevice::alloc_rings(std::string &error) {
        std::to_string(_dma.longest_run()) + " pages, " + std::to_string(_dma.runs_of(8)) +
        " runs of 8+ (the firmware needs about 20)");
 
-  _ctxt_info = _dma.alloc(sizeof(iwx_context_info), 4096);
-  /* Receive: free list (64-bit addresses with the buffer id in the low 12
-   * bits), used list, status word, 512 buffers of 4 KiB. */
-  _rx_free = _dma.alloc(IWX_RX_MQ_RING_COUNT * sizeof(uint64_t), 256);
-  _rx_used = _dma.alloc(IWX_RX_MQ_RING_COUNT * sizeof(uint32_t), 256);
+  _ctxt_info = _dma.alloc(std::max(sizeof(iwx_context_info), sizeof(iwx_context_info_gen3)), 4096);
+  /* Receive: free list, used list, status word, 512 buffers of 4 KiB. The
+   * 22000 family takes 64-bit addresses with the buffer id in the low 12
+   * bits and 32-bit used entries; the AX210 family 16-byte transfer and
+   * 32-byte completion descriptors (iwx_alloc_rx_ring). */
+  _rx_free = _dma.alloc(IWX_RX_MQ_RING_COUNT * (gen3() ? sizeof(iwx_rx_transfer_desc) : sizeof(uint64_t)), 256);
+  _rx_used = _dma.alloc(IWX_RX_MQ_RING_COUNT * (gen3() ? sizeof(iwx_rx_completion_desc) : sizeof(uint32_t)), 256);
   _rx_stat = _dma.alloc(sizeof(iwx_rb_status), 16);
   if (!_ctxt_info || !_rx_free || !_rx_used || !_rx_stat) {
     error = "out of DMA memory for the rings";
     return false;
   }
   _rx_bufs.resize(IWX_RX_MQ_RING_COUNT);
-  auto *free_list = reinterpret_cast<uint64_t *>(_rx_free.va);
   for (unsigned i = 0; i < IWX_RX_MQ_RING_COUNT; i++) {
     _rx_bufs[i] = _dma.alloc_page();
     if (!_rx_bufs[i]) {
       error = "out of DMA memory for receive buffers";
       return false;
     }
-    free_list[i] = htole64(_rx_bufs[i].pa | (i & 0x0fff));
+    post_rx_buf(i);
   }
 
   const auto make_ring = [&](TxRing &ring, unsigned count, unsigned qid, size_t payload) {
     ring.count = count;
     ring.qid = qid;
     ring.desc = _dma.alloc(count * sizeof(iwx_tfh_tfd), 256);
-    ring.bc_tbl = _dma.alloc(sizeof(iwx_agn_scd_bc_tbl), 1024);
+    ring.bc_tbl = _dma.alloc(std::max(sizeof(iwx_agn_scd_bc_tbl), sizeof(iwx_gen3_bc_tbl)), 1024);
     bool ok = ring.desc && ring.bc_tbl;
     if (payload) {
       /* Data ring: a page per slot for the TX command and one for the
@@ -252,14 +249,19 @@ bool IwxDevice::alloc_rings(std::string &error) {
     }
     return ok;
   };
-  if (!make_ring(_cmdq, IWX_CMD_QUEUE_SIZE, IWX_DQA_CMD_QUEUE, 0) ||
+  /* The AX210 family's command ring is 128 entries (IWX_CMD_QUEUE_SIZE_GEN3,
+   * the size the gen3 context info announces). Data rings stay 256 entries:
+   * Linux runs AX210 management queues at 128, and upstream's 1024 would need
+   * 64 physically adjacent pages for the descriptors alone. */
+  const unsigned cmd_count = gen3() ? IWX_CMD_QUEUE_SIZE_GEN3 : IWX_CMD_QUEUE_SIZE;
+  if (!make_ring(_cmdq, cmd_count, IWX_DQA_CMD_QUEUE, 0) ||
       !make_ring(_dataq, kTxQueueSize, 0, kTxPayloadSlot) ||
       !make_ring(_staq, kTxQueueSize, 0, kTxPayloadSlot)) {
     error = "out of DMA memory for the transmit rings";
     return false;
   }
-  _cmd_slots.resize(IWX_CMD_QUEUE_SIZE);
-  _cmd_big.resize(IWX_CMD_QUEUE_SIZE);
+  _cmd_slots.resize(cmd_count);
+  _cmd_big.resize(cmd_count);
   for (auto &big : _cmd_big) {
     big = _dma.alloc_page();
     if (!big) {
@@ -296,6 +298,7 @@ bool IwxDevice::prepare_card_hw() {
 }
 
 void IwxDevice::clear_persistence_bit() {
+  if (gen3()) return;
   const uint32_t hpm = read_prph(IWX_HPM_DEBUG);
   if (hpm != 0xa5a5a5a0 && (hpm & IWX_PERSISTENCE_BIT)) {
     if (read_prph(IWX_PREG_PRPH_WPROT_22000) & IWX_PREG_WFPM_ACCESS) {
@@ -363,7 +366,7 @@ bool IwxDevice::start_hw() {
   clear_persistence_bit();
   setb(IWX_CSR_RESET, IWX_CSR_RESET_REG_FLAG_SW_RESET);
   delay_us(5000);
-  if (_integrated) {
+  if (_integrated && !gen3()) {
     setb(IWX_CSR_GP_CNTRL, IWX_CSR_GP_CNTRL_REG_FLAG_INIT_DONE);
     delay_us(20);
     if (!poll_bit(IWX_CSR_GP_CNTRL, IWX_CSR_GP_CNTRL_REG_FLAG_MAC_CLOCK_READY,
@@ -379,7 +382,7 @@ bool IwxDevice::start_hw() {
   /* MSI rather than MSI-X causes, so CSR_INT reports them (iwx_conf_msix_hw
    * with sc_msix = 0). */
   if (nic_lock()) {
-    write_prph(IWX_UREG_CHICK, IWX_UREG_CHICK_MSI_ENABLE);
+    write_umac_prph(IWX_UREG_CHICK, IWX_UREG_CHICK_MSI_ENABLE);
     nic_unlock();
   }
   mask_interrupts();
@@ -414,14 +417,16 @@ void IwxDevice::set_ltr() {
       (IWX_CSR_LTR_LONG_VAL_AD_SCALE_USEC << 26) /* NO_SNOOP_SCALE */ |
       (250u << 16) /* NO_SNOOP_VAL */ | IWX_CSR_LTR_LONG_VAL_AD_SNOOP_REQ |
       (IWX_CSR_LTR_LONG_VAL_AD_SCALE_USEC << 10) /* SNOOP_SCALE */ | 250u;
-  if (_integrated) {
+  /* Discrete cards take it in a CSR, integrated 22000 parts in the HPM;
+   * integrated AX210 parts leave it to the firmware (iwx_set_ltr). */
+  if (!_integrated) {
+    wr(IWX_CSR_LTR_LONG_VAL_AD, ltr);
+  } else if (!gen3()) {
     if (nic_lock()) {
       write_prph(IWX_HPM_MAC_LTR_CSR, IWX_HPM_MAC_LRT_ENABLE_ALL);
       write_prph(IWX_HPM_UMAC_LTR, ltr);
       nic_unlock();
     }
-  } else {
-    wr(IWX_CSR_LTR_LONG_VAL_AD, ltr);
   }
 }
 
@@ -448,9 +453,26 @@ bool IwxDevice::load_firmware(std::string &error) {
   setb(IWX_CSR_MAC_SHADOW_REG_CTRL, 0x800fffff);
 
   /* Firmware sections into DMA memory: LMAC, separator, UMAC, separator,
-   * paging (iwx_init_fw_sec). */
-  auto *ci = reinterpret_cast<iwx_context_info *>(_ctxt_info.va);
-  std::memset(ci, 0, sizeof(*ci));
+   * paging (iwx_init_fw_sec). The 22000 family finds them through the
+   * context info, the AX210 family through the peripheral scratch. */
+  iwx_context_info *ci = nullptr;
+  iwx_prph_scratch *scratch = nullptr;
+  iwx_context_info_dram *dram = nullptr;
+  if (gen3()) {
+    _prph_scratch = _dma.alloc(sizeof(iwx_prph_scratch), 4096);
+    _prph_info = _dma.alloc_page();
+    if (!_prph_scratch || !_prph_info) {
+      error = "out of DMA memory for the peripheral scratch";
+      return false;
+    }
+    scratch = reinterpret_cast<iwx_prph_scratch *>(_prph_scratch.va);
+    std::memset(scratch, 0, sizeof(*scratch));
+    dram = &scratch->dram;
+  } else {
+    ci = reinterpret_cast<iwx_context_info *>(_ctxt_info.va);
+    std::memset(ci, 0, sizeof(*ci));
+    dram = &ci->dram;
+  }
   const auto &secs = _fw.regular;
   const auto count_until_sep = [&](size_t start) {
     size_t n = 0;
@@ -464,8 +486,8 @@ bool IwxDevice::load_firmware(std::string &error) {
   const size_t lmac = count_until_sep(0);
   const size_t umac = count_until_sep(lmac + 1);
   const size_t paging = count_until_sep(lmac + umac + 2);
-  if (lmac > nitems(ci->dram.lmac_img) || umac > nitems(ci->dram.umac_img) ||
-      paging > nitems(ci->dram.virtual_img)) {
+  if (lmac > nitems(dram->lmac_img) || umac > nitems(dram->umac_img) ||
+      paging > nitems(dram->virtual_img)) {
     error = "firmware has more sections than the context info holds";
     return false;
   }
@@ -477,29 +499,65 @@ bool IwxDevice::load_firmware(std::string &error) {
     _fw_sections.push_back(b);
     return true;
   };
-  for (size_t i = 0; i < lmac; i++)
-    if (!place(secs[i], ci->dram.lmac_img[i])) goto nomem;
-  for (size_t i = 0; i < umac; i++)
-    if (!place(secs[lmac + 1 + i], ci->dram.umac_img[i])) goto nomem;
-  for (size_t i = 0; i < paging; i++)
-    if (!place(secs[lmac + umac + 2 + i], ci->dram.virtual_img[i])) goto nomem;
+  bool placed = true;
+  for (size_t i = 0; placed && i < lmac; i++) placed = place(secs[i], dram->lmac_img[i]);
+  for (size_t i = 0; placed && i < umac; i++) placed = place(secs[lmac + 1 + i], dram->umac_img[i]);
+  for (size_t i = 0; placed && i < paging; i++)
+    placed = place(secs[lmac + umac + 2 + i], dram->virtual_img[i]);
+  if (gen3() && placed) {
+    if (!_fw.iml || !_fw.iml_len) {
+      error = "the AX210-family firmware has no image loader (IML)";
+      return false;
+    }
+    _iml_buf = _dma.alloc(_fw.iml_len, 4096);
+    placed = static_cast<bool>(_iml_buf);
+    if (placed) std::memcpy(_iml_buf.va, _fw.iml, _fw.iml_len);
+  }
+  if (!placed) {
+    error = "out of DMA memory for the firmware image";
+    return false;
+  }
   _dma.trim();
   _log("DMA: " + std::to_string(_dma.pages_used()) + " pages in use, the rest returned");
   _log("firmware " + _fw.version + ": " + std::to_string(lmac) + " LMAC, " +
        std::to_string(umac) + " UMAC, " + std::to_string(paging) + " paging sections");
 
-  ci->version.version = 0;
-  ci->version.mac_id = htole16(static_cast<uint16_t>(rd(IWX_CSR_HW_REV)));
-  ci->version.size = htole16(sizeof(*ci) / 4);
-  ci->control.control_flags =
-      htole32(IWX_CTXT_INFO_TFD_FORMAT_LONG |
-              (IWX_RX_QUEUE_CB_SIZE(IWX_MQ_RX_TABLE_SIZE) << IWX_CTXT_INFO_RB_CB_SIZE_POS) |
-              (IWX_CTXT_INFO_RB_SIZE_4K << IWX_CTXT_INFO_RB_SIZE_POS));
-  ci->rbd_cfg.free_rbd_addr = htole64(_rx_free.pa);
-  ci->rbd_cfg.used_rbd_addr = htole64(_rx_used.pa);
-  ci->rbd_cfg.status_wr_ptr = htole64(_rx_stat.pa);
-  ci->hcmd_cfg.cmd_queue_addr = htole64(_cmdq.desc.pa);
-  ci->hcmd_cfg.cmd_queue_size = IWX_TFD_QUEUE_CB_SIZE(IWX_CMD_QUEUE_SIZE);
+  if (gen3()) {
+    /* iwx_ctxt_info_gen3_init */
+    auto &ctrl = scratch->ctrl_cfg;
+    ctrl.version.version = 0;
+    ctrl.version.mac_id = htole16(static_cast<uint16_t>(rd(IWX_CSR_HW_REV)));
+    ctrl.version.size = htole16(sizeof(*scratch) / 4);
+    ctrl.control.control_flags =
+        htole32(IWX_PRPH_SCRATCH_RB_SIZE_4K | IWX_PRPH_SCRATCH_MTR_MODE |
+                (IWX_PRPH_MTR_FORMAT_256B & IWX_PRPH_SCRATCH_MTR_FORMAT));
+    ctrl.rbd_cfg.free_rbd_addr = htole64(_rx_free.pa);
+    auto *g3 = reinterpret_cast<iwx_context_info_gen3 *>(_ctxt_info.va);
+    std::memset(g3, 0, sizeof(*g3));
+    g3->prph_info_base_addr = htole64(_prph_info.pa);
+    g3->prph_scratch_base_addr = htole64(_prph_scratch.pa);
+    g3->prph_scratch_size = htole32(sizeof(*scratch));
+    g3->cr_head_idx_arr_base_addr = htole64(_rx_stat.pa);
+    g3->tr_tail_idx_arr_base_addr = htole64(_prph_info.pa + DmaPool::kPageBytes / 2);
+    g3->cr_tail_idx_arr_base_addr = htole64(_prph_info.pa + 3 * DmaPool::kPageBytes / 4);
+    g3->mtr_base_addr = htole64(_cmdq.desc.pa);
+    g3->mcr_base_addr = htole64(_rx_used.pa);
+    g3->mtr_size = htole16(static_cast<uint16_t>(IWX_TFD_QUEUE_CB_SIZE(IWX_CMD_QUEUE_SIZE_GEN3)));
+    g3->mcr_size = htole16(static_cast<uint16_t>(IWX_RX_QUEUE_CB_SIZE(IWX_RX_MQ_RING_COUNT)));
+  } else {
+    ci->version.version = 0;
+    ci->version.mac_id = htole16(static_cast<uint16_t>(rd(IWX_CSR_HW_REV)));
+    ci->version.size = htole16(sizeof(*ci) / 4);
+    ci->control.control_flags =
+        htole32(IWX_CTXT_INFO_TFD_FORMAT_LONG |
+                (IWX_RX_QUEUE_CB_SIZE(IWX_MQ_RX_TABLE_SIZE) << IWX_CTXT_INFO_RB_CB_SIZE_POS) |
+                (IWX_CTXT_INFO_RB_SIZE_4K << IWX_CTXT_INFO_RB_SIZE_POS));
+    ci->rbd_cfg.free_rbd_addr = htole64(_rx_free.pa);
+    ci->rbd_cfg.used_rbd_addr = htole64(_rx_used.pa);
+    ci->rbd_cfg.status_wr_ptr = htole64(_rx_stat.pa);
+    ci->hcmd_cfg.cmd_queue_addr = htole64(_cmdq.desc.pa);
+    ci->hcmd_cfg.cmd_queue_size = IWX_TFD_QUEUE_CB_SIZE(IWX_CMD_QUEUE_SIZE);
+  }
 
   /* From here the card may write into our memory: arm the stop the proxy
    * replays if this process dies (iwx_disable_rx_dma + stop master). */
@@ -515,14 +573,23 @@ bool IwxDevice::load_firmware(std::string &error) {
   }
 
   _alive_seen = _alive_ok = false;
-  wr(IWX_CSR_CTXT_INFO_BA, static_cast<uint32_t>(_ctxt_info.pa));
-  wr(IWX_CSR_CTXT_INFO_BA + 4, static_cast<uint32_t>(_ctxt_info.pa >> 32));
+  if (gen3()) {
+    wr(IWX_CSR_CTXT_INFO_ADDR, static_cast<uint32_t>(_ctxt_info.pa));
+    wr(IWX_CSR_CTXT_INFO_ADDR + 4, static_cast<uint32_t>(_ctxt_info.pa >> 32));
+    wr(IWX_CSR_IML_DATA_ADDR, static_cast<uint32_t>(_iml_buf.pa));
+    wr(IWX_CSR_IML_DATA_ADDR + 4, static_cast<uint32_t>(_iml_buf.pa >> 32));
+    wr(IWX_CSR_IML_SIZE_ADDR, static_cast<uint32_t>(_fw.iml_len));
+    setb(IWX_CSR_CTXT_INFO_BOOT_CTRL, IWX_CSR_AUTO_FUNC_BOOT_ENA);
+  } else {
+    wr(IWX_CSR_CTXT_INFO_BA, static_cast<uint32_t>(_ctxt_info.pa));
+    wr(IWX_CSR_CTXT_INFO_BA + 4, static_cast<uint32_t>(_ctxt_info.pa >> 32));
+  }
   set_ltr();
   if (!nic_lock()) {
     error = "MAC access failed before the firmware kick";
     return false;
   }
-  write_prph(IWX_UREG_CPU_INIT_RUN, 1);
+  write_umac_prph(IWX_UREG_CPU_INIT_RUN, 1);
   nic_unlock();
 
   /* The ALIVE cause latches in CSR_INT; the firmware has then set up the
@@ -545,18 +612,16 @@ bool IwxDevice::load_firmware(std::string &error) {
     }
     if (!alive_cause) {
       if (nic_lock()) {
-        _log("SecBoot CPU1 " + hex(read_prph(IWX_UMAG_SB_CPU_1_STATUS)) + " CPU2 " +
-             hex(read_prph(IWX_UMAG_SB_CPU_2_STATUS)) + " UMAC PC " +
-             hex(read_prph(IWX_UREG_UMAC_CURRENT_PC)) + " LMAC PC " +
-             hex(read_prph(IWX_UREG_LMAC1_CURRENT_PC)));
+        _log("SecBoot CPU1 " + hex(read_umac_prph(IWX_UMAG_SB_CPU_1_STATUS)) + " CPU2 " +
+             hex(read_umac_prph(IWX_UMAG_SB_CPU_2_STATUS)) + " UMAC PC " +
+             hex(read_umac_prph(IWX_UREG_UMAC_CURRENT_PC)) + " LMAC PC " +
+             hex(read_umac_prph(IWX_UREG_LMAC1_CURRENT_PC)));
         nic_unlock();
       }
       error = "the firmware did not come alive";
       return false;
     }
-    auto *free_list = reinterpret_cast<uint64_t *>(_rx_free.va);
-    for (unsigned i = 0; i < IWX_RX_MQ_RING_COUNT; i++)
-      free_list[i] = htole64(_rx_bufs[i].pa | (i & 0x0fff));
+    for (unsigned i = 0; i < IWX_RX_MQ_RING_COUNT; i++) post_rx_buf(i);
     wr(IWX_RFH_Q0_FRBDCB_WIDX_TRG, 8);
   }
   if (!wait_for([&] { return _alive_seen; }, 1000)) {
@@ -568,11 +633,92 @@ bool IwxDevice::load_firmware(std::string &error) {
     return false;
   }
   _log("firmware alive");
+  if (gen3() && !load_pnvm()) {
+    error = "the firmware did not take its platform NVM (PNVM)";
+    return false;
+  }
   return true;
+}
 
-nomem:
-  error = "out of DMA memory for the firmware image";
-  return false;
+namespace {
+uint32_t le32_at(const uint8_t *p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
+uint16_t le16_at(const uint8_t *p) { return static_cast<uint16_t>(p[0] | p[1] << 8); }
+} // namespace
+
+/* iwx_load_pnvm + iwx_read_pnvm + iwx_pnvm_handle_section: the platform NVM
+ * section for this SKU and MAC/radio, from iwlwifi-*.pnvm, goes to the
+ * firmware through the peripheral scratch; then the doorbell, and the
+ * firmware answers PNVM_INIT_COMPLETE. */
+bool IwxDevice::load_pnvm() {
+  if (!_sku_id[0] && !_sku_id[1] && !_sku_id[2]) return true; /* nothing to do */
+  std::vector<uint8_t> section;
+  if (!_card.pnvm.empty()) {
+    std::string path = _opt.firmware_dir, err;
+    if (!path.empty() && path.back() != '\\' && path.back() != '/') path += '\\';
+    if (!plat_read_file(path + _card.pnvm, _pnvm_raw, err)) {
+      _log("PNVM: " + err);
+    } else {
+      const uint8_t *data = _pnvm_raw.data();
+      size_t len = _pnvm_raw.size();
+      while (len >= 8 && section.empty()) {
+        const uint32_t type = le32_at(data), tlv_len = le32_at(data + 4);
+        len -= 8;
+        data += 8;
+        if (len < tlv_len || roundup(tlv_len, 4) > len) break;
+        if (type == IWX_UCODE_TLV_PNVM_SKU && tlv_len >= 12 && le32_at(data) == _sku_id[0] &&
+            le32_at(data + 4) == _sku_id[1] && le32_at(data + 8) == _sku_id[2]) {
+          /* This SKU's section: the TLVs up to the next SKU. */
+          const uint8_t *s = data + roundup(tlv_len, 4);
+          size_t slen = len - roundup(tlv_len, 4);
+          bool hw_match = false;
+          std::vector<uint8_t> collected;
+          while (slen >= 8) {
+            const uint32_t st = le32_at(s), sl = le32_at(s + 4);
+            slen -= 8;
+            s += 8;
+            if (slen < sl) break;
+            if (st == IWX_UCODE_TLV_PNVM_SKU) break;
+            if (st == IWX_UCODE_TLV_HW_TYPE && sl >= 4 && !hw_match)
+              hw_match = le16_at(s) == cards::mac_type(_hw_rev) && le16_at(s + 2) == cards::rf_type(_hw_rf_id);
+            if (st == IWX_UCODE_TLV_SEC_RT && sl >= 4 && le32_at(s) != 0xddddeeee)
+              collected.insert(collected.end(), s + 4, s + sl);
+            if (roundup(sl, 4) > slen) break;
+            slen -= roundup(sl, 4);
+            s += roundup(sl, 4);
+          }
+          if (hw_match && !collected.empty()) section = std::move(collected);
+          else _log("PNVM: this SKU's section is for another MAC/radio");
+        }
+        data += roundup(tlv_len, 4);
+        len -= roundup(tlv_len, 4);
+      }
+    }
+  }
+  if (!section.empty()) {
+    _pnvm_buf = _dma.alloc(section.size(), 4096);
+    if (!_pnvm_buf) {
+      _log("PNVM: out of DMA memory");
+    } else {
+      std::memcpy(_pnvm_buf.va, section.data(), section.size());
+      auto &ctrl = reinterpret_cast<iwx_prph_scratch *>(_prph_scratch.va)->ctrl_cfg;
+      ctrl.pnvm_cfg.pnvm_base_addr = htole64(_pnvm_buf.pa);
+      ctrl.pnvm_cfg.pnvm_size = htole32(static_cast<uint32_t>(section.size()));
+      _log("PNVM: " + std::to_string(section.size()) + " bytes for this SKU");
+    }
+  } else {
+    _log("PNVM: none for this SKU; the firmware goes on without it");
+  }
+  _pnvm_raw.clear();
+  _pnvm_done = false;
+  if (nic_lock()) {
+    write_umac_prph(IWX_UREG_DOORBELL_TO_ISR6, IWX_UREG_DOORBELL_TO_ISR6_PNVM);
+    nic_unlock();
+  }
+  if (!wait_for([&] { return _pnvm_done; }, 2000)) {
+    _log("PNVM: no PNVM_INIT_COMPLETE from the firmware");
+    return false;
+  }
+  return true;
 }
 
 /* iwx_run_init_mvm_ucode(readnvm = 1) followed by the parts of iwx_init_hw
@@ -618,15 +764,21 @@ bool IwxDevice::run_init_sequence(std::string &error) {
     err = send_cmd(IWX_BT_CONFIG, &bt, sizeof(bt), false, nullptr);
   }
   if (!err) {
-    /* iwl_qu_long_latency_trans_cfg: integrated, xtal latency 12000,
-     * low-latency xtal, LTR apply delay 2500. */
+    /* iwx_send_soc_conf with the card's transport parameters (cards.h):
+     * discrete cards say so (VER_1); integrated ones give the LTR delay and
+     * low-latency crystal (VER_2) and their crystal latency. */
     iwx_soc_configuration_cmd soc{};
-    uint32_t flags = IWX_SOC_FLAGS_LTR_APPLY_DELAY_2500 & IWX_SOC_FLAGS_LTR_APPLY_DELAY_MASK;
-    const uint8_t scan_ver = cmd_version(IWX_LONG_GROUP, IWX_SCAN_REQ_UMAC);
-    if (scan_ver != IWX_FW_CMD_VER_UNKNOWN && scan_ver >= 2)
-      flags |= IWX_SOC_CONFIG_CMD_FLAGS_LOW_LATENCY;
+    uint32_t flags = 0;
+    if (!_integrated) {
+      flags = IWX_SOC_CONFIG_CMD_FLAGS_DISCRETE;
+    } else {
+      flags = _card.ltr_delay & IWX_SOC_FLAGS_LTR_APPLY_DELAY_MASK;
+      const uint8_t scan_ver = cmd_version(IWX_LONG_GROUP, IWX_SCAN_REQ_UMAC);
+      if (scan_ver != IWX_FW_CMD_VER_UNKNOWN && scan_ver >= 2 && _card.low_latency_xtal)
+        flags |= IWX_SOC_CONFIG_CMD_FLAGS_LOW_LATENCY;
+    }
     soc.flags = htole32(flags);
-    soc.latency = htole32(12000);
+    soc.latency = htole32(_card.xtal_latency);
     err = send_cmd(iwx_cmd_id(IWX_SOC_CONFIGURATION_CMD, IWX_SYSTEM_GROUP, 0), &soc,
                    sizeof(soc), false, nullptr);
   }
@@ -683,9 +835,10 @@ void IwxDevice::stop() {
   if (_open || !_fw_sections.empty()) {
     /* iwx_stop_device: stop receive DMA, then the bus master, then reset. */
     if (nic_lock()) {
-      write_prph(IWX_RFH_RXF_DMA_CFG, 0);
+      if (gen3()) write_umac_prph(IWX_RFH_RXF_DMA_CFG_GEN3, 0);
+      else write_prph(IWX_RFH_RXF_DMA_CFG, 0);
       for (int i = 0; i < 100; i++) {
-        const uint32_t v = read_prph(IWX_RFH_GEN_STATUS);
+        const uint32_t v = gen3() ? read_umac_prph(IWX_RFH_GEN_STATUS_GEN3) : read_prph(IWX_RFH_GEN_STATUS);
         if (v == 0xffffffffu || (v & IWX_RXF_DMA_IDLE)) break;
         delay_us(10);
       }
@@ -766,7 +919,7 @@ int IwxDevice::send_cmd(uint32_t id, const void *data, size_t len, bool want_res
   slot.want_resp = want_resp;
   slot.resp.clear();
   ring.queued++;
-  ring.cur = (ring.cur + 1) % IWX_TFD_QUEUE_SIZE_MAX; /* the pointer wraps at 256, not at the ring */
+  ring.cur = (ring.cur + 1) % wrap(); /* the pointer wraps at 256 (65536 on AX210), not at the ring */
   plat_fence();
   wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
 
@@ -1174,7 +1327,9 @@ int IwxDevice::enable_queue(TxRing &ring, uint8_t sta_id, uint8_t tid) {
     return EIO;
   const auto *r = reinterpret_cast<const iwx_tx_queue_cfg_rsp *>(pkt->data);
   ring.qid = le16toh(r->queue_number);
-  ring.cur = ring.tail = le16toh(r->write_pointer) & (ring.count - 1);
+  /* The pointer as the firmware keeps it; the slot is it modulo the ring. */
+  ring.cur = le16toh(r->write_pointer) % wrap();
+  ring.tail = ring.cur & (ring.count - 1);
   ring.queued = 0;
   _log("transmit queue " + std::to_string(ring.qid) + " assigned for station " +
        std::to_string(sta_id) + ", write pointer " + std::to_string(ring.cur));
@@ -1366,14 +1521,29 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
     }
   }
 
-  auto *tx = reinterpret_cast<iwx_tx_cmd_gen2 *>(cmd->data);
-  std::memset(tx, 0, sizeof(*tx));
-  tx->len = htole16(static_cast<uint16_t>(len));
-  tx->offload_assist = htole16(offload_header(static_cast<unsigned>(hdrlen)));
+  /* TX command: version 7 (22000) or 8 (AX210 family, 16-bit flags and a
+   * 32-bit offload word), the 802.11 header right behind it (iwx_tx). */
   const bool fixed = rate.kind != TxRate::Auto;
-  tx->flags = htole32((fixed ? IWX_TX_FLAGS_CMD_RATE : 0u) | (encrypt ? 0u : IWX_TX_FLAGS_ENCRYPT_DIS));
-  tx->rate_n_flags = htole32(fixed ? rnf : 0u);
-  std::memcpy(reinterpret_cast<uint8_t *>(tx) + sizeof(*tx), frame, hdrlen);
+  const uint32_t txflags = (fixed ? IWX_TX_FLAGS_CMD_RATE : 0u) | (encrypt ? 0u : IWX_TX_FLAGS_ENCRYPT_DIS);
+  size_t tx_size;
+  if (gen3()) {
+    auto *tx = reinterpret_cast<iwx_tx_cmd_gen3 *>(cmd->data);
+    tx_size = sizeof(*tx);
+    std::memset(tx, 0, tx_size);
+    tx->len = htole16(static_cast<uint16_t>(len));
+    tx->offload_assist = htole32(offload_header(static_cast<unsigned>(hdrlen)));
+    tx->flags = htole16(static_cast<uint16_t>(txflags));
+    tx->rate_n_flags = htole32(fixed ? rnf : 0u);
+  } else {
+    auto *tx = reinterpret_cast<iwx_tx_cmd_gen2 *>(cmd->data);
+    tx_size = sizeof(*tx);
+    std::memset(tx, 0, tx_size);
+    tx->len = htole16(static_cast<uint16_t>(len));
+    tx->offload_assist = htole16(offload_header(static_cast<unsigned>(hdrlen)));
+    tx->flags = htole32(txflags);
+    tx->rate_n_flags = htole32(fixed ? rnf : 0u);
+  }
+  std::memcpy(reinterpret_cast<uint8_t *>(cmd->data) + tx_size, frame, hdrlen);
 
   const size_t payload_len = len - hdrlen;
   uint8_t *payload = ring.payload[idx].va;
@@ -1387,7 +1557,7 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
   desc->tbs[0].tb_len = htole16(IWX_FIRST_TB_SIZE);
   uint64_t a = htole64(cmd_pa);
   std::memcpy(&desc->tbs[0].addr, &a, sizeof(a));
-  const size_t tb1 = sizeof(iwx_cmd_header) + sizeof(*tx) + hdrlen - IWX_FIRST_TB_SIZE;
+  const size_t tb1 = sizeof(iwx_cmd_header) + tx_size + hdrlen - IWX_FIRST_TB_SIZE;
   desc->tbs[1].tb_len = htole16(static_cast<uint16_t>((tb1 + 3) & ~size_t(3)));
   a = htole64(cmd_pa + IWX_FIRST_TB_SIZE);
   std::memcpy(&desc->tbs[1].addr, &a, sizeof(a));
@@ -1397,15 +1567,20 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
     std::memcpy(&desc->tbs[2].addr, &a, sizeof(a));
   }
 
-  /* Byte count table: dwords, fetch chunks in the top bits (pre-AX210). */
+  /* Byte count table: fetch chunks in the top bits, then dwords (22000)
+   * or bytes (AX210 family) (iwx_tx_update_byte_tbl). */
   const unsigned filled = offsetof(iwx_tfh_tfd, tbs) + num_tbs * sizeof(iwx_tfh_tb);
   const unsigned chunks = howmany(filled, 64) - 1;
-  auto *bc = reinterpret_cast<iwx_agn_scd_bc_tbl *>(ring.bc_tbl.va);
-  bc->tfd_offset[idx] = htole16(static_cast<uint16_t>(howmany(len, 4) | (chunks << 12)));
+  if (gen3())
+    reinterpret_cast<iwx_gen3_bc_tbl *>(ring.bc_tbl.va)->tfd_offset[idx] =
+        htole16(static_cast<uint16_t>(len | (chunks << 14)));
+  else
+    reinterpret_cast<iwx_agn_scd_bc_tbl *>(ring.bc_tbl.va)->tfd_offset[idx] =
+        htole16(static_cast<uint16_t>(howmany(len, 4) | (chunks << 12)));
 
   _tx_hist[_tx_hist_at++ % 8] = {static_cast<uint16_t>(len), static_cast<uint8_t>(hdrlen),
                                  frame[0], frame[1], frame[4], rnf, static_cast<uint8_t>(idx)};
-  ring.cur = (ring.cur + 1) % ring.count;
+  ring.cur = (ring.cur + 1) % wrap();
   ring.queued++;
   plat_fence();
   wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
@@ -1428,18 +1603,30 @@ int IwxDevice::poll() {
   if (!_rx_stat) return 0;
   if (_cmd_depth == 0) deliver_deferred();
   const auto *stat = reinterpret_cast<volatile iwx_rb_status *>(_rx_stat.va);
-  uint16_t hw = le16toh(stat->closed_rb_num) & 0xfff;
-  hw &= IWX_RX_MQ_RING_COUNT - 1;
+  const auto closed = [&] {
+    return static_cast<unsigned>(le16toh(stat->closed_rb_num) & 0xfff) & (IWX_RX_MQ_RING_COUNT - 1);
+  };
   int handled = 0;
-  while (_rx_cur != hw) {
-    handle_rb(_rx_cur);
+  /* A receive handler may send a firmware command, whose wait polls again
+   * (re-entering here). So (Codex review #1 and round 2 #2/#3):
+   *  - the slot is claimed before it is handled, so no buffer is handled twice;
+   *  - the card's position is read afresh every round, so after a nested
+   *    poll has gone ahead the outer one stops instead of running on round
+   *    the ring into buffers the card has not filled;
+   *  - buffers still being handled further up the stack are not given back:
+   *    the card is told only about those before the oldest one in use. */
+  for (unsigned hw = closed(); _rx_cur != hw && handled < int(IWX_RX_MQ_RING_COUNT); hw = closed()) {
+    const unsigned idx = _rx_cur;
     _rx_cur = (_rx_cur + 1) % IWX_RX_MQ_RING_COUNT;
+    _rx_inflight.push_back(idx);
+    handle_rb(idx);
+    _rx_inflight.pop_back();
     handled++;
   }
   if (handled) {
-    /* Every buffer behind the card's position is free again; the card wants
-     * the index in multiples of 8 (iwx_notif_intr). */
-    const unsigned w = hw == 0 ? IWX_RX_MQ_RING_COUNT - 1 : hw - 1u;
+    /* The card wants the free index in multiples of 8 (iwx_notif_intr). */
+    const unsigned frontier = _rx_inflight.empty() ? _rx_cur : _rx_inflight.front();
+    const unsigned w = frontier == 0 ? IWX_RX_MQ_RING_COUNT - 1 : frontier - 1u;
     wr(IWX_RFH_Q0_FRBDCB_WIDX_TRG, w & ~7u);
   }
   return handled;
@@ -1461,12 +1648,22 @@ void IwxDevice::handle_rb(unsigned index) {
     if (len < minsz || len > IWX_RBUF_SIZE - offset) break;
     handle_packet(buf + offset, len);
     offset += roundup(len, IWX_FH_RSCSR_FRAME_ALIGN);
+    if (gen3()) break; /* one packet per buffer on the AX210 family (iwx_rx_pkt) */
   }
   /* Clear the first packet header so a stale buffer never parses twice, and
    * hand the same buffer back at the same slot of the free list. */
   std::memset(_rx_bufs[index].va, 0, IWX_RBUF_SIZE); /* stale packets must never parse again */
-  auto *free_list = reinterpret_cast<uint64_t *>(_rx_free.va);
-  free_list[index] = htole64(_rx_bufs[index].pa | (index & 0x0fff));
+  post_rx_buf(index);
+}
+
+void IwxDevice::post_rx_buf(unsigned index) {
+  if (gen3()) {
+    auto *bd = reinterpret_cast<iwx_rx_transfer_desc *>(_rx_free.va) + index;
+    bd->addr = htole64(_rx_bufs[index].pa);
+    bd->rbid = htole16(static_cast<uint16_t>(index & 0x0fff));
+  } else {
+    reinterpret_cast<uint64_t *>(_rx_free.va)[index] = htole64(_rx_bufs[index].pa | (index & 0x0fff));
+  }
 }
 
 void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
@@ -1501,20 +1698,25 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
       _alive_ok = le16toh(r->status) == IWX_ALIVE_STATUS_OK;
       _lmac_error_table = le32toh(r->lmac_data[0].dbg_ptrs.error_event_table_ptr);
       _umac_error_table = le32toh(r->umac_data.dbg_ptrs.error_info_addr);
+      for (int i = 0; i < 3; i++) _sku_id[i] = le32toh(r->sku_id.data[i]);
     }
     _alive_seen = true;
     break;
   }
+  case IWX_WIDE_ID(IWX_REGULATORY_AND_NVM_GROUP, IWX_PNVM_INIT_COMPLETE_NTFY):
+    _pnvm_done = true;
+    break;
   case IWX_INIT_COMPLETE_NOTIF:
     _init_complete = true;
     break;
   case IWX_SCAN_COMPLETE_UMAC:
   case IWX_WIDE_ID(IWX_LONG_GROUP, IWX_SCAN_COMPLETE_UMAC):
     if (_scan_running) {
+      const uint8_t status = plen >= sizeof(iwx_umac_scan_complete)
+          ? reinterpret_cast<const iwx_umac_scan_complete *>(payload)->status : 0;
+      _scan_succeeded = status == IWX_SCAN_OFFLOAD_COMPLETED;
       _scan_running = false;
-      if (plen >= sizeof(iwx_umac_scan_complete))
-        _log("scan: firmware scan done, status " +
-             std::to_string(reinterpret_cast<const iwx_umac_scan_complete *>(payload)->status));
+      _log("scan: firmware scan done, status " + std::to_string(status));
     }
     break;
   case IWX_REPLY_ERROR: {
@@ -1543,7 +1745,8 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
 }
 
 void IwxDevice::handle_mpdu(const uint8_t *payload, size_t len, bool rada) {
-  const size_t desc_size = IWX_RX_DESC_SIZE_V1;
+  /* The AX210 family's descriptor is the whole union (v3); the 22000's ends after v1. */
+  const size_t desc_size = gen3() ? sizeof(iwx_rx_mpdu_desc) : IWX_RX_DESC_SIZE_V1;
   if (len < desc_size) return;
   const auto *desc = reinterpret_cast<const iwx_rx_mpdu_desc *>(payload);
   if (!(le16toh(desc->status) & IWX_RX_MPDU_RES_STATUS_CRC_OK) ||
@@ -1564,11 +1767,15 @@ void IwxDevice::handle_mpdu(const uint8_t *payload, size_t len, bool rada) {
     mpdu_len -= 2;
   }
   /* Energy is reported as a positive number of dB below zero; 0 = none. */
-  const int ea = desc->v1.energy_a ? -int(desc->v1.energy_a) : -256;
-  const int eb = desc->v1.energy_b ? -int(desc->v1.energy_b) : -256;
+  const uint8_t raw_a = gen3() ? desc->v3.energy_a : desc->v1.energy_a;
+  const uint8_t raw_b = gen3() ? desc->v3.energy_b : desc->v1.energy_b;
+  const int ea = raw_a ? -int(raw_a) : -256;
+  const int eb = raw_b ? -int(raw_b) : -256;
   const int energy = std::max(ea, eb);
-  RxFrame f{frame, mpdu_len, static_cast<int8_t>(energy < -127 ? -127 : energy), desc->v1.channel,
-            le32toh(desc->v1.rate_n_flags), le16toh(desc->status), rada};
+  const uint8_t channel = gen3() ? desc->v3.channel : desc->v1.channel;
+  const uint32_t rnf = le32toh(gen3() ? desc->v3.rate_n_flags : desc->v1.rate_n_flags);
+  RxFrame f{frame, mpdu_len, static_cast<int8_t>(energy < -127 ? -127 : energy), channel, rnf,
+            le16toh(desc->status), rada};
   if (_cmd_depth) {
     if (_deferred_rx.size() < 1024) _deferred_rx.push_back({std::vector<uint8_t>(frame, frame + mpdu_len), f});
     return;
@@ -1729,8 +1936,8 @@ void IwxDevice::dump_error_tables() {
     }
   }
   if (nic_lock()) {
-    _log("UMAC PC " + hex(read_prph(IWX_UREG_UMAC_CURRENT_PC)) + ", LMAC PC " +
-         hex(read_prph(IWX_UREG_LMAC1_CURRENT_PC)));
+    _log("UMAC PC " + hex(read_umac_prph(IWX_UREG_UMAC_CURRENT_PC)) + ", LMAC PC " +
+         hex(read_umac_prph(IWX_UREG_LMAC1_CURRENT_PC)));
     nic_unlock();
   }
 }

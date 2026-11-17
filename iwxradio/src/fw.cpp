@@ -106,6 +106,10 @@ bool Firmware::load(const std::string &path, std::string &error) {
       if (tlv_len == 12)
         version = version_string(u32_at(data), u32_at(data + 4), u32_at(data + 8));
       break;
+    case IWX_UCODE_TLV_IML:
+      iml = data;
+      iml_len = tlv_len;
+      break;
     case IWX_UCODE_TLV_CMD_VERSIONS:
       cmd_versions.clear();
       for (size_t off = 0; off + 4 <= tlv_len; off += 4)

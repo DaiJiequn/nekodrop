@@ -34,8 +34,8 @@ function Step($what, [scriptblock]$do) {
   if (-not $DryRun) { & $do }
 }
 
-if (-not (Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match 'PCI\\VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0)' })) {
-  throw 'This PC has no Intel Wi-Fi 6 AX201-family card; nekodrop cannot run here.'
+if (-not (Get-PnpDevice -PresentOnly | Where-Object { $_.InstanceId -match 'PCI\\VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0|2723|2725|7A70|7AF0|51F0|51F1|54F0|7F70)' })) {
+  throw 'This PC has no Intel Wi-Fi card nekodrop supports (AX201, AX200, AX210, AX211, AX411, or 9560 on Qu); nekodrop cannot run here.'
 }
 
 'Files'

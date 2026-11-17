@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* A user-mode driver for Intel Wi-Fi 6 cards of the 22000 family (AX200,
- * AX201 and kin), reduced to what an AWDL radio needs: boot the firmware,
+/* A user-mode driver for Intel Wi-Fi 6/6E cards of the 22000 family (AX200,
+ * AX201, 9560 on Qu) and the AX210 family (AX210, AX211, AX411), reduced to
+ * what an AWDL radio needs: boot the firmware,
  * hold one listener MAC context on one channel, hand up every frame heard and
  * inject frames.
  *
@@ -25,6 +26,7 @@
 #include <string>
 #include <vector>
 
+#include "cards.h"
 #include "dma.h"
 #include "fw.h"
 #include "proxy.h"
@@ -138,6 +140,7 @@ public:
    * protected bit; the firmware adds the CCMP header and MIC. */
   int sta_transmit(const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt);
   bool sta_add_rx_ba(unsigned tid, uint16_t ssn, uint16_t window);
+  bool sta_remove_rx_ba(unsigned tid);
   void sta_leave();
   bool sta_active() const { return _sta_mac_added; }
   const StaParams &sta_params() const { return _sta; }
@@ -150,6 +153,7 @@ public:
   bool umac_scan(const uint8_t *channels, size_t count, const uint8_t *ssid, size_t ssid_len,
                  const uint8_t address[6]);
   bool scan_running() const { return _scan_running; }
+  bool scan_succeeded() const { return !_scan_running && _scan_succeeded; }
   void scan_abort();
   /* Handles whatever the card has delivered since the last call. Returns the
    * number of receive buffers processed. */
@@ -166,6 +170,7 @@ public:
   unsigned width_mhz() const { return _width; }
   bool healthy() const { return _open && !_fw_error && !_proxy.failed(); }
   const std::array<uint8_t, 6> &hw_address() const { return _hw_addr; }
+  const CardInfo &card() const { return _card; }
 
 private:
   struct TxRing {
@@ -189,6 +194,10 @@ private:
   void nic_unlock();
   uint32_t read_prph(uint32_t addr);
   void write_prph(uint32_t addr, uint32_t value);
+  /* UMAC peripherals: 0x300000 higher on the AX210 family (iwx_*_umac_prph). */
+  uint32_t read_umac_prph(uint32_t addr) { return read_prph(addr + (gen3() ? 0x300000u : 0u)); }
+  void write_umac_prph(uint32_t addr, uint32_t v) { write_prph(addr + (gen3() ? 0x300000u : 0u), v); }
+  bool gen3() const { return _card.ax210; }
   void set_bits_prph(uint32_t addr, uint32_t bits);
   void clear_bits_prph(uint32_t addr, uint32_t bits);
 
@@ -205,6 +214,7 @@ private:
   void mask_interrupts();
   void nic_config();
   bool load_firmware(std::string &error);
+  bool load_pnvm();
   bool run_init_sequence(std::string &error);
   void set_ltr();
 
@@ -227,6 +237,7 @@ private:
   int enable_monitor_queue();
 
   /* Receive */
+  void post_rx_buf(unsigned index); /* iwx_update_rx_desc */
   void handle_rb(unsigned index);
   void handle_packet(const uint8_t *pkt, size_t len);
   void handle_mpdu(const uint8_t *payload, size_t len, bool rada);
@@ -242,7 +253,7 @@ private:
 
   Logger _log;
   RxHandler _on_rx;
-  bool _scan_configured = false, _scan_running = false;
+  bool _scan_configured = false, _scan_running = false, _scan_succeeded = false;
   bool scan_config();
   std::vector<uint8_t> _unpadded; /* handle_mpdu's scratch */
   TxStatusHandler _on_tx;
@@ -262,8 +273,17 @@ private:
   Firmware _fw;
 
   uint32_t _hw_rev = 0, _hw_rev_raw = 0, _hw_rf_id = 0;
+  CardInfo _card;
   bool _integrated = true;
   std::string _fw_name;
+  /* AX210 family */
+  DmaBuf _prph_scratch, _prph_info, _iml_buf, _pnvm_buf;
+  std::vector<uint8_t> _pnvm_raw;
+  uint32_t _sku_id[3] = {};
+  bool _pnvm_done = false;
+  /* TFD write pointers run modulo 256 (22000) or 65536 (AX210); the slot is
+   * the pointer modulo the ring size. */
+  unsigned wrap() const { return gen3() ? 65536u : 256u; }
   int _nic_locks = 0;
   bool _open = false, _fw_error = false;
 
@@ -271,6 +291,7 @@ private:
   std::vector<DmaBuf> _rx_bufs;
   std::vector<DmaBuf> _fw_sections; /* kept until the card is reset */
   unsigned _rx_cur = 0;
+  std::vector<unsigned> _rx_inflight; /* buffers being handled, oldest first (re-entrant poll) */
   TxRing _cmdq, _dataq, _staq;
   std::vector<CmdSlot> _cmd_slots;
   std::vector<DmaBuf> _cmd_big; /* per slot, for commands over 316 bytes */

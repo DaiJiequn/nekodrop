@@ -15,6 +15,13 @@
 #pragma pack(push, 1)
 #endif
 #include "../third_party/iwx/if_iwxreg.h"
+/* The AX210 family's receive transfer descriptor, which itlwm defines in
+ * ItlIwx.cpp rather than the header (Linux: struct iwl_rx_transfer_desc). */
+struct iwx_rx_transfer_desc {
+  uint16_t rbid;
+  uint16_t reserved[3];
+  uint64_t addr;
+} __packed;
 #ifdef _MSC_VER
 #pragma pack(pop)
 #pragma warning(pop)

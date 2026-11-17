@@ -48,6 +48,8 @@ Source: "..\build\stage\*"; DestDir: "{tmp}\nekodrop-stage"; Flags: recursesubdi
 ; The AppUserModelID lets Windows show nekodrop's notifications under its own name.
 Name: "{autoprograms}\nekodrop"; Filename: "{app}\nekodrop.exe"; AppUserModelID: "nekodrop.app"
 Name: "{autodesktop}\nekodrop"; Filename: "{app}\nekodrop.exe"; AppUserModelID: "nekodrop.app"; Tasks: desktop
+; One-click rollback: gives the Wi-Fi card back to Intel's driver (restore.ps1).
+Name: "{autoprograms}\nekodrop - restore Windows Wi-Fi"; Filename: "{app}\restore.cmd"; IconFilename: "{sys}\netshell.dll"; IconIndex: 0
 
 [Run]
 ; Started as the signed-in user: the first start registers the Explorer

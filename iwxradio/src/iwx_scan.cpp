@@ -136,13 +136,15 @@ bool IwxDevice::umac_scan(const uint8_t *channels, size_t count, const uint8_t *
   }
   cp.count = used;
   if (!nic_lock()) return false;
+  _scan_succeeded = false;
+  _scan_running = true; /* send_cmd can dispatch firmware notifications while waiting */
   const int err = send_cmd(iwx_cmd_id(IWX_SCAN_REQ_UMAC, IWX_LONG_GROUP, 0), req.get(), sizeof(*req), false, nullptr);
   nic_unlock();
   if (err) {
+    _scan_running = false;
     _log("scan: request refused (" + std::to_string(err) + ")");
     return false;
   }
-  _scan_running = true;
   return true;
 }
 

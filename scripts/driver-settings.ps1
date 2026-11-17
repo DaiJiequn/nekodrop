@@ -9,8 +9,8 @@ $DriverSettings = @{
   PackageFiles = @('winawdl_regproxy.inf', 'winawdl_regproxy.dll')
   CertSubject  = 'CN=winairdrop driver signing (local test)'
   CertFile     = 'winairdrop-signing.cer'
-  # The Qu/QuZ CNVi parts (AX201 and its Killer twins) this build can drive.
-  DeviceIds    = @('43F0', 'A0F0', '02F0', '06F0', '34F0', '3DF0', '4DF0')
+  # The cards the radio drives (iwxradio/src/cards.h): Qu/QuZ CNVi, AX200, AX210 family.
+  DeviceIds    = @('43F0', 'A0F0', '02F0', '06F0', '34F0', '3DF0', '4DF0', '2723', '2725', '7A70', '7AF0', '51F0', '51F1', '54F0', '7F70')
   TrustStores  = @('Root', 'TrustedPublisher')
 }
 
@@ -41,7 +41,7 @@ function Get-WifiCardHardwareId {
 
 function Show-WifiCardDriver {
   $card = Get-WifiCard
-  if (-not $card) { 'Intel AX201-family Wi-Fi card not found.'; return }
+  if (-not $card) { 'No supported Intel Wi-Fi card found.'; return }
   $service = (Get-PnpDeviceProperty -InstanceId $card.InstanceId `
                 -KeyName DEVPKEY_Device_Service).Data
   $inf = (Get-PnpDeviceProperty -InstanceId $card.InstanceId `

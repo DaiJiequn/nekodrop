@@ -28,6 +28,9 @@ struct Firmware {
   uint8_t ucode_api[16] = {};  /* bit per IWX_UCODE_TLV_API_* */
   uint8_t capa[16] = {};       /* bit per IWX_UCODE_TLV_CAPA_* */
   std::vector<FwCmdVersion> cmd_versions;
+  /* AX210 family: the image loader the card runs before the firmware. */
+  const uint8_t *iml = nullptr;
+  size_t iml_len = 0;
 
   bool load(const std::string &path, std::string &error);
   bool has_api(unsigned bit) const;

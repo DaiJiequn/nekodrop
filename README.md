@@ -15,7 +15,7 @@
 
 <p align="center">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078d4">
-  <img alt="card" src="https://img.shields.io/badge/card-Intel%20Wi--Fi%206%20AX201-6c5ce7">
+  <img alt="card" src="https://img.shields.io/badge/card-Intel%20AX201%20(tested)%20%7C%20AX200%2FAX210%2FAX211%20(untested)-6c5ce7">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--2.0-blue">
   <img alt="status" src="https://img.shields.io/badge/status-experimental-orange">
 </p>
@@ -47,23 +47,30 @@ Other AX201 laptops should behave the same, since the chip and firmware are iden
 
 ## Supported hardware
 
-nekodrop talks to the Wi-Fi chip directly, so it only works on chips it has a driver for.
+nekodrop talks to the Wi-Fi chip directly, so it only works on chips it has a driver for. It supports every card the upstream driver ([ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)'s `hal_iwx`) ships firmware for. **Only the AX201 has been tested on real hardware**; the others are ported from upstream and untested.
 
-| Card | Status |
-|---|---|
-| **Intel Wi-Fi 6 AX201** (160 MHz, CNVi): PCI IDs `8086:02F0`, `06F0`, `34F0`, `3DF0`, `4DF0`, `43F0`, `A0F0` | ✅ Supported, tested on real hardware (firmware `Qu/QuZ-hr-68`) |
-| Intel Wireless-AC 9560 / 9461 / 9462 (same PCI IDs, older radio) | ❌ Not supported (different firmware family) |
-| Intel AX200, AX210, AX211, AX411, BE200 | ❌ Not yet. The upstream driver supports them, so ports are possible |
-| Realtek, MediaTek, Qualcomm, Broadcom | ❌ No |
+| Card | PCI IDs (`8086:`) | Firmware | Status |
+|---|---|---|---|
+| **Intel Wi-Fi 6 AX201** 160 MHz (CNVi) | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | ✅ **tested** (QuZ on `43F0`) |
+| Intel Wireless-AC 9560 / 9462 / 9461 on Qu/QuZ (CNVi) | same IDs as AX201 | `Qu/QuZ-jf-b0-68` | ⚠️ untested |
+| Intel Wi-Fi 6 AX200 (discrete) | `2723` | `cc-a0-68` | ⚠️ untested |
+| Intel Wi-Fi 6E AX210 (discrete) | `2725` | `ty-a0-gf-a0-68` + PNVM | ⚠️ untested |
+| Intel Wi-Fi 6E AX211 / AX411 (CNVi, 12th gen+) | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf(4)-a0-68` + PNVM | ⚠️ untested |
+| Intel Wi-Fi 6 AX203 / 9560 on So | same IDs as AX211 | `so-a0-hr/jf-b0-68` | ⚠️ untested |
+| Intel SnJ `2726`, QnJ `2720`, Meteor Lake `7E40`/`2729` | | not shipped upstream | ❌ |
+| Intel BE200 / BE201 (Wi-Fi 7) | | no upstream driver | ❌ |
+| Realtek, MediaTek, Qualcomm, Broadcom | | | ❌ |
 
-To check your card: *Device Manager → Network adapters*. It should read **Intel(R) Wi-Fi 6 AX201 160MHz**. The installer refuses to run on any other card.
+To check your card: *Device Manager → Network adapters*. The installer refuses to run on cards not in this table. On an untested card nekodrop may fail to start the firmware; if it does, the card stays usable: run **restore** (below) and please report the log in an [issue](../../issues).
 
-AX201 ships in most Intel 10th and 11th gen laptops (Comet Lake, Ice Lake, Tiger Lake, Jasper Lake).
+### Something went wrong? One-click restore
+
+Start menu → **nekodrop - restore Windows Wi-Fi** (or double-click `restore.cmd` in `C:\Program Files\nekodrop`). It stops nekodrop, gives the card back to Intel's driver, removes nekodrop's driver packages and brings Windows Wi-Fi back, whatever state nekodrop left the card in. nekodrop stays installed; run the installer again to use it. Log: `C:\ProgramData\nekodrop\restore.log`.
 
 ## Requirements
 
 - Windows 10 2004 (build 19041) or later, x64. Windows 11 recommended.
-- An Intel AX201 Wi-Fi card (see above).
+- A supported Intel Wi-Fi card (see above; AX201 is the tested one).
 - Administrator rights to install.
 - Bluetooth, for sending: AirDrop wakes nearby Apple devices with a Bluetooth LE beacon.
 - On the Apple side, AirDrop set to **Everyone for 10 Minutes**. *Contacts Only* needs an Apple ID certificate nekodrop doesn't have.
@@ -122,14 +129,14 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 | Part | State |
 |---|---|
-| User-mode Intel driver: firmware boot, monitor, inject, scan | ✅ works on AX201 |
+| User-mode Intel driver: firmware boot, monitor, inject, scan | ✅ works on AX201; AX210 family path (gen3 context info, IML, PNVM) ported |
 | iPhone → Windows | ✅ works (photos received intact, hash-checked) |
 | Windows → iPhone | ✅ works (tested on AX201) |
 | Wi-Fi and AirDrop at the same time | ✅ works (WPA2, DHCP, DNS through the "nekodrop" adapter) |
 | Wi-Fi manager, saved networks, captive portal | ✅ |
 | Service, tray app, notifications, context menu, installer | ✅ |
 | WPA3-only, 802.1X, WEP | ⏳ planned |
-| Other Intel cards (AX200/AX210/AX211/BE200) | ⏳ planned |
+| Other Intel cards (AX200/AX210/AX211/AX411, 9560 on Qu) | 🧪 ported from upstream, untested on hardware |
 | Kernel WiFiCx driver (`kdriver/`) | 🧊 shelved: experimental and **not installed** by the setup. See [docs/KERNEL.md](docs/KERNEL.md) |
 
 ## How it works

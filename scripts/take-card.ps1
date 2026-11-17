@@ -13,7 +13,7 @@ $inf = Join-Path $package $DriverSettings.InfName
 $certFile = Join-Path $package $DriverSettings.CertFile
 if (-not (Test-Path $certFile)) { throw 'Run scripts\package-driver.ps1 first.' }
 $hardwareId = Get-WifiCardHardwareId
-if (-not $hardwareId) { throw 'No Intel AX201-family card found.' }
+if (-not $hardwareId) { throw 'No supported Intel Wi-Fi card found.' }
 if (-not (Test-OtherNetwork) -and -not $Force) {
   throw ('No other network connection is up. Taking the card turns Wi-Fi off; ' +
          'plug in a cable or USB tethering first, or pass -Force.')
