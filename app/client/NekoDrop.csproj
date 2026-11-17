@@ -13,6 +13,7 @@
     <Product>nekodrop</Product>
     <Description>nekodrop: AirDrop for Windows</Description>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../assets/nekodrop.ico</ApplicationIcon>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

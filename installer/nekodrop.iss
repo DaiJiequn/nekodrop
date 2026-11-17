@@ -20,6 +20,7 @@ OutputDir=..\build
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=../app/assets/nekodrop.ico
 UninstallDisplayIcon={app}\nekodrop.exe
 CloseApplications=yes
 

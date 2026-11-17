@@ -55,16 +55,7 @@ New-Item -ItemType Directory -Force "$shellBuild\pkg\Assets" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "context menu DLL build failed ($LASTEXITCODE)" }
 Copy-Item "$shellBuild\nekodrop-shell.dll" $stage
 Copy-Item "$repo\installer\sparse\AppxManifest.xml" "$shellBuild\pkg\"
-Add-Type -AssemblyName System.Drawing
-$bmp = New-Object System.Drawing.Bitmap 150, 150
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.SmoothingMode = 'AntiAlias'; $g.TextRenderingHint = 'AntiAliasGridFit'
-$g.FillEllipse((New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(0, 103, 192))), 5, 5, 140, 140)
-$font = New-Object System.Drawing.Font 'Segoe MDL2 Assets', 60
-$fmt = New-Object System.Drawing.StringFormat; $fmt.Alignment = 'Center'; $fmt.LineAlignment = 'Center'
-$g.DrawString([string][char]0xE724, $font, [System.Drawing.Brushes]::White, (New-Object System.Drawing.RectangleF 0, 4, 150, 150), $fmt)
-$bmp.Save("$shellBuild\pkg\Assets\logo.png", [System.Drawing.Imaging.ImageFormat]::Png)
-$g.Dispose(); $bmp.Dispose()
+Copy-Item "$repo\app\assets\logo150.png" "$shellBuild\pkg\Assets\logo.png"
 $makeAppx = Join-Path (Split-Path $tools.SignTool) 'makeappx.exe'
 New-Item -ItemType Directory -Force "$stage\shell" | Out-Null
 & $makeAppx pack /o /nv /d "$shellBuild\pkg" /p "$stage\shell\nekodrop-shell.msix" | Out-Null

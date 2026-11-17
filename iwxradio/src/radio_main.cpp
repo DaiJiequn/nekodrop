@@ -463,17 +463,20 @@ int main(int argc, char **argv) {
           b.seen_ms = GetTickCount64();
         }
       }
-      if (sta && sta->owns(f)) {
-        sta->on_frame(f);
-        return;
-      }
-      /* Beacon hint: a beacon heard in our 80 MHz block lifts "passive". */
+      /* Beacon hint: a beacon heard in our 80 MHz block lifts "passive". Checked
+       * before the station takes its AP's beacons: with Wi-Fi joined on the
+       * AWDL channel those are the only beacons there, and AWDL would stay
+       * held forever (2026-11-17). */
       if (f.len >= 36 && (f.data[0] == 0x80 || f.data[0] == 0x50) && !beacon_heard) {
         const unsigned a = awdl::block80_first(f.channel), b = awdl::block80_first(dev.channel());
         if ((a && a == b) || f.channel == dev.channel()) {
           beacon_heard = true;
           log_line("beacon heard on channel " + std::to_string(f.channel) + ": transmitting allowed here");
         }
+      }
+      if (sta && sta->owns(f)) {
+        sta->on_frame(f);
+        return;
       }
       if (awdl::is_awdl_action(f.data, f.len)) {
         rx_awdl++;
