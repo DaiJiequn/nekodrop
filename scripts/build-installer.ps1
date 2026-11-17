@@ -118,7 +118,10 @@ if (Test-Path $tap) {
 New-Item -ItemType Directory -Force "$stage\licenses" | Out-Null
 Copy-Item "$repo\third_party\ForbiddenItlwm\LICENSE" "$stage\licenses\ForbiddenItlwm-GPL-2.0.txt"
 Copy-Item "$repo\third_party\ForbiddenItlwm\iwlwifi-firmware-license" "$stage\licenses\iwlwifi-firmware.txt"
-Copy-Item "$repo\third_party\winawdl\LICENSE" "$stage\licenses\winawdl.txt" -ErrorAction SilentlyContinue
+Copy-Item "$repo\third_party\winawdl\LICENSE" "$stage\licenses\winawdl-MIT.txt"
+Copy-Item "$repo\third_party\winawdl\awdl\LICENSE" "$stage\licenses\awdld-GPL-3.0.txt"
+Copy-Item "$repo\third_party\winawdl\airdrop\LICENSE" "$stage\licenses\airdrop-engine-MIT.txt"
+Copy-Item "$repo\LICENSE" "$stage\licenses\nekodrop-GPL-2.0.txt"
 Copy-Item "$repo\third_party\winawdl\deps\wintun\LICENSE.txt" "$stage\licenses\wintun.txt"
 
 $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") |

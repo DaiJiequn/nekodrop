@@ -31,6 +31,20 @@
 - **自动恢复**：后台服务盯着 radio、AWDL 守护进程和 AirDrop 引擎，哪个停了就重启哪个。开机自动启动。
 - **托盘程序**：中英双语，浅色界面，有系统通知和设置窗口。
 
+## 实机测试
+
+以下都是作者在自己的笔记本上实际测过的，不是纸上谈兵：
+
+| | |
+|---|---|
+| 网卡 | **Intel Wi-Fi 6 AX201 160MHz**（CNVi，固件 `iwlwifi-QuZ-a0-hr-b0-68`） |
+| 系统 | Windows 11 专业版 x64 |
+| iPhone → Windows | ✅ 可用：照片和文件完整收到 |
+| Windows → iPhone | ✅ 可用：右键 → 用 nekodrop 发送，iPhone 接受并收到 |
+| 同时上网 | ✅ 可用：AirDrop 运行时电脑通过 nekodrop 自己的 WPA2 连接保持在线，Wi-Fi 和 AWDL 在同一个 5 GHz 信道上也没问题 |
+
+其他 AX201 笔记本用的是同一颗芯片、同一份固件，应该表现一致，但目前只在这一台上测过。欢迎在 [Issues](../../issues) 反馈其他机器的结果。
+
 ## 支持的网卡
 
 nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。
@@ -110,7 +124,7 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。
 |---|---|
 | 用户态 Intel 驱动：固件启动、监听、注入、扫描 | ✅ AX201 上可用 |
 | iPhone → Windows | ✅ 可用（收到的照片完整，哈希一致） |
-| Windows → iPhone | 🧪 能发现设备，传输还在实验阶段 |
+| Windows → iPhone | ✅ 可用（AX201 实测） |
 | 联网同时 AirDrop | ✅ 可用（WPA2、DHCP、DNS 都走“nekodrop”网卡） |
 | Wi-Fi 管理、已保存网络、网页登录识别 | ✅ |
 | 服务、托盘程序、通知、右键菜单、安装包 | ✅ |
@@ -171,19 +185,51 @@ cd nekodrop
 | `installer/` | Inno Setup 脚本、安装/卸载脚本、TAP 配置 |
 | `kdriver/` | 已搁置的内核 WiFiCx 驱动（实验性，不随安装包发布） |
 
-## 致谢
+## 代码来源
 
-nekodrop 建立在这些项目之上：
+nekodrop 是在其他开源项目的基础上做的。这里写清楚哪些是**直接用了源码**（复制、移植或打包），哪些只是**参考**。
 
-- [retropineaple/ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)：Intel 22000 系列驱动（itlwm `hal_iwx`），以及 AWDL 相关策略（信道跟随、国家码学习、Block Ack、速率阶梯、单播重发、信标提示）。GPL-2.0。
-- [raph559/winawdl](https://github.com/raph559/winawdl)：在 Windows 上从用户态接管 PCIe 网卡的方法（UMDF 寄存器代理、用户态 DMA）、radio 管道、OWL 移植和 AirDrop 引擎。MIT。
-- [seemoo-lab/owl](https://github.com/seemoo-lab/owl) 和 [seemoo-lab/opendrop](https://github.com/seemoo-lab/opendrop)：这里一切的源头，开源的 AWDL 和 AirDrop 实现。
-- OpenBSD `iwx(4)` 和 Linux `iwlwifi`。
-- [Wintun](https://www.wintun.net/)、[TAP-Windows](https://github.com/OpenVPN/tap-windows6)。
+### 用到的源码
+
+| 项目 | 许可 | 用了什么 | 在 nekodrop 里的位置 |
+|---|---|---|---|
+| [retropineaple/ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 0.6.0（itlwm 分支，macOS） | GPL-2.0 | Intel 22000 系列驱动 `hal_iwx`：固件加载、TLV 解析、context info、收发环、固件命令、寄存器头文件 `if_iwxreg.h`。还有它的 AWDL 策略：信道跟随（44/149 的 min 规则、国家码学习）、接收 Block Ack、BA 期间关混杂、速率阶梯、主机侧单播重发、信标提示 | `iwxradio/`，从内核 C 移植成用户态 C++ 驱动 |
+| ForbiddenItlwm 的固件目录 | Intel 再分发许可 | iwlwifi 固件 `iwlwifi-Qu*-hr-b0-68.ucode` | 随安装包放在 `radio\firmware\` |
+| [raph559/winawdl](https://github.com/raph559/winawdl) | MIT | 在 Windows 上从用户态接管 PCIe 网卡的方法：UMDF 寄存器代理驱动（原本给 Realtek RTL8852CE 用）和用户态 DMA；radio 管道协议 | `driver/regproxy/`（改成 AX201 的 PCI ID）、`iwxradio/`（管道和 DMA） |
+| winawdl 的 `awdl/`（`awdld`） | GPL-3.0 或更新（基于 OWL） | AWDL 守护进程：OWL 的协议核心加上 Windows I/O 层和 Wintun | 从源码编译，随安装包放在 `awdl\awdld.exe` |
+| winawdl 的 `airdrop/` | MIT | Python 写的 AirDrop 引擎：mDNS、HTTPS 接收端、发送端、蓝牙信标 | 放在 `airdrop\`，打了两个小补丁（`scripts/patch-engine.py`：固定实例名、备用端口） |
+| [seemoo-lab/owl](https://github.com/seemoo-lab/owl) | GPL-3.0 | `awdld` 里的 AWDL 实现 | 经由 winawdl |
+| [Wintun](https://www.wintun.net/) | Wintun 许可 | 虚拟网卡 `awdl0` | `awdl\wintun.dll`（预编译） |
+| [TAP-Windows6](https://github.com/OpenVPN/tap-windows6) | GPL-2.0 / OpenVPN | Windows 上网用的“nekodrop”虚拟以太网卡 | 安装时装上（OpenVPN 签名的安装程序） |
+
+### 参考过的项目（没有复制代码）
+
+| 项目 | 参考了什么 |
+|---|---|
+| OpenBSD `iwx(4)`、Linux `iwlwifi` | 固件、UMAC 扫描、站点模式、密钥的工作方式 |
+| [seemoo-lab/opendrop](https://github.com/seemoo-lab/opendrop) | AirDrop 协议（`/Discover`、`/Ask`、`/Upload`、mDNS 记录） |
+| [microsoft/Windows-driver-samples](https://github.com/microsoft/Windows-driver-samples) | 已搁置的内核驱动（`kdriver/`）的 WiFiCx 结构 |
+| [t4t5/owly](https://github.com/t4t5/owly)、[JungyoKim/WirDrop](https://github.com/JungyoKim/WirDrop) | 其他平台上实现 AirDrop 的尝试，设计时对比参考 |
+
+### nekodrop 自己写的部分
+
+- `iwxradio/`：用户态移植本身，以及所有 Windows 特有的部分：两个 MAC 同时运行（AWDL 监听加上独立 PHY 上的 Wi-Fi 站点）、WPA2 站点模式（四次握手、密钥交给固件、TLC 速率控制）、TAP 桥接、固件 UMAC 扫描、信标解析和加密方式识别。
+- `app/service/`：Windows 服务：网卡接管、radio 和 awdld 监管、Wi-Fi 管理（DPAPI 加密保存的网络、自动连接、隐藏网络、网页登录识别）。
+- `app/client/`：托盘程序（WPF）、通知、发送窗口、Wi-Fi 窗口、中英文界面。
+- `app/shellext/`：Windows 11 右键菜单。
+- `installer/`：Inno Setup 安装包、本机驱动签名、TAP 配置和卸载。
 
 ## 许可
 
-nekodrop 以 **GPL-2.0** 发布（见 [LICENSE](LICENSE)），因为 `iwxradio/` 派生自 itlwm/ForbiddenItlwm。`if_iwxreg.h` 是 BSD/GPL-2.0 双许可。`driver/regproxy` 和 AirDrop 引擎沿用 winawdl 的 MIT 许可。iwlwifi 固件按 Intel 的再分发许可附带，Wintun 和 TAP-Windows 各按其许可。
+nekodrop 整体以 **GPL-2.0** 发布（见 [LICENSE](LICENSE)），因为 `iwxradio/` 派生自 itlwm/ForbiddenItlwm。
+
+- `if_iwxreg.h`：BSD/GPL-2.0 双许可。
+- `driver/regproxy` 和 AirDrop 引擎：沿用 winawdl 的 MIT 许可。
+- `awdld`：GPL-3.0 或更新，来自 winawdl/OWL，是通过管道通信的独立程序。
+- iwlwifi 固件：Intel 再分发许可（`licenses\iwlwifi-firmware.txt`）。
+- Wintun 和 TAP-Windows：各按其许可。
+
+安装包会把所有许可证复制到 `licenses\`。
 
 ## 免责声明
 

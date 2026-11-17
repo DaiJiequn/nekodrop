@@ -31,6 +31,20 @@
 - **Recover by itself.** A service watches the radio, the AWDL daemon and the AirDrop engine and restarts whatever stops. It starts with Windows.
 - **Tray app in Chinese and English**, with a light UI, system notifications and a settings window.
 
+## Tested on real hardware
+
+Everything below was tested by the author on their own laptop, not just in theory:
+
+| | |
+|---|---|
+| Wi-Fi card | **Intel Wi-Fi 6 AX201 160MHz** (CNVi, firmware `iwlwifi-QuZ-a0-hr-b0-68`) |
+| OS | Windows 11 Pro x64 |
+| iPhone → Windows | ✅ works: photos and files arrive intact |
+| Windows → iPhone | ✅ works: right-click → Send with nekodrop, accepted and received on the iPhone |
+| Wi-Fi at the same time | ✅ works: the PC stays online through nekodrop's own WPA2 connection while AirDrop runs, including with Wi-Fi and AWDL on the same 5 GHz channel |
+
+Other AX201 laptops should behave the same, since the chip and firmware are identical, but only this one has been tested. Reports from other machines are welcome in [Issues](../../issues).
+
 ## Supported hardware
 
 nekodrop talks to the Wi-Fi chip directly, so it only works on chips it has a driver for.
@@ -110,7 +124,7 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 |---|---|
 | User-mode Intel driver: firmware boot, monitor, inject, scan | ✅ works on AX201 |
 | iPhone → Windows | ✅ works (photos received intact, hash-checked) |
-| Windows → iPhone | 🧪 discovery works; transfer is experimental |
+| Windows → iPhone | ✅ works (tested on AX201) |
 | Wi-Fi and AirDrop at the same time | ✅ works (WPA2, DHCP, DNS through the "nekodrop" adapter) |
 | Wi-Fi manager, saved networks, captive portal | ✅ |
 | Service, tray app, notifications, context menu, installer | ✅ |
@@ -171,19 +185,51 @@ cd nekodrop
 | `installer/` | Inno Setup script, install/uninstall scripts, TAP setup |
 | `kdriver/` | Shelved kernel WiFiCx driver (experimental, not shipped) |
 
-## Credits
+## Where the code comes from
 
-nekodrop stands on these projects:
+nekodrop is built on other open-source projects. This section says exactly what was **used as source code** (copied, ported or bundled) and what was only **studied as a reference**.
 
-- [retropineaple/ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm): Intel 22000-series driver (itlwm `hal_iwx`) and AWDL strategies (channel following, country learning, Block Ack, rate stepping, unicast resend, beacon hints). GPL-2.0.
-- [raph559/winawdl](https://github.com/raph559/winawdl): the user-mode takeover of a PCIe Wi-Fi card on Windows (UMDF register proxy and user-mode DMA), the radio pipe, the OWL port and the AirDrop engine. MIT.
-- [seemoo-lab/owl](https://github.com/seemoo-lab/owl) and [seemoo-lab/opendrop](https://github.com/seemoo-lab/opendrop): the open AWDL and AirDrop implementations everything here descends from.
-- OpenBSD `iwx(4)` and Linux `iwlwifi`.
-- [Wintun](https://www.wintun.net/), [TAP-Windows](https://github.com/OpenVPN/tap-windows6).
+### Source code used
+
+| Project | License | What nekodrop takes from it | Where it ends up |
+|---|---|---|---|
+| [retropineaple/ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 0.6.0 (itlwm fork, macOS) | GPL-2.0 | The Intel 22000-series driver `hal_iwx`: firmware loading, TLV parsing, context info, TX/RX rings, firmware commands, the register header `if_iwxreg.h`. Its AWDL strategies too: channel following (the 44/149 min rule, country-code learning), receive Block Ack, promiscuous off during BA, rate stepping, host-side unicast resend, beacon hints | `iwxradio/`, ported from kernel C to a user-mode C++ driver |
+| ForbiddenItlwm's firmware folder | Intel redistribution license | iwlwifi firmware `iwlwifi-Qu*-hr-b0-68.ucode` | shipped in `radio\firmware\` |
+| [raph559/winawdl](https://github.com/raph559/winawdl) | MIT | The way to take over a PCIe Wi-Fi card from user mode on Windows: the UMDF register-proxy driver (originally for Realtek RTL8852CE) and user-mode DMA; the radio pipe protocol | `driver/regproxy/` (adapted to the AX201's PCI IDs), `iwxradio/` (pipe and DMA) |
+| winawdl `awdl/` (`awdld`) | GPL-3.0-or-later (builds on OWL) | The AWDL daemon: OWL's protocol core with a Windows I/O layer and Wintun | built from source, shipped as `awdl\awdld.exe` |
+| winawdl `airdrop/` | MIT | The AirDrop engine in Python: mDNS, the HTTPS receiver, the sender, the BLE beacon | shipped as `airdrop\` with two small patches (`scripts/patch-engine.py`: stable instance name, spare ports) |
+| [seemoo-lab/owl](https://github.com/seemoo-lab/owl) | GPL-3.0 | The AWDL implementation inside `awdld` | through winawdl |
+| [Wintun](https://www.wintun.net/) | Wintun license | The `awdl0` virtual interface | `awdl\wintun.dll` (prebuilt) |
+| [TAP-Windows6](https://github.com/OpenVPN/tap-windows6) | GPL-2.0 / OpenVPN | The "nekodrop" virtual Ethernet adapter for Windows' internet | installed by the setup (signed OpenVPN installer) |
+
+### Studied as references (no code copied)
+
+| Project | What it was used for |
+|---|---|
+| OpenBSD `iwx(4)`, Linux `iwlwifi` | How the firmware, UMAC scan, station mode and keys work |
+| [seemoo-lab/opendrop](https://github.com/seemoo-lab/opendrop) | The AirDrop protocol (`/Discover`, `/Ask`, `/Upload`, mDNS records) |
+| [microsoft/Windows-driver-samples](https://github.com/microsoft/Windows-driver-samples) | WiFiCx structure for the shelved kernel driver (`kdriver/`) |
+| [t4t5/owly](https://github.com/t4t5/owly), [JungyoKim/WirDrop](https://github.com/JungyoKim/WirDrop) | Other AirDrop-on-other-platforms attempts, compared during design |
+
+### Written for nekodrop
+
+- `iwxradio/`: the user-mode port itself, plus everything Windows-specific: running two MACs at once (AWDL listener plus Wi-Fi station on its own PHY), station mode with WPA2 (4-way handshake, keys in firmware, TLC rate control), bridging to TAP, firmware UMAC scan, beacon parsing and security detection.
+- `app/service/`: the Windows service: card ownership, radio and awdld supervision, the Wi-Fi manager (DPAPI-encrypted saved networks, auto-connect, hidden networks, captive-portal detection).
+- `app/client/`: the tray app (WPF), notifications, the send window, the Wi-Fi window, Chinese/English UI.
+- `app/shellext/`: the Windows 11 context-menu handler.
+- `installer/`: the Inno Setup installer, the on-PC driver signing, TAP setup and uninstall.
 
 ## License
 
-nekodrop is **GPL-2.0** (see [LICENSE](LICENSE)), because `iwxradio/` derives from itlwm/ForbiddenItlwm. `if_iwxreg.h` is dual BSD/GPL-2.0. `driver/regproxy` and the AirDrop engine keep winawdl's MIT license. The iwlwifi firmware ships under Intel's redistribution license. Wintun and TAP-Windows ship under their own licenses.
+nekodrop as a whole is **GPL-2.0** (see [LICENSE](LICENSE)), because `iwxradio/` derives from itlwm/ForbiddenItlwm.
+
+- `if_iwxreg.h`: dual BSD/GPL-2.0.
+- `driver/regproxy` and the AirDrop engine: keep winawdl's MIT license.
+- `awdld`: GPL-3.0-or-later, from winawdl/OWL. It is a separate program talking over a pipe.
+- iwlwifi firmware: Intel's redistribution license (`licenses\iwlwifi-firmware.txt`).
+- Wintun and TAP-Windows: their own licenses.
+
+The installer copies every license into `licenses\`.
 
 ## Disclaimer
 
