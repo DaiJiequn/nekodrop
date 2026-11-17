@@ -392,6 +392,7 @@ void WifiStation::handle_data(const RxFrame &f) {
   if (f.data[0] & 0x40) return;               /* null / QoS null */
   const size_t h = hdrlen(f.data, f.len);
   if (!h) return;
+  _rx.data++;
   const uint8_t *da = f.data + 4, *sa = f.data + 16;
   if (std::memcmp(sa, _addr.data(), 6) == 0) return; /* our own broadcast, echoed */
   const uint8_t *body = f.data + h;
@@ -399,8 +400,14 @@ void WifiStation::handle_data(const RxFrame &f) {
   if (flags & 0x40) {
     /* Protected: the firmware decrypted it, or it is dropped. */
     if ((f.status & (IWX_RX_MPDU_RES_STATUS_DEC_DONE | IWX_RX_MPDU_RES_STATUS_MIC_OK)) !=
-        (IWX_RX_MPDU_RES_STATUS_DEC_DONE | IWX_RX_MPDU_RES_STATUS_MIC_OK))
+        (IWX_RX_MPDU_RES_STATUS_DEC_DONE | IWX_RX_MPDU_RES_STATUS_MIC_OK)) {
+      if (_rx.undecrypted++ < 5) {
+        char b[96];
+        std::snprintf(b, sizeof(b), "station: frame not decrypted (status 0x%04x, %zu bytes)", f.status, f.len);
+        _log(b);
+      }
       return;
+    }
     if (len < 8) return;
     body += 8; /* CCMP header stays in place */
     len -= 8;
@@ -409,7 +416,46 @@ void WifiStation::handle_data(const RxFrame &f) {
       len -= 8;
     }
   }
-  if (len < 8 || body[0] != 0xaa || body[1] != 0xaa || body[2] != 0x03) return;
+  /* A-MSDU (QoS control bit 7): the payload is subframes, each DA, SA,
+   * length, then LLC/SNAP, padded to 4 bytes. The hardware usually splits
+   * them into one subframe per MPDU, keeping the bit (iwx_rx_mpdu_mq); a
+   * whole A-MSDU takes the same loop. Without this, an access point that
+   * turns A-MSDU on after a while starves the station of everything but
+   * broadcasts (hardware, 2026-11-17). */
+  const bool qos = (f.data[0] & 0x88) == 0x88;
+  const size_t qos_at = (flags & 0x03) == 0x03 ? 30 : 24;
+  if (qos && qos_at < h && (f.data[qos_at] & 0x80)) {
+    _rx.amsdu++;
+    while (len >= 14 + 8) {
+      const size_t sub = be16(body + 12);
+      if (sub < 8 || 14 + sub > len) {
+        if (_rx.not_llc++ < 5) _log("station: malformed A-MSDU subframe dropped");
+        return;
+      }
+      deliver(body, body + 6, body + 14, sub);
+      const size_t step = (14 + sub + 3) & ~size_t(3);
+      if (step >= len) break;
+      body += step;
+      len -= step;
+    }
+    return;
+  }
+  deliver(da, sa, body, len);
+}
+
+/* One LLC/SNAP payload from the AP: EAPOL to the handshake, the rest to
+ * Windows as an Ethernet frame. */
+void WifiStation::deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *body, size_t len) {
+  if (len < 8 || body[0] != 0xaa || body[1] != 0xaa || body[2] != 0x03) {
+    if (_rx.not_llc++ < 5) {
+      char b[128];
+      std::snprintf(b, sizeof(b), "station: data frame without LLC/SNAP dropped (%zu bytes: %02x %02x %02x %02x)",
+                    len, len > 0 ? body[0] : 0, len > 1 ? body[1] : 0, len > 2 ? body[2] : 0, len > 3 ? body[3] : 0);
+      _log(b);
+    }
+    return;
+  }
+  if (std::memcmp(sa, _addr.data(), 6) == 0) return; /* our own broadcast, echoed */
   const uint16_t ethertype = be16(body + 6);
   body += 8;
   len -= 8;
@@ -424,7 +470,11 @@ void WifiStation::handle_data(const RxFrame &f) {
   eth.insert(eth.end(), sa, sa + 6);
   put_be16(eth, ethertype);
   eth.insert(eth.end(), body, body + len);
-  if (_tap.write(eth.data(), eth.size())) _rx_packets++;
+  if (_tap.write(eth.data(), eth.size())) {
+    _rx_packets++;
+  } else if (_rx.tap_failed++ < 5) {
+    _log("station: writing to the TAP adapter failed");
+  }
 }
 
 void WifiStation::send_data(const uint8_t *da, uint16_t ethertype, const uint8_t *payload, size_t len,

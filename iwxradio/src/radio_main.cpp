@@ -646,7 +646,8 @@ int main(int argc, char **argv) {
     ready = true;
     log_line("ready on channel " + std::to_string(opt.channel) + ", waiting for a client");
 
-    uint64_t idle_rounds = 0, last_report = GetTickCount64(), last_health = 0;
+    uint64_t idle_rounds = 0, last_report = GetTickCount64(), last_health = 0, last_rejoin = 0;
+    std::deque<std::pair<uint64_t, uint64_t>> stall_hist; /* station packets in, out at each report */
     Request req;
     while (!stopping() && dev.healthy()) {
       bool busy = dev.poll() > 0;
@@ -796,11 +797,37 @@ int main(int argc, char **argv) {
                  std::to_string(ladder.downs) + " down); BA answers " + std::to_string(ba_answers) +
                  (dev.promiscuous() ? "" : ", promiscuous off") +
                  (tx_held_passive ? "; " + std::to_string(tx_held_passive) + " held (passive channel)" : ""));
-        if (sta)
+        if (sta) {
+          const auto &r = sta->rx_stats();
           log_line(std::string("wifi: ") + sta->state_name() + ", " + std::to_string(sta->rx_packets()) +
                    " packets in, " + std::to_string(sta->tx_packets()) + " out; frames to the AP " +
                    std::to_string(dev.sta_tx_acked()) + " acknowledged, " + std::to_string(dev.sta_tx_failed()) +
-                   " not");
+                   " not; from the AP " + std::to_string(r.data) + " data frames, " + std::to_string(r.amsdu) +
+                   " A-MSDU, dropped " + std::to_string(r.undecrypted) + " undecrypted, " +
+                   std::to_string(r.not_llc) + " not LLC, " + std::to_string(r.tap_failed) + " TAP");
+          /* Stall watchdog: Windows keeps sending but nearly nothing comes
+           * back while the link still looks fine (hardware, 2026-11-17:
+           * after ~40 minutes, 300-600 packets a minute out against 50-100
+           * in, until the station was joined again). Two minutes of that
+           * and the station joins again; at most once every 10 minutes. */
+          if (sta->state() == WifiStation::State::Running) {
+            const uint64_t in = sta->rx_packets(), out = sta->tx_packets();
+            stall_hist.push_back({in, out});
+            if (stall_hist.size() > 25) stall_hist.pop_front(); /* 2 minutes of 5 s reports */
+            if (stall_hist.size() == 25) {
+              const uint64_t din = in - stall_hist.front().first, dout = out - stall_hist.front().second;
+              if (dout >= 400 && din * 5 < dout && now - last_rejoin > 600000) {
+                last_rejoin = now;
+                stall_hist.clear();
+                log_line("event: wifi-stall");
+                sta->rejoin("replies stopped (" + std::to_string(dout) + " packets out, " + std::to_string(din) +
+                            " in over 2 minutes)");
+              }
+            }
+          } else {
+            stall_hist.clear();
+          }
+        }
       }
     }
     if (sta) sta->stop();

@@ -57,12 +57,22 @@ public:
   uint64_t tx_packets() const { return _tx_packets; }
   /* Receive Block Ack requests from the AP, answered like AWDL's. */
   bool take_addba(std::vector<uint8_t> &answer);
+  /* Data frames from the AP and why some never reached Windows. */
+  struct RxStats {
+    uint64_t data = 0, undecrypted = 0, not_llc = 0, amsdu = 0, tap_failed = 0;
+  };
+  const RxStats &rx_stats() const { return _rx; }
+  /* Leaves and joins again in 5 s (the radio's stall watchdog). */
+  void rejoin(const std::string &why) {
+    if (_state == State::Running) fail(why);
+  }
 
 private:
   void send_auth();
   void send_assoc();
   void handle_mgmt(const RxFrame &f);
   void handle_data(const RxFrame &f);
+  void deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *body, size_t len);
   void handle_eapol(const uint8_t *body, size_t len);
   void send_eapol(const std::vector<uint8_t> &eapol, bool protect);
   void learn_beacon(const uint8_t *f, size_t len);
@@ -102,4 +112,5 @@ private:
   std::deque<std::vector<uint8_t>> _addba_answers;
   uint16_t _mgmt_seq = 0;
   uint64_t _rx_packets = 0, _tx_packets = 0;
+  RxStats _rx;
 };
