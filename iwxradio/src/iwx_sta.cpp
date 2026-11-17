@@ -231,8 +231,23 @@ bool IwxDevice::sta_set_key(bool group, unsigned key_index, const uint8_t key[16
   cmd.common.sta_id = IWX_STATION_ID;
   cmd.transmit_seq_cnt = 0;
   if (!nic_lock()) return false;
-  const int err = send_cmd(IWX_ADD_STA_KEY, &cmd, sizeof(cmd), false, nullptr);
+  /* The firmware answers with an ADD_STA status (Linux iwl_mvm_send_sta_key
+   * accepts only ADD_STA_SUCCESS). A reply of another shape is taken as
+   * success, as before, so an unexpected format cannot break key installs. */
+  std::vector<uint8_t> resp;
+  int err = send_cmd(IWX_ADD_STA_KEY, &cmd, sizeof(cmd), true, &resp);
   nic_unlock();
+  if (!err && resp.size() >= sizeof(iwx_rx_packet) + sizeof(uint32_t)) {
+    const auto *pkt = reinterpret_cast<const iwx_rx_packet *>(resp.data());
+    uint32_t status = 0;
+    std::memcpy(&status, pkt->data, sizeof(status));
+    status = le32toh(status);
+    if (iwx_rx_packet_payload_len(pkt) == sizeof(iwx_cmd_response) &&
+        (status & IWX_ADD_STA_STATUS_MASK) != IWX_ADD_STA_SUCCESS) {
+      _log("station: key install refused, status " + std::to_string(status));
+      return false;
+    }
+  }
   if (err) _log("station: key install refused (" + std::to_string(err) + ")");
   return err == 0;
 }
@@ -283,9 +298,36 @@ bool IwxDevice::sta_set_igtk(unsigned key_id, const uint8_t key[16], uint64_t rs
   return err == 0;
 }
 
+/* A Block Ack session the AP ended (DELBA), or one about to be replaced. */
+bool IwxDevice::sta_remove_rx_ba(unsigned tid) {
+  if (!_sta_sta_added || tid >= 8 || !((_sta_ba_tids >> tid) & 1)) return true;
+  iwx_add_sta_cmd cmd{};
+  cmd.sta_id = IWX_STATION_ID;
+  cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(kStaMac, 0));
+  cmd.add_modify = IWX_STA_MODE_MODIFY;
+  cmd.remove_immediate_ba_tid = static_cast<uint8_t>(tid);
+  cmd.modify_mask = IWX_STA_MODIFY_REMOVE_BA_TID;
+  uint32_t status = IWX_ADD_STA_SUCCESS;
+  if (!nic_lock()) return false;
+  const int err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+  nic_unlock();
+  const bool ok = !err && (status & IWX_ADD_STA_STATUS_MASK) == IWX_ADD_STA_SUCCESS;
+  /* Only forgotten once the firmware confirms (Codex review #23); a failed
+   * removal is logged, and a following add still replaces the session. */
+  if (ok) _sta_ba_tids &= static_cast<uint8_t>(~(1u << tid));
+  else _log("station: removing Block Ack on TID " + std::to_string(tid) + " failed");
+  return ok;
+}
+
 bool IwxDevice::sta_add_rx_ba(unsigned tid, uint16_t ssn, uint16_t window) {
   if (!_sta_sta_added || tid >= 8) return false;
-  if ((_sta_ba_tids >> tid) & 1) return true;
+  /* A new ADDBA for an open TID is a new session with its own start (the
+   * AP restarts sessions after idling, or after a DELBA we missed). Keeping
+   * the old one left the firmware's reorder window at the old sequence
+   * number, and it dropped the AP's frames as stale before we ever saw them
+   * (hardware, 2026-11-17: no internet after a while, "connected", every
+   * counter clean). Replace it, as the AWDL side does. */
+  if ((_sta_ba_tids >> tid) & 1) sta_remove_rx_ba(tid);
   iwx_add_sta_cmd cmd{};
   cmd.sta_id = IWX_STATION_ID;
   cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(kStaMac, 0));

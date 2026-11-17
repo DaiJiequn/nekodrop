@@ -28,8 +28,12 @@ struct StaConfig {
   bool open = false;
   std::string tap;        /* TAP adapter name or GUID; empty: the first */
   unsigned max_width = 80;
+  /* Receive Block Ack sessions with the AP. Off by default until the host
+   * reorders by BAID/NSSN as Linux does: requests are declined (status 37)
+   * and the AP sends unaggregated (Codex review #24, agreed fix). */
+  bool block_ack = false;
 
-  /* key=value lines: ssid, bssid, channel, passphrase, psk, open, tap, width. */
+  /* key=value lines: ssid, bssid, channel, passphrase, psk, open, tap, width, ba. */
   bool load(const std::string &path, std::string &error);
 };
 
@@ -55,16 +59,19 @@ public:
   TapAdapter &tap() { return _tap; }
   uint64_t rx_packets() const { return _rx_packets; }
   uint64_t tx_packets() const { return _tx_packets; }
+  /* Unicast only: Windows' multicast (mDNS, SSDP, LLMNR) never gets answers. */
+  uint64_t tx_unicast() const { return _tx_unicast; }
+  uint64_t rx_unicast() const { return _rx.unicast; }
   /* Receive Block Ack requests from the AP, answered like AWDL's. */
   bool take_addba(std::vector<uint8_t> &answer);
   /* Data frames from the AP and why some never reached Windows. */
   struct RxStats {
-    uint64_t data = 0, undecrypted = 0, not_llc = 0, amsdu = 0, tap_failed = 0;
+    uint64_t data = 0, unicast = 0, undecrypted = 0, not_llc = 0, amsdu = 0, tap_failed = 0;
   };
   const RxStats &rx_stats() const { return _rx; }
   /* Leaves and joins again in 5 s (the radio's stall watchdog). */
   void rejoin(const std::string &why) {
-    if (_state == State::Running) fail(why);
+    if (_state != State::Idle && _state != State::Failed) fail(why);
   }
 
 private:
@@ -74,13 +81,20 @@ private:
   void handle_data(const RxFrame &f);
   void deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *body, size_t len);
   void handle_eapol(const uint8_t *body, size_t len);
-  void send_eapol(const std::vector<uint8_t> &eapol, bool protect);
+  bool send_eapol(const std::vector<uint8_t> &eapol, bool protect);
+  void reset_join_state();
+  bool install_gtk();
   void learn_beacon(const uint8_t *f, size_t len);
   void fail(const std::string &why);
-  void send_data(const uint8_t *da, uint16_t ethertype, const uint8_t *payload, size_t len, bool protect);
-  bool derive_ptk(const uint8_t anonce[32]);
-  bool mic_ok(const uint8_t *eapol, size_t len);
-  void add_mic(std::vector<uint8_t> &eapol);
+  bool send_data(const uint8_t *da, uint16_t ethertype, const uint8_t *payload, size_t len, bool protect);
+  bool derive_ptk(const uint8_t anonce[32], uint8_t out[48]);
+  /* The KCK (and KEK at +16) of the handshake in progress: the pending PTK
+   * during a rekey, else the one in use. */
+  const uint8_t *kck() const { return _rekey ? _tptk : _ptk; }
+  /* The GTK KDE from unwrapped key data: a 16-byte CCMP key, else false. */
+  bool take_gtk(const std::vector<uint8_t> &plain);
+  bool mic_ok(const uint8_t *eapol, size_t len, const uint8_t *key = nullptr);
+  void add_mic(std::vector<uint8_t> &eapol, const uint8_t *key = nullptr);
 
   IwxDevice &_dev;
   Logger _log;
@@ -101,6 +115,19 @@ private:
   /* WPA2 */
   uint8_t _pmk[32] = {};
   uint8_t _ptk[48] = {}; /* KCK 16 | KEK 16 | TK 16 */
+  uint8_t _tptk[48] = {}; /* a rekey's PTK until it is installed */
+  bool _rekey = false, _ptk_installed = false;
+  uint64_t _rekey_since = 0;
+  uint8_t _gtk_in_fw[16] = {}, _gtk_in_fw_idx = 0;
+  bool _gtk_in_fw_valid = false;
+  uint8_t _ba_token[8] = {}, _ba_token_valid = 0;
+  uint16_t _ba_ssn[8] = {}, _ba_window[8] = {};
+  bool _m4_unsent = false; /* 4/4 could not be queued; its keys wait for the resend */
+  /* The last EAPOL reply, sent again when the AP repeats its message. */
+  std::vector<uint8_t> _last_reply;
+  bool _last_reply_protect = false;
+  uint8_t _last_reply_replay[8] = {};
+  unsigned _declined_ba = 0;
   uint8_t _snonce[32] = {}, _anonce[32] = {};
   uint8_t _replay[8] = {};
   bool _replay_valid = false, _keys_installed = false, _ptk_ready = false;
@@ -111,6 +138,6 @@ private:
 
   std::deque<std::vector<uint8_t>> _addba_answers;
   uint16_t _mgmt_seq = 0;
-  uint64_t _rx_packets = 0, _tx_packets = 0;
+  uint64_t _rx_packets = 0, _tx_packets = 0, _tx_unicast = 0;
   RxStats _rx;
 };

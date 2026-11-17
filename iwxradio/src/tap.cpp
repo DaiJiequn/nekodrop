@@ -43,11 +43,41 @@ std::string connection_name(const std::string &guid) {
   return name;
 }
 
+/* DeviceIoControl on the overlapped handle, waited for (Codex review #22:
+ * a null OVERLAPPED on an overlapped handle is outside the API contract). */
+bool ioctl_wait(HANDLE h, DWORD code, void *in, DWORD in_len, void *out, DWORD out_len, DWORD *got) {
+  OVERLAPPED ov{};
+  ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+  if (!ov.hEvent) return false;
+  DWORD n = 0;
+  bool ok = DeviceIoControl(h, code, in, in_len, out, out_len, &n, &ov) != 0;
+  if (!ok && GetLastError() == ERROR_IO_PENDING) {
+    if (WaitForSingleObject(ov.hEvent, 2000) == WAIT_OBJECT_0) {
+      ok = GetOverlappedResult(h, &ov, &n, FALSE) != 0;
+    } else {
+      CancelIoEx(h, &ov);
+      GetOverlappedResult(h, &ov, &n, TRUE);
+      ok = false;
+    }
+  }
+  CloseHandle(ov.hEvent);
+  if (got) *got = n;
+  return ok;
+}
+
 } // namespace
 
 TapAdapter::~TapAdapter() {
   if (_handle) {
-    CancelIo(_handle);
+    /* The read may have been started by another thread: cancel it by its
+     * OVERLAPPED and wait before its buffer and event go (Codex review #21). */
+    if (_read_pending) {
+      auto *ov = reinterpret_cast<OVERLAPPED *>(_read_ov);
+      DWORD n = 0;
+      CancelIoEx(_handle, ov);
+      GetOverlappedResult(_handle, ov, &n, TRUE);
+      _read_pending = false;
+    }
     CloseHandle(_handle);
   }
   if (_read_event) CloseHandle(_read_event);
@@ -92,7 +122,7 @@ bool TapAdapter::open(const std::string &wanted, std::string &error) {
     return false;
   }
   DWORD got = 0;
-  if (!DeviceIoControl(h, kTapGetMac, _mac.data(), 6, _mac.data(), 6, &got, nullptr) || got != 6) {
+  if (!ioctl_wait(h, kTapGetMac, _mac.data(), 6, _mac.data(), 6, &got) || got != 6) {
     CloseHandle(h);
     error = "the TAP adapter did not give its MAC address";
     return false;
@@ -107,8 +137,8 @@ bool TapAdapter::open(const std::string &wanted, std::string &error) {
 bool TapAdapter::set_connected(bool up) {
   ULONG status = up ? 1 : 0;
   DWORD got = 0;
-  return _handle && DeviceIoControl(_handle, kTapSetMediaStatus, &status, sizeof(status), &status,
-                                    sizeof(status), &got, nullptr);
+  return _handle && ioctl_wait(_handle, kTapSetMediaStatus, &status, sizeof(status), &status,
+                               sizeof(status), &got);
 }
 
 bool TapAdapter::read(std::vector<uint8_t> &frame, unsigned timeout_ms) {
@@ -138,11 +168,36 @@ bool TapAdapter::read(std::vector<uint8_t> &frame, unsigned timeout_ms) {
 
 bool TapAdapter::write(const uint8_t *frame, size_t len) {
   if (!_handle) return false;
-  OVERLAPPED ov{};
-  ov.hEvent = _write_event;
-  ResetEvent(_write_event);
+  /* The request owns its buffer, OVERLAPPED and event: a write that never
+   * completes must not stop the radio's only thread (Codex review #8), and
+   * a cancellation that never completes either (round 2 #14). After 500 ms
+   * the write is cancelled; if even that has not finished a second later,
+   * the request is left to the kernel (leaked) rather than freed under it. */
+  struct Request {
+    OVERLAPPED ov{};
+    std::vector<uint8_t> buf;
+  };
+  auto *r = new Request;
+  r->buf.assign(frame, frame + len);
+  r->ov.hEvent = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+  if (!r->ov.hEvent) {
+    delete r;
+    return false;
+  }
+  const auto done = [&](bool ok) {
+    CloseHandle(r->ov.hEvent);
+    delete r;
+    return ok;
+  };
   DWORD put = 0;
-  if (WriteFile(_handle, frame, static_cast<DWORD>(len), &put, &ov)) return true;
-  if (GetLastError() != ERROR_IO_PENDING) return false;
-  return GetOverlappedResult(_handle, &ov, &put, TRUE) != 0;
+  if (WriteFile(_handle, r->buf.data(), static_cast<DWORD>(len), &put, &r->ov)) return done(true);
+  if (GetLastError() != ERROR_IO_PENDING) return done(false);
+  if (WaitForSingleObject(r->ov.hEvent, 500) == WAIT_OBJECT_0)
+    return done(GetOverlappedResult(_handle, &r->ov, &put, FALSE) != 0);
+  CancelIoEx(_handle, &r->ov);
+  if (WaitForSingleObject(r->ov.hEvent, 1000) == WAIT_OBJECT_0) {
+    GetOverlappedResult(_handle, &r->ov, &put, FALSE);
+    return done(false);
+  }
+  return false; /* still owned by the kernel: leaked on purpose */
 }

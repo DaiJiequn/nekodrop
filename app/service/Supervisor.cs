@@ -136,9 +136,16 @@ public sealed class Supervisor : IDisposable
     {
         lock (_lock) _wanted = false;
         Say($"stopping: {why}");
-        KillDaemons();
-        if (giveBack) EnsureVendorDriver();
-        lock (_lock) { State = RadioState.Off; _wifi = ""; _channel = 0; }
+        // Serialized with launches (round 2 #7): a launch in progress sees
+        // _wanted false at its next check and returns; then the card goes back.
+        _launchGate.Wait();
+        try
+        {
+            KillDaemons();
+            if (giveBack) EnsureVendorDriver();
+            lock (_lock) { State = RadioState.Off; _wifi = ""; _channel = 0; }
+        }
+        finally { _launchGate.Release(); }
         Publish();
     }
 
@@ -156,7 +163,13 @@ public sealed class Supervisor : IDisposable
     void LaunchLocked(int channel)
     {
         if (!_wanted) return;
-        lock (_lock) { State = RadioState.Starting; _channel = channel; _detail = ""; }
+        lock (_lock)
+        {
+            State = RadioState.Starting; _channel = channel; _detail = "";
+            // A scan the old radio never finished must not block auto-connect forever (Codex review #29).
+            _scanBusy = false;
+            _scanPending = [];
+        }
         Publish();
         try
         {
@@ -207,7 +220,10 @@ public sealed class Supervisor : IDisposable
             }
             // With nekodrop-wlan.sys the card stays where it is: Windows runs
             // the station, the radio only drives AWDL through the driver.
+            // Stop may have run meanwhile: never take the card or start a radio for it (Codex review #10).
+            if (!_wanted) { lock (_lock) State = RadioState.Off; Publish(); return; }
             if (!kernel) TakeCard();
+            if (!_wanted) { lock (_lock) State = RadioState.Off; Publish(); return; }
             var width = channel <= 14 ? 20 : 80;
             var args = new List<string> { channel.ToString(), "--width", width.ToString() };
             if (kernel) args.Add("--kernel");
@@ -224,7 +240,7 @@ public sealed class Supervisor : IDisposable
         {
             try { File.Delete(Path.Combine(ServiceConfig.Folder, "run", "sta.conf")); } catch (Exception) { }
             Say("start failed: " + e.Message);
-            lock (_lock) { State = RadioState.Error; _detail = e.Message; }
+            lock (_lock) { State = _wanted ? RadioState.Error : RadioState.Off; _detail = e.Message; }
             Publish();
         }
     }
@@ -372,9 +388,18 @@ public sealed class Supervisor : IDisposable
         {
             await Task.Delay(2000, ct).ContinueWith(_ => { });
             if (!_wanted) continue;
-            var radioDown = _radio is null || _radio.HasExited;
-            var awdldDown = State == RadioState.On && (_awdld is null || _awdld.HasExited);
-            if ((radioDown || awdldDown) && State != RadioState.Starting && _launchGate.CurrentCount > 0)
+            // Snapshots: Relaunch swaps the processes on another thread (Codex review #11).
+            var radio = _radio;
+            var awdld = _awdld;
+            var radioDown = radio is null || radio.HasExited;
+            var awdldDown = State is RadioState.On or RadioState.Error && (awdld is null || awdld.HasExited);
+            // A radio that never says "ready" would hold Starting for good (Codex review #12).
+            var startStuck = State == RadioState.Starting && _launchGate.CurrentCount > 0 &&
+                             DateTime.UtcNow - _startedAt > TimeSpan.FromSeconds(60);
+            if (_scanBusy && DateTime.UtcNow - _scanStartedAt > TimeSpan.FromSeconds(30))
+                lock (_lock) { _scanBusy = false; _scanPending = []; }
+            if ((radioDown || awdldDown || startStuck) && (State != RadioState.Starting || startStuck) &&
+                _launchGate.CurrentCount > 0)
             {
                 if (++_restarts > 5)
                 {
@@ -384,7 +409,7 @@ public sealed class Supervisor : IDisposable
                     Publish();
                     continue;
                 }
-                Say("a daemon stopped; restarting");
+                Say(startStuck ? "the radio never became ready; restarting" : "a daemon stopped; restarting");
                 Relaunch(_channel == 0 ? _cfg.StartChannel : _channel);
             }
             else if (State == RadioState.On && DateTime.UtcNow - _startedAt > TimeSpan.FromMinutes(2))
@@ -399,12 +424,127 @@ public sealed class Supervisor : IDisposable
             if (_cfg.Mode == NetMode.OnDemand && State == RadioState.On &&
                 DateTime.UtcNow - _lastUse > TimeSpan.FromSeconds(_cfg.IdleSeconds))
                 Stop("idle", giveBack: true);
+            if (DateTime.UtcNow - _probeAt >= TimeSpan.FromSeconds(15))
+            {
+                _probeAt = DateTime.UtcNow;
+                try { await ProbeGateway(); } catch (Exception e) { Say("gateway probe: " + e.Message); }
+            }
+        }
+    }
+
+    /* ----------------------------------------------------------- gateway probe */
+
+    DateTime _probeAt = DateTime.MinValue, _connectedAt = DateTime.MaxValue, _scanStartedAt = DateTime.MinValue;
+    System.Net.IPAddress? _probeGateway;
+    DateTime _rejoinAt = DateTime.MinValue;
+    int _probeFails;
+    bool _gatewayAnswered, _rejoinAsked;
+
+    /// <summary>
+    /// The link can look connected while nothing comes back from the access
+    /// point (hardware, 2026-11-17: Windows lost the internet with the station
+    /// still "connected"). Every 15 s the gateway on the "nekodrop" adapter is
+    /// pinged; four misses in a row (a minute) make the station join again, and
+    /// four more after that restart the radio. A gateway that never answered a
+    /// ping since the join is not judged (some routers drop ICMP).
+    /// </summary>
+    async Task ProbeGateway()
+    {
+        bool connected, wanted;
+        lock (_lock)
+        {
+            // Not judged when the user turned Wi-Fi off or no station is set up (round 2 #11).
+            wanted = _cfg.Mode == NetMode.Concurrent && State == RadioState.On && !_userOff && _staSsid != "";
+            connected = wanted && _wifi == "connected";
+        }
+        if (!wanted)
+        {
+            _connectedAt = DateTime.MaxValue;
+            _probeFails = 0;
+            _gatewayAnswered = _rejoinAsked = false;
+            return;
+        }
+        if (!connected)
+        {
+            _connectedAt = DateTime.MaxValue;
+            // A rejoin that never gets the link back escalates on its own clock (round 2 #10).
+            if (_rejoinAsked && DateTime.UtcNow - _rejoinAt > TimeSpan.FromSeconds(90))
+            {
+                Say("Wi-Fi did not come back after joining again; restarting the radio");
+                _probeFails = 0;
+                _rejoinAsked = false;
+                _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+                return;
+            }
+            // The rejoin we asked for disconnects briefly: keep the episode, so a
+            // join that stays broken still escalates (Codex review #15).
+            if (!_rejoinAsked)
+            {
+                _probeFails = 0;
+                _gatewayAnswered = false;
+            }
+            return;
+        }
+        if (_connectedAt == DateTime.MaxValue) _connectedAt = DateTime.UtcNow;
+        if (DateTime.UtcNow - _connectedAt < TimeSpan.FromSeconds(20)) return; /* DHCP first */
+        var adapter = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .FirstOrDefault(n => n.Name == "nekodrop" && n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up);
+        var props = adapter?.GetIPProperties();
+        static bool V4(System.Net.IPAddress a) =>
+            a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !a.Equals(System.Net.IPAddress.Any);
+        var gateway = props?.GatewayAddresses.Select(g => g.Address).FirstOrDefault(V4);
+        var source = props?.UnicastAddresses.Select(u => u.Address).FirstOrDefault(V4);
+        if (gateway is null || source is null)
+        {
+            // No DHCP gateway long after the join is a failure too (Codex review #18).
+            if (DateTime.UtcNow - _connectedAt > TimeSpan.FromSeconds(90)) Failed("no gateway from DHCP");
+            return;
+        }
+        if (!gateway.Equals(_probeGateway))
+        {
+            // Another network or router: its ICMP behaviour is learned afresh (Codex review #19).
+            _probeGateway = gateway;
+            _gatewayAnswered = false;
+            _probeFails = 0;
+        }
+        var answered = false;
+        for (int i = 0; i < 3 && !answered; i++)
+            answered = await Task.Run(() => Icmp.Ping(source, gateway, 1000));
+        if (answered)
+        {
+            if (_probeFails >= 4) Say($"the gateway {gateway} answers again");
+            _probeFails = 0;
+            _gatewayAnswered = true;
+            _rejoinAsked = false;
+            return;
+        }
+        if (!_gatewayAnswered) return; /* a router that drops ICMP is not judged */
+        Failed($"the gateway {gateway} does not answer");
+    }
+
+    /// <summary>One more failed probe: four in a row rejoin, four more restart the radio.</summary>
+    void Failed(string why)
+    {
+        _probeFails++;
+        if (_probeFails == 4)
+        {
+            Say($"{why} for a minute; joining Wi-Fi again");
+            _rejoinAsked = true;
+            _rejoinAt = DateTime.UtcNow;
+            RadioCommand("rejoin");
+        }
+        else if (_probeFails >= 8)
+        {
+            Say($"{why} after joining again; restarting the radio");
+            _probeFails = 0;
+            _rejoinAsked = false;
+            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         }
     }
 
     void TakeCard()
     {
-        var card = Card.Find() ?? throw new InvalidOperationException("no Intel AX201-family card found");
+        var card = Card.Find() ?? throw new InvalidOperationException("no supported Intel Wi-Fi card found");
         if (Card.TakenByProxy(card)) return;
         if (card.InfPath != "" && !card.InfPath.Contains("regproxy", StringComparison.OrdinalIgnoreCase))
         {
@@ -447,6 +587,7 @@ public sealed class Supervisor : IDisposable
         {
             _scanPending = [];
             _scanBusy = true;
+            _scanStartedAt = DateTime.UtcNow;
         }
         RadioCommand(string.IsNullOrEmpty(ssid) ? "scan" : "scan " + Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(ssid)));
         Publish();

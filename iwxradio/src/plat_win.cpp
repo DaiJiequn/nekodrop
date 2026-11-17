@@ -13,7 +13,10 @@ uint64_t now_us() {
   }();
   LARGE_INTEGER t;
   QueryPerformanceCounter(&t);
-  return static_cast<uint64_t>(t.QuadPart) * 1000000ull / static_cast<uint64_t>(freq.QuadPart);
+  /* Quotient and remainder: counter * 1000000 overflows after ~21 days of
+   * uptime at 10 MHz (Codex review #13). */
+  const uint64_t c = static_cast<uint64_t>(t.QuadPart), hz = static_cast<uint64_t>(freq.QuadPart);
+  return c / hz * 1000000ull + c % hz * 1000000ull / hz;
 }
 
 void delay_us(unsigned us) {

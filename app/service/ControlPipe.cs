@@ -88,11 +88,24 @@ public sealed class ControlPipe(Supervisor sup)
         finally { lock (_clients) _clients.Remove(writer); }
     }
 
+    /// <summary>One write at a time per client: a broadcast and a reply used to
+    /// overlap on the same StreamWriter, which throws (Codex review #34).</summary>
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<StreamWriter, SemaphoreSlim> WriteLocks = new();
+
     static async Task Send(StreamWriter w, JsonObject o)
     {
-        try { await w.WriteLineAsync(o.ToJsonString()); }
+        var gate = WriteLocks.GetValue(w, _ => new SemaphoreSlim(1, 1));
+        // A client that stops reading is not waited for forever.
+        if (!await gate.WaitAsync(TimeSpan.FromSeconds(5))) return;
+        // The deadline covers the write too (round 2 #16): a client that stops
+        // reading has its pipe closed instead of holding the lock.
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try { await w.WriteLineAsync(o.ToJsonString().AsMemory(), cts.Token); }
+        catch (OperationCanceledException) { try { w.BaseStream.Dispose(); } catch (Exception) { } }
         catch (IOException) { }
         catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
+        finally { gate.Release(); }
     }
 
     void Broadcast(JsonObject o)

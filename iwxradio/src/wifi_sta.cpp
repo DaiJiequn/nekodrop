@@ -51,7 +51,10 @@ size_t hdrlen(const uint8_t *f, size_t len) {
   if (len < 24) return 0;
   size_t h = 24;
   if ((f[1] & 0x03) == 0x03) h += 6;
-  if ((f[0] & 0x0c) == 0x08 && (f[0] & 0x80)) h += 2;
+  if ((f[0] & 0x0c) == 0x08 && (f[0] & 0x80)) {
+    h += 2;
+    if (f[1] & 0x80) h += 4; /* +HTC: the Order bit in a QoS data frame (Codex review #26) */
+  }
   return h <= len ? h : 0;
 }
 
@@ -106,6 +109,7 @@ bool StaConfig::load(const std::string &path, std::string &error) {
     else if (k == "open") open = v == "1" || v == "true";
     else if (k == "tap") tap = v;
     else if (k == "width") max_width = static_cast<unsigned>(std::atoi(v.c_str()));
+    else if (k == "ba") block_ack = v == "1";
   }
   if (ssid.empty() || ssid.size() > 32) error = "ssid missing or longer than 32 bytes";
   else if (!have_bssid) error = "bssid missing";
@@ -159,6 +163,7 @@ bool WifiStation::start(const StaConfig &cfg, std::string &error) {
     return false;
   }
   _joins++;
+  reset_join_state();
   _state = State::Listening;
   _state_since = _now;
   _tries = 0;
@@ -176,11 +181,33 @@ void WifiStation::stop() {
   _state = State::Idle;
 }
 
+/* Nothing from one join may leak into the next (Codex review #7, round 2 #8). */
+void WifiStation::reset_join_state() {
+  _keys_installed = _ptk_ready = _replay_valid = _rekey = _ptk_installed = _m4_unsent = false;
+  _install_at = 0;
+  _gtk_len = 0;
+  _gtk_in_fw_valid = false;
+  _last_reply.clear();
+  _addba_answers.clear();
+  _ba_token_valid = 0;
+}
+
+/* The group key into the firmware, unless that very key is already there:
+ * a reinstall resets its sequence counters for nothing (round 2 #1). */
+bool WifiStation::install_gtk() {
+  if (_gtk_in_fw_valid && _gtk_in_fw_idx == _gtk_index && std::memcmp(_gtk_in_fw, _gtk, 16) == 0) return true;
+  if (!_dev.sta_set_key(true, _gtk_index, _gtk)) return false;
+  std::memcpy(_gtk_in_fw, _gtk, 16);
+  _gtk_in_fw_idx = static_cast<uint8_t>(_gtk_index);
+  _gtk_in_fw_valid = true;
+  return true;
+}
+
 void WifiStation::fail(const std::string &why) {
   _log("station: " + why + "; retrying in 5 s");
   _tap.set_connected(false);
   _dev.sta_leave();
-  _keys_installed = _ptk_ready = _replay_valid = false;
+  reset_join_state();
   _state = State::Failed;
   _state_since = _now;
 }
@@ -365,15 +392,47 @@ void WifiStation::handle_mgmt(const RxFrame &f) {
   } else if (sub == 0xc0 || sub == 0xa0) { /* deauthentication, disassociation */
     const uint16_t reason = f.len >= 26 ? le16(f.data + 24) : 0;
     if (_state != State::Failed) fail("the access point disconnected us, reason " + std::to_string(reason));
+  } else if (sub == 0xd0 && f.len >= 30 && f.data[24] == 3 && f.data[25] == 2) {
+    /* DELBA (Block Ack category, action 2): the parameter set's bit 11 says
+     * whether the sender started the session, bits 12-15 the TID. The AP
+     * ending its own session means our receive session for it goes. */
+    const uint16_t params = le16(f.data + 26);
+    const unsigned tid = params >> 12;
+    if ((params & 0x0800) && tid < 8) {
+      _dev.sta_remove_rx_ba(tid);
+      _ba_token_valid &= static_cast<uint8_t>(~(1u << tid));
+      _log("station: the access point ended Block Ack on TID " + std::to_string(tid) + ", reason " +
+           std::to_string(le16(f.data + 28)));
+    }
   } else if (sub == 0xd0 && f.len >= 33) {
     /* Block Ack request from the AP: firmware session + answer. */
     awdl::AddbaRequest r;
-    if (awdl::parse_addba_request(f.data, f.len, _addr.data(), &r) && r.immediate &&
-        _dev.sta_add_rx_ba(r.tid, r.ssn, r.window)) {
-      std::vector<uint8_t> a(awdl::kAddbaResponseLength);
-      awdl::build_addba_response(a.data(), r, _addr.data(), ++_mgmt_seq);
-      if (_addba_answers.size() < 8) _addba_answers.push_back(std::move(a));
+    if (!awdl::parse_addba_request(f.data, f.len, _addr.data(), &r)) return;
+    std::vector<uint8_t> a(awdl::kAddbaResponseLength);
+    awdl::build_addba_response(a.data(), r, _addr.data(), ++_mgmt_seq);
+    const unsigned tid = r.tid & 7;
+    const bool same = ((_ba_token_valid >> tid) & 1) && _ba_token[tid] == r.token && _ba_ssn[tid] == r.ssn &&
+                      _ba_window[tid] == r.window;
+    if (_cfg.block_ack && r.immediate && (same || _dev.sta_add_rx_ba(r.tid, r.ssn, r.window))) {
+      /* A repeated request (same dialog token) is answered again without
+       * touching the firmware's session (round 2 #12). */
+      if (!same)
+        _log("station: Block Ack on TID " + std::to_string(r.tid) + " from sequence " + std::to_string(r.ssn) +
+             ", window " + std::to_string(r.window));
+      _ba_token[tid] = r.token;
+      _ba_ssn[tid] = r.ssn;
+      _ba_window[tid] = r.window;
+      _ba_token_valid |= static_cast<uint8_t>(1u << tid);
+    } else {
+      /* Declined: status 37 (request declined); the AP sends unaggregated.
+       * Any session left for this TID goes too (round 2 #13). */
+      a[27] = 37;
+      a[28] = 0;
+      _dev.sta_remove_rx_ba(r.tid);
+      _ba_token_valid &= static_cast<uint8_t>(~(1u << tid));
+      if (_declined_ba++ < 3) _log("station: Block Ack request on TID " + std::to_string(r.tid) + " declined");
     }
+    if (_addba_answers.size() < 8) _addba_answers.push_back(std::move(a));
   }
 }
 
@@ -392,7 +451,13 @@ void WifiStation::handle_data(const RxFrame &f) {
   if (f.data[0] & 0x40) return;               /* null / QoS null */
   const size_t h = hdrlen(f.data, f.len);
   if (!h) return;
+  /* The AWDL listener is promiscuous on the same channel: the AP's frames
+   * to other stations arrive too, sealed with their keys. Only ours and the
+   * BSS's group frames count. */
+  const bool group = (f.data[4] & 1) != 0;
+  if (!group && std::memcmp(f.data + 4, _addr.data(), 6) != 0) return;
   _rx.data++;
+  if (!group) _rx.unicast++;
   const uint8_t *da = f.data + 4, *sa = f.data + 16;
   if (std::memcmp(sa, _addr.data(), 6) == 0) return; /* our own broadcast, echoed */
   const uint8_t *body = f.data + h;
@@ -477,7 +542,7 @@ void WifiStation::deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *b
   }
 }
 
-void WifiStation::send_data(const uint8_t *da, uint16_t ethertype, const uint8_t *payload, size_t len,
+bool WifiStation::send_data(const uint8_t *da, uint16_t ethertype, const uint8_t *payload, size_t len,
                             bool protect) {
   std::vector<uint8_t> f(24, 0);
   f[0] = 0x08;
@@ -501,7 +566,9 @@ void WifiStation::send_data(const uint8_t *da, uint16_t ethertype, const uint8_t
     rate.kind = TxRate::Legacy;
     rate.mbps_x2 = 108; /* 54 Mb/s */
   }
-  if (_dev.sta_transmit(f.data(), f.size(), rate, protect) >= 0) _tx_packets++;
+  if (_dev.sta_transmit(f.data(), f.size(), rate, protect) < 0) return false;
+  _tx_packets++;
+  return true;
 }
 
 void WifiStation::on_ethernet(const uint8_t *frame, size_t len) {
@@ -510,12 +577,13 @@ void WifiStation::on_ethernet(const uint8_t *frame, size_t len) {
    * traffic, which a station may not send. */
   if (std::memcmp(frame + 6, _addr.data(), 6) != 0) return;
   const uint16_t ethertype = be16(frame + 12);
+  if (!(frame[0] & 1)) _tx_unicast++;
   send_data(frame, ethertype, frame + 14, len - 14, _keys_installed && !_cfg.open);
 }
 
 /* ---------------------------------------------------------------- WPA2 */
 
-bool WifiStation::derive_ptk(const uint8_t anonce[32]) {
+bool WifiStation::derive_ptk(const uint8_t anonce[32], uint8_t out[48]) {
   uint8_t data[6 + 6 + 32 + 32];
   const bool ap_low = std::memcmp(_cfg.bssid, _addr.data(), 6) < 0;
   std::memcpy(data, ap_low ? _cfg.bssid : _addr.data(), 6);
@@ -523,36 +591,54 @@ bool WifiStation::derive_ptk(const uint8_t anonce[32]) {
   const bool a_low = std::memcmp(anonce, _snonce, 32) < 0;
   std::memcpy(data + 12, a_low ? anonce : _snonce, 32);
   std::memcpy(data + 44, a_low ? _snonce : anonce, 32);
-  return crypto::prf_sha1(_pmk, 32, "Pairwise key expansion", data, sizeof(data), _ptk, 48);
+  return crypto::prf_sha1(_pmk, 32, "Pairwise key expansion", data, sizeof(data), out, 48);
 }
 
 /* EAPOL-Key layout (12.7.2): version, type 3, length; descriptor 2; key info
  * at 5; key length 7; replay 9; nonce 17; IV 49; RSC 65; reserved 73; MIC 81;
  * data length 97; data 99. */
-bool WifiStation::mic_ok(const uint8_t *eapol, size_t len) {
+bool WifiStation::take_gtk(const std::vector<uint8_t> &plain) {
+  for (size_t i = 0; i + 2 <= plain.size();) {
+    const uint8_t id = plain[i], n = plain[i + 1];
+    if (id == 0xdd && n == 0) break; /* padding */
+    if (i + 2 + n > plain.size()) break;
+    /* GTK KDE: OUI 00-0F-AC, type 1, key ID byte, reserved, key. CCMP: 16 bytes. */
+    if (id == 0xdd && n == 6 + 16 && std::memcmp(&plain[i + 2], kRsnOui, 3) == 0 && plain[i + 5] == 1) {
+      _gtk_index = plain[i + 6] & 3;
+      _gtk_len = 16;
+      std::memcpy(_gtk, &plain[i + 8], 16);
+      return true;
+    }
+    i += 2 + n;
+  }
+  return false;
+}
+
+bool WifiStation::mic_ok(const uint8_t *eapol, size_t len, const uint8_t *key) {
   if (len < 99) return false;
   std::vector<uint8_t> copy(eapol, eapol + len);
   std::memset(copy.data() + 81, 0, 16);
   uint8_t mac[20];
-  if (!crypto::hmac_sha1(_ptk, 16, copy.data(), copy.size(), mac)) return false;
+  if (!crypto::hmac_sha1(key ? key : kck(), 16, copy.data(), copy.size(), mac)) return false;
   return std::memcmp(mac, eapol + 81, 16) == 0;
 }
 
-void WifiStation::add_mic(std::vector<uint8_t> &eapol) {
+void WifiStation::add_mic(std::vector<uint8_t> &eapol, const uint8_t *key) {
   std::memset(eapol.data() + 81, 0, 16);
   uint8_t mac[20];
-  crypto::hmac_sha1(_ptk, 16, eapol.data(), eapol.size(), mac);
+  crypto::hmac_sha1(key ? key : kck(), 16, eapol.data(), eapol.size(), mac);
   std::memcpy(eapol.data() + 81, mac, 16);
 }
 
-void WifiStation::send_eapol(const std::vector<uint8_t> &eapol, bool protect) {
-  static const uint8_t kAp[6] = {};
-  (void)kAp;
-  send_data(_cfg.bssid, kEtherEapol, eapol.data(), eapol.size(), protect);
+bool WifiStation::send_eapol(const std::vector<uint8_t> &eapol, bool protect) {
+  return send_data(_cfg.bssid, kEtherEapol, eapol.data(), eapol.size(), protect);
 }
 
 void WifiStation::handle_eapol(const uint8_t *body, size_t len) {
   if (_cfg.open || len < 99 || body[1] != 3 || body[4] != 2) return;
+  /* Only while a handshake can be going on: a late message after a failed
+   * join must not refill what fail() cleared (round 2 #8). */
+  if (_state != State::Handshake && _state != State::Running) return;
   const size_t total = 4 + be16(body + 2);
   if (total > len || total < 99) return;
   const uint16_t info = be16(body + 5);
@@ -562,11 +648,36 @@ void WifiStation::handle_eapol(const uint8_t *body, size_t len) {
     return;
   }
   const uint8_t *replay = body + 9;
-  if (_replay_valid && std::memcmp(replay, _replay, 8) <= 0) return; /* replayed */
+  if (_replay_valid && std::memcmp(replay, _replay, 8) <= 0) {
+    /* The AP sends a message again when our reply was lost: answer with the
+     * same reply, without new nonces or keys (Codex review #3). */
+    if (!_last_reply.empty() && std::memcmp(replay, _last_reply_replay, 8) == 0) {
+      /* Only for a genuine repeat (round 2 #4): message 1 carries no MIC but
+       * must bring the same ANonce; the others must pass the MIC. */
+      const bool m1 = (info & kKeyPairwise) && (info & kKeyAck) && !(info & kKeyMic);
+      const bool genuine = m1 ? std::memcmp(body + 17, _anonce, 32) == 0
+                              : (mic_ok(body, total, _ptk) || (_rekey && mic_ok(body, total, _tptk)));
+      if (genuine && send_eapol(_last_reply, _last_reply_protect)) {
+        _log("station: EAPOL message repeated by the access point; reply sent again");
+        /* The 4/4 that could not be queued the first time has now left:
+         * its keys go in as they would have then (round 3 #1). */
+        if (_m4_unsent) {
+          _m4_unsent = false;
+          _install_at = _now + 20000;
+        }
+      }
+    }
+    return;
+  }
   const uint16_t data_len = be16(body + 97);
   if (99u + data_len > total) return;
   const uint8_t *key_data = body + 99;
 
+  auto remember = [&](const std::vector<uint8_t> &reply, bool protect) {
+    _last_reply = reply;
+    _last_reply_protect = protect;
+    std::memcpy(_last_reply_replay, replay, 8);
+  };
   auto make_reply = [&](uint16_t reply_info, const std::vector<uint8_t> &kd) {
     std::vector<uint8_t> e(99, 0);
     e[0] = body[0]; /* the AP's EAPOL version */
@@ -586,20 +697,44 @@ void WifiStation::handle_eapol(const uint8_t *body, size_t len) {
 
   if ((info & kKeyPairwise) && (info & kKeyAck) && !(info & kKeyMic)) {
     /* Message 1: ANonce. */
+    /* While connected this is a PTK rekey: the new key is derived beside
+     * the one in use, which stays installed until message 4 has left
+     * (Codex review #2: installing only in the Handshake state left the
+     * firmware on the old key while the AP moved to the new one). */
+    _rekey = _keys_installed;
+    _rekey_since = _now;
+    _install_at = 0;
+    _ptk_installed = _m4_unsent = false;
     std::memcpy(_anonce, body + 17, 32);
     crypto::random_bytes(_snonce, 32);
-    if (!derive_ptk(_anonce)) return;
+    if (!derive_ptk(_anonce, _rekey ? _tptk : _ptk)) return;
     _ptk_ready = true;
     std::memcpy(_replay, replay, 8);
     _replay_valid = true;
     std::vector<uint8_t> m2 = make_reply(2 | kKeyPairwise | kKeyMic, _rsn_ie);
     std::memcpy(&m2[17], _snonce, 32);
     add_mic(m2);
-    send_eapol(m2, false);
-    _log("station: 4-way handshake 1/4 received, 2/4 sent");
+    const bool protect = _keys_installed;
+    send_eapol(m2, protect);
+    remember(m2, protect);
+    _log(std::string("station: 4-way handshake 1/4 received, 2/4 sent") + (_rekey ? " (rekey)" : ""));
   } else if ((info & kKeyPairwise) && (info & kKeyAck) && (info & kKeyMic) && (info & kKeyInstall)) {
     /* Message 3: verify, unwrap the GTK, answer, install. */
     if (!_ptk_ready || std::memcmp(body + 17, _anonce, 32) != 0) return;
+    if (_ptk_installed) {
+      /* The AP repeats message 3 with a higher counter when our 4/4 got
+       * lost. Answer, but never install the same PTK again: that resets our
+       * packet numbers and the AP would drop everything we send as replays
+       * (round 2 #1). */
+      if (!mic_ok(body, total)) return;
+      std::memcpy(_replay, replay, 8);
+      std::vector<uint8_t> again = make_reply(2 | kKeyPairwise | kKeyMic | kKeySecure, {});
+      add_mic(again);
+      send_eapol(again, true);
+      remember(again, true);
+      _log("station: message 3/4 repeated; 4/4 sent again");
+      return;
+    }
     if (!mic_ok(body, total)) {
       _log("station: message 3/4 has a bad MIC (wrong password?)");
       return fail("4-way handshake failed: check the Wi-Fi password");
@@ -607,48 +742,44 @@ void WifiStation::handle_eapol(const uint8_t *body, size_t len) {
     std::memcpy(_replay, replay, 8);
     if ((info & kKeyEncryptedData) && data_len >= 24) {
       std::vector<uint8_t> plain;
-      if (!crypto::aes_unwrap(_ptk + 16, 16, key_data, data_len, plain))
+      if (!crypto::aes_unwrap(kck() + 16, 16, key_data, data_len, plain))
         return fail("could not unwrap the group key");
-      for (size_t i = 0; i + 2 <= plain.size();) {
-        const uint8_t id = plain[i], n = plain[i + 1];
-        if (id == 0xdd && n == 0 ) break; /* padding */
-        if (i + 2 + n > plain.size()) break;
-        if (id == 0xdd && n >= 6 && std::memcmp(&plain[i + 2], kRsnOui, 3) == 0 && plain[i + 5] == 1) {
-          _gtk_index = plain[i + 6] & 3;
-          _gtk_len = std::min<unsigned>(n - 6, sizeof(_gtk));
-          std::memcpy(_gtk, &plain[i + 8], _gtk_len);
-        }
-        i += 2 + n;
-      }
+      if (!take_gtk(plain)) return fail("message 3/4 carries no usable group key");
     }
     std::vector<uint8_t> m4 = make_reply(2 | kKeyPairwise | kKeyMic | kKeySecure, {});
     add_mic(m4);
-    send_eapol(m4, false);
+    /* During a rekey message 4 goes out under the key in use. */
+    const bool protect = _keys_installed;
+    remember(m4, protect);
+    if (!send_eapol(m4, protect)) {
+      /* Not even queued (round 2 #6): no keys yet; the AP repeats 3/4. */
+      _m4_unsent = true;
+      _log("station: message 4/4 could not be queued; waiting for 3/4 again");
+      return;
+    }
     /* Keys go in once message 4 has left: installing first would make the
      * firmware encrypt it. */
     _install_at = _now + 20000;
     _log("station: 4-way handshake 3/4 received, 4/4 sent");
   } else if (!(info & kKeyPairwise) && (info & kKeyAck) && (info & kKeyMic)) {
     /* Group key handshake (rekey). */
-    if (!_keys_installed || !mic_ok(body, total)) return;
+    /* During a pairwise rekey the AP's group message waits: it repeats it
+     * once the new PTK is in (round 2 #5). Otherwise the PTK in use signs,
+     * verifies and unwraps, one context throughout. */
+    if (!_keys_installed || _rekey || !mic_ok(body, total, _ptk)) return;
     std::memcpy(_replay, replay, 8);
+    /* The AP is told only once the new group key is in the firmware
+     * (Codex review #5): acknowledging a key we could not install would
+     * silently cut broadcasts (ARP, DHCP). */
     std::vector<uint8_t> plain;
-    if ((info & kKeyEncryptedData) && crypto::aes_unwrap(_ptk + 16, 16, key_data, data_len, plain)) {
-      for (size_t i = 0; i + 2 <= plain.size();) {
-        const uint8_t id = plain[i], n = plain[i + 1];
-        if (i + 2 + n > plain.size()) break;
-        if (id == 0xdd && n >= 6 && std::memcmp(&plain[i + 2], kRsnOui, 3) == 0 && plain[i + 5] == 1) {
-          _gtk_index = plain[i + 6] & 3;
-          _gtk_len = std::min<unsigned>(n - 6, sizeof(_gtk));
-          std::memcpy(_gtk, &plain[i + 8], _gtk_len);
-          _dev.sta_set_key(true, _gtk_index, _gtk);
-        }
-        i += 2 + n;
-      }
-    }
+    if (!(info & kKeyEncryptedData) || !crypto::aes_unwrap(_ptk + 16, 16, key_data, data_len, plain) ||
+        !take_gtk(plain))
+      return fail("the group key update could not be read");
+    if (!install_gtk()) return fail("the firmware refused the new group key");
     std::vector<uint8_t> g2 = make_reply(2 | kKeyMic | kKeySecure, {});
-    add_mic(g2);
+    add_mic(g2, _ptk);
     send_eapol(g2, true);
+    remember(g2, true);
     _log("station: group key renewed");
   }
 }
@@ -657,6 +788,36 @@ void WifiStation::handle_eapol(const uint8_t *body, size_t len) {
 
 void WifiStation::tick(uint64_t now_us) {
   _now = now_us;
+  /* Keys go in once message 4 has left, for the first handshake and for a
+   * rekey alike (Codex review #2: rekeys used to be acknowledged and never
+   * installed). */
+  if (_install_at && now_us >= _install_at && (_state == State::Handshake || _state == State::Running)) {
+    _install_at = 0;
+    const bool rekey = _rekey;
+    if (rekey) {
+      std::memcpy(_ptk, _tptk, sizeof(_ptk));
+      _rekey = false;
+    }
+    if (!_dev.sta_set_key(false, 0, _ptk + 32)) return fail("could not install the pairwise key");
+    _ptk_installed = true;
+    if (_gtk_len && !install_gtk()) return fail("could not install the group key");
+    _keys_installed = true;
+    if (rekey) {
+      _log("station: pairwise key renewed");
+    } else {
+      _state = State::Running;
+      _state_since = now_us;
+      _tap.set_connected(true);
+      _log("station: connected to \"" + _cfg.ssid + "\" (WPA2)");
+    }
+    return;
+  }
+  /* A rekey whose message 3 never came is given up; the PTK in use stays
+   * (round 2 #9). The AP starts again or disconnects us, which rejoins. */
+  if (_rekey && !_install_at && now_us - _rekey_since > kHandshakeTimeoutUS) {
+    _rekey = false;
+    _log("station: pairwise rekey did not finish; keeping the current key");
+  }
   switch (_state) {
   case State::Listening:
     /* A beacon tells us the AP's capabilities; after 1.5 s go anyway. */
@@ -684,18 +845,8 @@ void WifiStation::tick(uint64_t now_us) {
     }
     break;
   case State::Handshake:
-    if (_install_at && now_us >= _install_at) {
-      _install_at = 0;
-      if (!_dev.sta_set_key(false, 0, _ptk + 32)) return fail("could not install the pairwise key");
-      if (_gtk_len) _dev.sta_set_key(true, _gtk_index, _gtk);
-      _keys_installed = true;
-      _state = State::Running;
-      _state_since = now_us;
-      _tap.set_connected(true);
-      _log("station: connected to \"" + _cfg.ssid + "\" (WPA2)");
-    } else if (now_us - _state_since > kHandshakeTimeoutUS) {
+    if (!_install_at && now_us - _state_since > kHandshakeTimeoutUS)
       fail("no 4-way handshake from the access point");
-    }
     break;
   case State::Failed:
     if (now_us - _state_since > kRejoinDelayUS) {

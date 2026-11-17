@@ -219,6 +219,7 @@ bool parse_radiotap(const uint8_t *p, size_t len, RadiotapInfo &info) {
 
 constexpr uint16_t kStaEthernet = 0x100; /* inbox: a frame from the TAP adapter */
 constexpr uint16_t kScanRequest = 0x101; /* inbox: "scan" on stdin (the service's Wi-Fi list) */
+constexpr uint16_t kRejoinRequest = 0x102; /* inbox: "rejoin" on stdin (the service's gateway probe failed) */
 
 /* Networks heard in beacons and probe responses, for the client's Wi-Fi list. */
 struct BssSeen {
@@ -329,6 +330,10 @@ int main(int argc, char **argv) {
   std::thread stdin_thread([&] {
     char line[128];
     while (!stopping() && std::fgets(line, sizeof(line), stdin)) {
+      if (std::strncmp(line, "rejoin", 6) == 0) {
+        inbox.push({kRejoinRequest, {}});
+        continue;
+      }
       if (std::strncmp(line, "scan", 4) != 0) continue;
       /* "scan" or "scan <SSID in hex>" (a directed scan, for hidden networks) */
       std::vector<uint8_t> ssid;
@@ -433,7 +438,10 @@ int main(int argc, char **argv) {
       }();
       LARGE_INTEGER t;
       QueryPerformanceCounter(&t);
-      return static_cast<uint64_t>(t.QuadPart) * 1000000ull / static_cast<uint64_t>(f.QuadPart);
+      /* Quotient and remainder: counter * 1000000 overflows after ~21 days of
+       * uptime at 10 MHz (Codex review #13). */
+      const uint64_t c = static_cast<uint64_t>(t.QuadPart), hz = static_cast<uint64_t>(f.QuadPart);
+      return c / hz * 1000000ull + c % hz * 1000000ull / hz;
     };
     std::map<std::string, BssSeen> bss_seen;
     bool scan_wanted = false, scan_started = false;
@@ -445,7 +453,14 @@ int main(int argc, char **argv) {
         char key[18];
         std::snprintf(key, sizeof(key), "%02x:%02x:%02x:%02x:%02x:%02x", f.data[16], f.data[17], f.data[18],
                       f.data[19], f.data[20], f.data[21]);
-        if (bss_seen.size() < 256 || bss_seen.count(key)) {
+        if (!bss_seen.count(key) && bss_seen.size() >= 256) {
+          /* Full: the entry heard longest ago goes (Codex review #31). */
+          auto oldest = bss_seen.begin();
+          for (auto it = bss_seen.begin(); it != bss_seen.end(); ++it)
+            if (it->second.seen_ms < oldest->second.seen_ms) oldest = it;
+          bss_seen.erase(oldest);
+        }
+        {
           BssSeen &b = bss_seen[key];
           const uint8_t *ies = f.data + 36;
           const size_t ies_len = f.len - 36;
@@ -648,6 +663,7 @@ int main(int argc, char **argv) {
 
     uint64_t idle_rounds = 0, last_report = GetTickCount64(), last_health = 0, last_rejoin = 0;
     std::deque<std::pair<uint64_t, uint64_t>> stall_hist; /* station packets in, out at each report */
+    WifiStation::State published_wifi = WifiStation::State::Idle;
     Request req;
     while (!stopping() && dev.healthy()) {
       bool busy = dev.poll() > 0;
@@ -675,6 +691,11 @@ int main(int argc, char **argv) {
             else uq.push_back({std::vector<uint8_t>(frame, frame + len), rate, data});
           } else {
             dev.transmit(frame, len, rate);
+          }
+        } else if (req.type == kRejoinRequest) {
+          if (sta) {
+            log_line("event: wifi-stall");
+            sta->rejoin("the gateway stopped answering");
           }
         } else if (req.type == kScanRequest) {
           scan_wanted = true;
@@ -728,9 +749,14 @@ int main(int argc, char **argv) {
         want_country.clear();
       }
       if (sta) {
-        const auto before = sta->state();
         sta->tick(now_us());
-        if (sta->state() != before) log_line(std::string("event: wifi ") + sta->state_name());
+        /* Against the last state published, not the one before tick(): a
+         * deauthentication or rejoin changes it while frames are handled
+         * (Codex review #14). */
+        if (sta->state() != published_wifi) {
+          published_wifi = sta->state();
+          log_line(std::string("event: wifi ") + sta->state_name());
+        }
         std::vector<uint8_t> ans;
         while (sta->take_addba(ans)) {
           TxRate r;
@@ -802,26 +828,28 @@ int main(int argc, char **argv) {
           log_line(std::string("wifi: ") + sta->state_name() + ", " + std::to_string(sta->rx_packets()) +
                    " packets in, " + std::to_string(sta->tx_packets()) + " out; frames to the AP " +
                    std::to_string(dev.sta_tx_acked()) + " acknowledged, " + std::to_string(dev.sta_tx_failed()) +
-                   " not; from the AP " + std::to_string(r.data) + " data frames, " + std::to_string(r.amsdu) +
+                   " not; from the AP " + std::to_string(r.data) + " data frames (" + std::to_string(r.unicast) + " unicast), " + std::to_string(r.amsdu) +
                    " A-MSDU, dropped " + std::to_string(r.undecrypted) + " undecrypted, " +
                    std::to_string(r.not_llc) + " not LLC, " + std::to_string(r.tap_failed) + " TAP");
           /* Stall watchdog: Windows keeps sending but nearly nothing comes
            * back while the link still looks fine (hardware, 2026-11-17:
            * after ~40 minutes, 300-600 packets a minute out against 50-100
            * in, until the station was joined again). Two minutes of that
-           * and the station joins again; at most once every 10 minutes. */
+           * and the station joins again; at most once every 10 minutes.
+           * Unicast only: Windows' own multicast never gets answers. The
+           * service's gateway probe is the main check; this is the fallback. */
           if (sta->state() == WifiStation::State::Running) {
-            const uint64_t in = sta->rx_packets(), out = sta->tx_packets();
+            const uint64_t in = sta->rx_unicast(), out = sta->tx_unicast();
             stall_hist.push_back({in, out});
             if (stall_hist.size() > 25) stall_hist.pop_front(); /* 2 minutes of 5 s reports */
             if (stall_hist.size() == 25) {
               const uint64_t din = in - stall_hist.front().first, dout = out - stall_hist.front().second;
-              if (dout >= 400 && din * 5 < dout && now - last_rejoin > 600000) {
+              /* A diagnostic only (Codex review #17): a healthy upload looks
+               * the same. Recovery is the service's gateway probe ("rejoin"). */
+              if (dout >= 200 && din * 10 < dout && now - last_rejoin > 600000) {
                 last_rejoin = now;
-                stall_hist.clear();
-                log_line("event: wifi-stall");
-                sta->rejoin("replies stopped (" + std::to_string(dout) + " packets out, " + std::to_string(din) +
-                            " in over 2 minutes)");
+                log_line("wifi: few unicast replies (" + std::to_string(dout) + " out, " + std::to_string(din) +
+                         " in over 2 minutes)");
               }
             }
           } else {
