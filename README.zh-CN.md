@@ -42,6 +42,7 @@
 | iPhone → Windows | ✅ 可用：照片和文件完整收到 |
 | Windows → iPhone | ✅ 可用：右键 → 用 nekodrop 发送，iPhone 接受并收到 |
 | 同时上网 | ✅ 可用：AirDrop 运行时电脑通过 nekodrop 自己的 WPA2 连接保持在线，Wi-Fi 和 AWDL 在同一个 5 GHz 信道上也没问题 |
+| AirDrop 运行时的网速 | 下载峰值约 **28 Mbps**（每秒约 2,370 个包，持续 20 秒；5 GHz 信道 44，80 MHz，WPA2）。这是按 radio 的收包计数、假设每个包都是 1,500 字节满包估算的，取自日常使用而不是测速，链路的真实上限可能更高。测得时 Block Ack 处于拒绝状态（0.1.1 起的默认设置）；开着 Block Ack 时见到的峰值约 22 Mbps |
 
 其他 AX201 笔记本用的是同一颗芯片、同一份固件，应该表现一致，但目前只在这一台上测过。欢迎在 [Issues](../../issues) 反馈其他机器的结果。
 

@@ -42,6 +42,7 @@ Everything below was tested by the author on their own laptop, not just in theor
 | iPhone → Windows | ✅ works: photos and files arrive intact |
 | Windows → iPhone | ✅ works: right-click → Send with nekodrop, accepted and received on the iPhone |
 | Wi-Fi at the same time | ✅ works: the PC stays online through nekodrop's own WPA2 connection while AirDrop runs, including with Wi-Fi and AWDL on the same 5 GHz channel |
+| Internet speed while AirDrop runs | about **28 Mbps** download at peak (≈2,370 packets/s sustained for 20 s, 5 GHz channel 44, 80 MHz, WPA2). Estimated from the radio's packet counters assuming full-size 1,500-byte packets, during ordinary use, not a speed test, so the link's real maximum may be higher. Block Ack declined (the default since 0.1.1); with Block Ack on, the peak seen was ~22 Mbps |
 
 Other AX201 laptops should behave the same, since the chip and firmware are identical, but only this one has been tested. Reports from other machines are welcome in [Issues](../../issues).
 
