@@ -6,6 +6,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <sddl.h>
 
 #include <algorithm>
 #include <atomic>
@@ -25,12 +26,19 @@ public:
    * connect ends soon after the daemon is asked to stop. */
   PipeServer(const std::string &name, std::function<bool()> stopping)
       : _stopping(std::move(stopping)) {
-    _handle = CreateNamedPipeA(name.c_str(),
-                               PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED |
-                                   FILE_FLAG_FIRST_PIPE_INSTANCE,
-                               PIPE_TYPE_BYTE | PIPE_READMODE_BYTE |
-                                   PIPE_REJECT_REMOTE_CLIENTS,
-                               1, kBufferBytes, kBufferBytes, 0, nullptr);
+    SECURITY_ATTRIBUTES sa{sizeof(sa), nullptr, FALSE};
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (ConvertStringSecurityDescriptorToSecurityDescriptorA(
+            "D:P(A;;GA;;;SY)(A;;GA;;;BA)", SDDL_REVISION_1, &sd, nullptr)) {
+      sa.lpSecurityDescriptor = sd;
+      _handle = CreateNamedPipeA(name.c_str(),
+                                 PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED |
+                                     FILE_FLAG_FIRST_PIPE_INSTANCE,
+                                 PIPE_TYPE_BYTE | PIPE_READMODE_BYTE |
+                                     PIPE_REJECT_REMOTE_CLIENTS,
+                                 1, kBufferBytes, kBufferBytes, 0, &sa);
+      LocalFree(sd);
+    }
     _read_event = CreateEventA(nullptr, TRUE, FALSE, nullptr);
     _write_event = CreateEventA(nullptr, TRUE, FALSE, nullptr);
   }

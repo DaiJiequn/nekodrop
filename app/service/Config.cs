@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -36,10 +38,53 @@ public sealed class ServiceConfig
     static string FilePath => Path.Combine(Folder, "service.json");
     static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
+    public static void RejectReparsePoint(string path)
+    {
+        try
+        {
+            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException($"Refusing reparse point: {path}");
+        }
+        catch (FileNotFoundException) { }
+        catch (DirectoryNotFoundException) { }
+    }
+
+    public static void EnsureSecureDirectory(string? dir = null)
+    {
+        var target = dir ?? Folder;
+        RejectReparsePoint(target);
+        Directory.CreateDirectory(target);
+        RejectReparsePoint(target);
+        var acl = new DirectorySecurity();
+        acl.SetAccessRuleProtection(true, false);
+        foreach (var sid in new[] { WellKnownSidType.LocalSystemSid, WellKnownSidType.BuiltinAdministratorsSid })
+            acl.AddAccessRule(new FileSystemAccessRule(
+                new SecurityIdentifier(sid, null),
+                FileSystemRights.FullControl,
+                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
+                PropagationFlags.None,
+                AccessControlType.Allow));
+        new DirectoryInfo(target).SetAccessControl(acl);
+    }
+
+    static void LockAdminFile(string path)
+    {
+        var acl = new FileSecurity();
+        acl.SetAccessRuleProtection(true, false);
+        foreach (var sid in new[] { WellKnownSidType.LocalSystemSid, WellKnownSidType.BuiltinAdministratorsSid })
+            acl.AddAccessRule(new FileSystemAccessRule(
+                new SecurityIdentifier(sid, null),
+                FileSystemRights.FullControl,
+                AccessControlType.Allow));
+        new FileInfo(path).SetAccessControl(acl);
+    }
+
     public static ServiceConfig Load()
     {
         try
         {
+            RejectReparsePoint(Folder);
+            RejectReparsePoint(FilePath);
             if (File.Exists(FilePath))
                 return JsonSerializer.Deserialize<ServiceConfig>(File.ReadAllText(FilePath), Options) ?? new();
         }
@@ -49,9 +94,13 @@ public sealed class ServiceConfig
 
     public void Save()
     {
-        Directory.CreateDirectory(Folder);
+        EnsureSecureDirectory();
         var tmp = FilePath + ".tmp";
+        RejectReparsePoint(tmp);
+        RejectReparsePoint(FilePath);
         File.WriteAllText(tmp, JsonSerializer.Serialize(this, Options));
+        LockAdminFile(tmp);
         File.Move(tmp, FilePath, true);
+        LockAdminFile(FilePath);
     }
 }

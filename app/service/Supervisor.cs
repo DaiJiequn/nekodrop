@@ -83,8 +83,10 @@ public sealed class Supervisor : IDisposable
         Log?.Invoke(line);
         try
         {
-            Directory.CreateDirectory(ServiceConfig.Folder);
-            File.AppendAllText(Path.Combine(ServiceConfig.Folder, "service.log"),
+            ServiceConfig.EnsureSecureDirectory();
+            var logPath = Path.Combine(ServiceConfig.Folder, "service.log");
+            ServiceConfig.RejectReparsePoint(logPath);
+            File.AppendAllText(logPath,
                 $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {line}{Environment.NewLine}");
         }
         catch (IOException) { }
@@ -716,10 +718,21 @@ public sealed class Supervisor : IDisposable
             Say("cannot give the card back: Intel's INF is not known; run give-card.ps1");
             return;
         }
+        var fullInf = Path.GetFullPath(_cfg.VendorInf);
+        var infDir = Path.GetFullPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "INF"));
+        var infRoot = infDir.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!fullInf.StartsWith(infRoot, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(Path.GetDirectoryName(fullInf), infDir.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase) ||
+            !System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(fullInf), @"^oem\d+\.inf$", System.Text.RegularExpressions.RegexOptions.IgnoreCase) ||
+            (File.GetAttributes(fullInf) & FileAttributes.ReparsePoint) != 0)
+        {
+            Say($"refusing untrusted VendorInf path: {_cfg.VendorInf}");
+            return;
+        }
         try
         {
-            Say($"giving the card back to {Path.GetFileName(_cfg.VendorInf)}");
-            Card.Bind(card.HardwareId, _cfg.VendorInf);
+            Say($"giving the card back to {Path.GetFileName(fullInf)}");
+            Card.Bind(card.HardwareId, fullInf);
         }
         catch (Exception e) { Say("giving the card back failed: " + e.Message); }
     }

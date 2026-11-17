@@ -79,8 +79,8 @@ private:
   void send_assoc();
   void handle_mgmt(const RxFrame &f);
   void handle_data(const RxFrame &f);
-  void deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *body, size_t len);
-  void handle_eapol(const uint8_t *body, size_t len);
+  void deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *body, size_t len, bool encrypted);
+  void handle_eapol(const uint8_t *body, size_t len, bool encrypted);
   bool send_eapol(const std::vector<uint8_t> &eapol, bool protect);
   void reset_join_state();
   bool install_gtk();

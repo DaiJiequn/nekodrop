@@ -336,7 +336,7 @@ public sealed class App : Application
             try
             {
                 using var server = new NamedPipeServerStream(_pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte,
-                                                             PipeOptions.Asynchronous);
+                                                             PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await server.WaitForConnectionAsync();
                 using var r = new StreamReader(server, Encoding.UTF8);
                 var line = await r.ReadLineAsync() ?? "";

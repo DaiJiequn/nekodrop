@@ -451,6 +451,10 @@ void WifiStation::handle_data(const RxFrame &f) {
   if (f.data[0] & 0x40) return;               /* null / QoS null */
   const size_t h = hdrlen(f.data, f.len);
   if (!h) return;
+  if ((flags & 0x04) != 0 || (f.data[22] & 0x0f) != 0) {
+    if (_rx.not_llc++ < 5) _log("station: fragmented data frame dropped");
+    return;
+  }
   /* The AWDL listener is promiscuous on the same channel: the AP's frames
    * to other stations arrive too, sealed with their keys. Only ours and the
    * BSS's group frames count. */
@@ -462,7 +466,8 @@ void WifiStation::handle_data(const RxFrame &f) {
   if (std::memcmp(sa, _addr.data(), 6) == 0) return; /* our own broadcast, echoed */
   const uint8_t *body = f.data + h;
   size_t len = f.len - h;
-  if (flags & 0x40) {
+  const bool encrypted = (flags & 0x40) != 0;
+  if (encrypted) {
     /* Protected: the firmware decrypted it, or it is dropped. */
     if ((f.status & (IWX_RX_MPDU_RES_STATUS_DEC_DONE | IWX_RX_MPDU_RES_STATUS_MIC_OK)) !=
         (IWX_RX_MPDU_RES_STATUS_DEC_DONE | IWX_RX_MPDU_RES_STATUS_MIC_OK)) {
@@ -480,6 +485,13 @@ void WifiStation::handle_data(const RxFrame &f) {
       if (len < 8) return;
       len -= 8;
     }
+  } else if (!_cfg.open) {
+    /* Unencrypted frames on a protected network are valid only during the
+     * initial 4-way handshake before pairwise keys are installed. */
+    if (_state != State::Handshake || _keys_installed) {
+      if (_rx.undecrypted++ < 5) _log("station: unencrypted frame dropped on protected network");
+      return;
+    }
   }
   /* A-MSDU (QoS control bit 7): the payload is subframes, each DA, SA,
    * length, then LLC/SNAP, padded to 4 bytes. The hardware usually splits
@@ -490,6 +502,10 @@ void WifiStation::handle_data(const RxFrame &f) {
   const bool qos = (f.data[0] & 0x88) == 0x88;
   const size_t qos_at = (flags & 0x03) == 0x03 ? 30 : 24;
   if (qos && qos_at < h && (f.data[qos_at] & 0x80)) {
+    if (!encrypted && !_cfg.open) {
+      if (_rx.not_llc++ < 5) _log("station: unencrypted A-MSDU dropped");
+      return;
+    }
     _rx.amsdu++;
     while (len >= 14 + 8) {
       const size_t sub = be16(body + 12);
@@ -497,7 +513,7 @@ void WifiStation::handle_data(const RxFrame &f) {
         if (_rx.not_llc++ < 5) _log("station: malformed A-MSDU subframe dropped");
         return;
       }
-      deliver(body, body + 6, body + 14, sub);
+      deliver(body, body + 6, body + 14, sub, encrypted);
       const size_t step = (14 + sub + 3) & ~size_t(3);
       if (step >= len) break;
       body += step;
@@ -505,12 +521,12 @@ void WifiStation::handle_data(const RxFrame &f) {
     }
     return;
   }
-  deliver(da, sa, body, len);
+  deliver(da, sa, body, len, encrypted);
 }
 
 /* One LLC/SNAP payload from the AP: EAPOL to the handshake, the rest to
  * Windows as an Ethernet frame. */
-void WifiStation::deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *body, size_t len) {
+void WifiStation::deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *body, size_t len, bool encrypted) {
   if (len < 8 || body[0] != 0xaa || body[1] != 0xaa || body[2] != 0x03) {
     if (_rx.not_llc++ < 5) {
       char b[128];
@@ -525,9 +541,10 @@ void WifiStation::deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *b
   body += 8;
   len -= 8;
   if (ethertype == kEtherEapol) {
-    handle_eapol(body, len);
+    handle_eapol(body, len, encrypted);
     return;
   }
+  if (!_cfg.open && !encrypted) return;
   if (_state != State::Running) return;
   std::vector<uint8_t> eth;
   eth.reserve(14 + len);
@@ -634,11 +651,15 @@ bool WifiStation::send_eapol(const std::vector<uint8_t> &eapol, bool protect) {
   return send_data(_cfg.bssid, kEtherEapol, eapol.data(), eapol.size(), protect);
 }
 
-void WifiStation::handle_eapol(const uint8_t *body, size_t len) {
+void WifiStation::handle_eapol(const uint8_t *body, size_t len, bool encrypted) {
   if (_cfg.open || len < 99 || body[1] != 3 || body[4] != 2) return;
   /* Only while a handshake can be going on: a late message after a failed
    * join must not refill what fail() cleared (round 2 #8). */
   if (_state != State::Handshake && _state != State::Running) return;
+  if (_keys_installed && !encrypted) {
+    _log("station: unencrypted EAPOL frame dropped after key installation");
+    return;
+  }
   const size_t total = 4 + be16(body + 2);
   if (total > len || total < 99) return;
   const uint16_t info = be16(body + 5);

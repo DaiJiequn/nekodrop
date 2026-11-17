@@ -17,6 +17,10 @@ $Source = $PSScriptRoot
 # code and install-error.txt, which the setup shows.
 $LogDir = Join-Path $env:ProgramData 'nekodrop'
 New-Item -ItemType Directory -Force $LogDir | Out-Null
+if ((Get-Item -LiteralPath $LogDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+  throw "Refusing reparse point: $LogDir"
+}
+& icacls.exe $LogDir /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" | Out-Null
 Remove-Item (Join-Path $LogDir 'install-error.txt') -ErrorAction SilentlyContinue
 if (-not $DryRun) { Start-Transcript (Join-Path $LogDir 'install.log') -Force | Out-Null }
 trap {

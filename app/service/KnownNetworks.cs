@@ -36,6 +36,8 @@ public sealed class KnownNetworks
         var k = new KnownNetworks();
         try
         {
+            ServiceConfig.RejectReparsePoint(ServiceConfig.Folder);
+            ServiceConfig.RejectReparsePoint(FilePath);
             if (File.Exists(FilePath))
             {
                 var plain = ProtectedData.Unprotect(File.ReadAllBytes(FilePath), null, DataProtectionScope.LocalMachine);
@@ -48,7 +50,8 @@ public sealed class KnownNetworks
 
     void Save()
     {
-        Directory.CreateDirectory(ServiceConfig.Folder);
+        ServiceConfig.EnsureSecureDirectory();
+        ServiceConfig.RejectReparsePoint(FilePath);
         var data = ProtectedData.Protect(JsonSerializer.SerializeToUtf8Bytes(_entries), null, DataProtectionScope.LocalMachine);
         if (File.Exists(FilePath)) File.Delete(FilePath);
         File.WriteAllBytes(FilePath, data);

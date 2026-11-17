@@ -252,8 +252,10 @@ public static class Wlan
     public static string WriteStaConfig(Network n)
     {
         var dir = Path.Combine(ServiceConfig.Folder, "run");
-        Directory.CreateDirectory(dir);
+        ServiceConfig.EnsureSecureDirectory();
+        ServiceConfig.EnsureSecureDirectory(dir);
         var path = Path.Combine(dir, "sta.conf");
+        ServiceConfig.RejectReparsePoint(path);
         var lines = new List<string> { $"ssid={n.Ssid}", $"bssid={n.Bssid}", $"channel={n.Channel}" };
         // nekodrop's own TAP adapter (installer: DHCP on), never another VPN's.
         lines.Add("tap=nekodrop");
