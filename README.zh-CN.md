@@ -20,6 +20,15 @@
   <img alt="status" src="https://img.shields.io/badge/status-experimental-orange">
 </p>
 
+<p align="center">
+  <img src="docs/demo.gif" width="760" alt="实机拍摄：iPhone 与 Windows 11 用自带 Intel AX201 网卡双向收发原生 AirDrop，同时保持 Wi-Fi 在线">
+  <br>
+  <sub>
+    <b>实机拍摄（未装任何第三方 App 的 iPhone ↔ Windows 11，自带 Intel AX201 在 5 GHz 信道 44 同卡保持 Wi-Fi 在线）：</b><br>
+    ① iPhone 原生隔空投送直接发现电脑并发图 → ② Windows 保持 Wi-Fi 在线同时点击接收 → ③ 3556×2000 原图无损保存打开 → ④ 资源管理器右键 <i>Send with nekodrop</i> → ⑤ 选中附近 iPhone 发出 → ⑥ iPhone 灵动岛原生弹窗收图并打开。
+  </sub>
+</p>
+
 ---
 
 ## 功能

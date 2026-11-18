@@ -20,6 +20,15 @@
   <img alt="status" src="https://img.shields.io/badge/status-experimental-orange">
 </p>
 
+<p align="center">
+  <img src="docs/demo.gif" width="760" alt="Two-way AirDrop between iPhone and Windows 11 on built-in Intel AX201 while Wi-Fi stays connected">
+  <br>
+  <sub>
+    <b>Real-hardware capture (unmodified iPhone ↔ Windows 11, built-in Intel AX201 on 5 GHz ch 44, Wi-Fi stays online):</b><br>
+    ① iOS AirDrop discovers the PC and sends a photo → ② Accepted on Windows while WPA2 Wi-Fi stays connected → ③ Full-res (3556×2000) photo opens intact → ④ Explorer right-click → <i>Send with nekodrop</i> → ⑤ Pick nearby iPhone → ⑥ Native AirDrop banner opens in iOS Photos.
+  </sub>
+</p>
+
 ---
 
 ## What it does
