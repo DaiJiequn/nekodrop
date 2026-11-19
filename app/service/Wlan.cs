@@ -93,6 +93,31 @@ public static class Wlan
         finally { WlanCloseHandle(h, IntPtr.Zero); }
     }
 
+    /// <summary>
+    /// A wired adapter is up with a default gateway (USB tethering and VPN
+    /// adapters do not count).
+    /// </summary>
+    public static bool WiredUp()
+    {
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().Any(n =>
+                n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up &&
+                n.NetworkInterfaceType is System.Net.NetworkInformation.NetworkInterfaceType.Ethernet
+                    or System.Net.NetworkInformation.NetworkInterfaceType.GigabitEthernet
+                    or System.Net.NetworkInformation.NetworkInterfaceType.FastEthernetT
+                    or System.Net.NetworkInformation.NetworkInterfaceType.FastEthernetFx &&
+                n.Name != "nekodrop" &&
+                !NotWired.Any(d => n.Description.Contains(d, StringComparison.OrdinalIgnoreCase)) &&
+                n.GetIPProperties().GatewayAddresses.Any(g =>
+                    g.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+                    !g.Address.Equals(System.Net.IPAddress.Any)));
+        }
+        catch (System.Net.NetworkInformation.NetworkInformationException) { return false; }
+    }
+
+    static readonly string[] NotWired = ["TAP-Windows", "Wintun", "WireGuard", "Remote NDIS", "Apple Mobile Device", "Bluetooth"];
+
     public sealed record SavedProfile(string Ssid, string? Passphrase, string? PskHex, bool Open);
 
     /// <summary>
@@ -191,6 +216,13 @@ public static class Wlan
             // then WLAN_ASSOCIATION_ATTRIBUTES: DOT11_SSID (4 + 32), bss type 4, bssid 6 (+2 pad),
             // phy type 4, phy index 4, quality 4, rx 4, tx 4 (= 68), then security: enabled 4,
             // 1X 4, auth 4, cipher 4.
+            // Read while Windows is still joining, everything below is zero
+            // ("auth 0 is not supported", issue #1): not connected yet.
+            if (Marshal.ReadInt32(p) != 1 /* wlan_interface_state_connected */)
+            {
+                why = "Wi-Fi is not connected yet";
+                return null;
+            }
             profile = Marshal.PtrToStringUni(p + 8, 256).TrimEnd('\0');
             var ssidLen = Marshal.ReadInt32(p + 520);
             var ssidBytes = new byte[Math.Clamp(ssidLen, 0, 32)];

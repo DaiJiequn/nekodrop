@@ -1146,8 +1146,11 @@ bool IwxDevice::set_country(const std::string &alpha2) {
    * source. Other sources are tried after it. */
   bool ok = false;
   /* Measured on an AX201 (firmware 68): only the BIOS source is taken; the
-   * Wi-Fi, ME and MCC-API sources answer status 4 and change nothing. */
-  for (int source : {int(IWX_MCC_SOURCE_BIOS), int(IWX_MCC_SOURCE_WIFI)}) {
+   * Wi-Fi, ME and MCC-API sources answer status 4 and change nothing. An
+   * AX200 (cc-a0-68) answered "00" to BIOS and Wi-Fi (issue #1): ME and
+   * MCC-API are tried too, each logged with what the firmware answered. */
+  for (int source : {int(IWX_MCC_SOURCE_BIOS), int(IWX_MCC_SOURCE_WIFI), int(IWX_MCC_SOURCE_ME),
+                     int(IWX_MCC_SOURCE_MCC_API)}) {
     std::string got;
     if (update_mcc(alpha2, source, &got) == 0 && got == alpha2) {
       ok = true;

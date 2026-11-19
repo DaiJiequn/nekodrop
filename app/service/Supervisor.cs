@@ -98,6 +98,7 @@ public sealed class Supervisor : IDisposable
         // A config the radio never read (it deletes it once read) holds the
         // Wi-Fi key: never leave one behind across a restart.
         try { File.Delete(Path.Combine(ServiceConfig.Folder, "run", "sta.conf")); } catch (Exception) { }
+        _ = Task.Run(SetTapMetric);
         if (KernelDriver) Start("boot (kernel driver: Windows keeps Wi-Fi)");
         else if (_cfg.Mode == NetMode.Concurrent) Start("boot (concurrent mode)");
         else EnsureVendorDriver();
@@ -195,7 +196,10 @@ public sealed class Supervisor : IDisposable
                 var fresh = cardFree && !_userChose && !_userOff ? Wlan.Current(out why) : null;
                 // Not connected (USB tethering, or Intel's driver just got the card back):
                 // let Windows join a saved network once, to read what the station needs.
-                for (int i = 0; cardFree && !_userChose && !_userOff && fresh is null && _net is null && i < 4; i++)
+                // Not beside a wired connection: that left two default routes (issue #1).
+                var wired = fresh is null && _net is null && !_userChose && Wlan.WiredUp();
+                if (wired) Say("Wi-Fi: a wired connection is up; not joining a saved network on its own");
+                for (int i = 0; cardFree && !wired && !_userChose && !_userOff && fresh is null && _net is null && i < 4; i++)
                 {
                     if (i == 0) Say("Wi-Fi: Windows is not connected; joining a saved network to read it");
                     fresh = Wlan.ConnectSaved(out why, TimeSpan.FromSeconds(15));
@@ -236,7 +240,7 @@ public sealed class Supervisor : IDisposable
             // awdld connects to the radio's pipe; give the firmware time to boot.
             for (int i = 0; i < 100 && State == RadioState.Starting && _radio is { HasExited: false }; i++) Thread.Sleep(100);
             if (_radio is null || _radio.HasExited) throw new InvalidOperationException("the radio exited during bring-up: " + _detail);
-            _awdld = Spawn(Path.Combine(_root, "awdl", "awdld.exe"), ["-c", channel.ToString()], line => Say("awdld: " + line));
+            _awdld = Spawn(Path.Combine(_root, "awdl", "awdld.exe"), ["-c", channel.ToString()], OnAwdldLine);
         }
         catch (Exception e)
         {
@@ -245,6 +249,38 @@ public sealed class Supervisor : IDisposable
             lock (_lock) { State = _wanted ? RadioState.Error : RadioState.Off; _detail = e.Message; }
             Publish();
         }
+    }
+
+    /* awdld warns for every frame it does not parse, several a second (issue #1):
+       the first is logged, then one count a minute. */
+    readonly object _noiseLock = new();
+    DateTime _noiseAt = DateTime.MinValue;
+    int _noiseCount;
+
+    void OnAwdldLine(string line)
+    {
+        if (line.Contains("unhandled frame", StringComparison.Ordinal))
+        {
+            string? summary = null;
+            lock (_noiseLock)
+            {
+                var now = DateTime.UtcNow;
+                if (_noiseAt == DateTime.MinValue) { _noiseAt = now; summary = line + " (repeats are counted once a minute)"; }
+                else
+                {
+                    _noiseCount++;
+                    if (now - _noiseAt >= TimeSpan.FromMinutes(1))
+                    {
+                        summary = $"{_noiseCount} more unhandled frames";
+                        _noiseCount = 0;
+                        _noiseAt = now;
+                    }
+                }
+            }
+            if (summary is not null) Say("awdld: " + summary);
+            return;
+        }
+        Say("awdld: " + line);
     }
 
     void OnRadioLine(string line)
@@ -421,7 +457,7 @@ public sealed class Supervisor : IDisposable
             // Wi-Fi down for a while: look for a known network to join.
             if (_cfg.Mode == NetMode.Concurrent && State == RadioState.On && !_userOff && _wifi != "connected" &&
                 !_scanBusy && DateTime.UtcNow - _wifiDownSince > TimeSpan.FromSeconds(20) &&
-                DateTime.UtcNow - _scanAt > TimeSpan.FromSeconds(30))
+                DateTime.UtcNow - _scanAt > TimeSpan.FromSeconds(30) && !Wlan.WiredUp())
                 WifiScan();
             if (_cfg.Mode == NetMode.OnDemand && State == RadioState.On &&
                 DateTime.UtcNow - _lastUse > TimeSpan.FromSeconds(_cfg.IdleSeconds))
@@ -657,8 +693,10 @@ public sealed class Supervisor : IDisposable
             _userChose = false;
             _net = null;
             _staSsid = "";
+            _wifi = "";
         }
         Say("Wi-Fi: disconnected by the user");
+        Publish();
         _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
     }
 
@@ -695,6 +733,8 @@ public sealed class Supervisor : IDisposable
         }
         if (_userOff || _cfg.Mode != NetMode.Concurrent || _wifi == "connected") return;
         if (DateTime.UtcNow - _wifiDownSince < TimeSpan.FromSeconds(20)) return;
+        // Beside a wired connection Wi-Fi is joined only from the Wi-Fi window (issue #1).
+        if (Wlan.WiredUp()) return;
         JsonObject? best;
         lock (_lock)
             best = _scan.Where(n => Joinable.Contains((string?)n["security"] ?? "") &&
@@ -705,6 +745,33 @@ public sealed class Supervisor : IDisposable
         Say($"Wi-Fi: auto-connecting to \"{ssid}\"");
         WifiConnect(ssid, null, null, false);
     }
+
+    /// <summary>
+    /// The "nekodrop" adapter after any wired one: with the automatic metric both
+    /// got 25 and traffic could leave through Wi-Fi (issue #1).
+    /// </summary>
+    void SetTapMetric()
+    {
+        foreach (var family in new[] { "ipv4", "ipv6" })
+        {
+            try
+            {
+                var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "netsh.exe"))
+                {
+                    UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                };
+                foreach (var a in new[] { "interface", family, "set", "interface", "nekodrop", $"metric={TapMetric}" })
+                    psi.ArgumentList.Add(a);
+                using var p = Process.Start(psi);
+                p?.WaitForExit(10000);
+                if (p is { HasExited: true, ExitCode: not 0 }) Say($"could not set the nekodrop adapter's {family} metric");
+            }
+            catch (Exception e) { Say("could not set the nekodrop adapter's metric: " + e.Message); }
+        }
+    }
+
+    const int TapMetric = 75;
 
     /// <summary>The card runs nekodrop's kernel Wi-Fi driver (nekodrop-wlan.sys).</summary>
     static bool KernelDriver => Card.Find() is { } k && Card.ByKernelDriver(k);

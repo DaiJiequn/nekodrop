@@ -63,7 +63,7 @@ nekodrop talks to the Wi-Fi chip directly, so it only works on chips it has a dr
 |---|---|---|---|
 | **Intel Wi-Fi 6 AX201** 160 MHz (CNVi) | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | ✅ **tested** (QuZ on `43F0`) |
 | Intel Wireless-AC 9560 / 9462 / 9461 on Qu/QuZ (CNVi) | same IDs as AX201 | `Qu/QuZ-jf-b0-68` | ⚠️ untested |
-| Intel Wi-Fi 6 AX200 (discrete) | `2723` | `cc-a0-68` | ⚠️ untested |
+| Intel Wi-Fi 6 AX200 (discrete) | `2723` | `cc-a0-68` | ✅ iPhone → PC receive reported working ([#1](../../issues/1)) |
 | Intel Wi-Fi 6E AX210 (discrete) | `2725` | `ty-a0-gf-a0-68` + PNVM | ⚠️ untested |
 | Intel Wi-Fi 6E AX211 / AX411 (CNVi, 12th gen+) | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf(4)-a0-68` + PNVM | ⚠️ untested |
 | Intel Wi-Fi 6 AX203 / 9560 on So | same IDs as AX211 | `so-a0-hr/jf-b0-68` | ⚠️ untested |

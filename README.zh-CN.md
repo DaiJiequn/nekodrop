@@ -63,7 +63,7 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 |---|---|---|---|
 | **Intel Wi-Fi 6 AX201** 160 MHz（CNVi） | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | ✅ **已实测**（`43F0` 上的 QuZ） |
 | Qu/QuZ 上的 Intel Wireless-AC 9560 / 9462 / 9461（CNVi） | 与 AX201 相同 | `Qu/QuZ-jf-b0-68` | ⚠️ 未测试 |
-| Intel Wi-Fi 6 AX200（独立网卡） | `2723` | `cc-a0-68` | ⚠️ 未测试 |
+| Intel Wi-Fi 6 AX200（独立网卡） | `2723` | `cc-a0-68` | ✅ 用户反馈 iPhone → PC 接收正常（[#1](../../issues/1)） |
 | Intel Wi-Fi 6E AX210（独立网卡） | `2725` | `ty-a0-gf-a0-68` + PNVM | ⚠️ 未测试 |
 | Intel Wi-Fi 6E AX211 / AX411（CNVi，第 12 代及以后） | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf(4)-a0-68` + PNVM | ⚠️ 未测试 |
 | So 平台上的 Intel Wi-Fi 6 AX203 / 9560 | 与 AX211 相同 | `so-a0-hr/jf-b0-68` | ⚠️ 未测试 |
