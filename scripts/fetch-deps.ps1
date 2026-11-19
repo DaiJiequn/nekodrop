@@ -26,6 +26,11 @@ function Get-File($url, $out, $sha256) {
 Get-Repo winawdl https://github.com/raph559/winawdl.git 0db7031589dc2bca03c0893db341176376962047
 Get-Repo ForbiddenItlwm https://github.com/retropineaple/ForbiddenItlwm.git 96ff71e0211789239f6fbf6b64ac8e7fd22b41aa
 
+# Wintun for awdld: winawdl's script checks its SHA-256 and WireGuard's signature.
+if (-not (Test-Path "$tp\winawdl\deps\wintun\wintun.dll")) {
+  & "$tp\winawdl\scripts\fetch-wintun.ps1"
+}
+
 $mingw = Join-Path $tp 'winlibs'
 if (-not (Test-Path "$mingw\mingw64\bin\gcc.exe")) {
   New-Item -ItemType Directory -Force $mingw | Out-Null
