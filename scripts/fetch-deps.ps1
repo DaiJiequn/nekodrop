@@ -29,7 +29,7 @@ Get-Repo ForbiddenItlwm https://github.com/retropineaple/ForbiddenItlwm.git 96ff
 $mingw = Join-Path $tp 'winlibs'
 if (-not (Test-Path "$mingw\mingw64\bin\gcc.exe")) {
   New-Item -ItemType Directory -Force $mingw | Out-Null
-  Get-File 'https://github.com/brechtsanders/winlibs_mingw/releases/download/16.2.0posix-14.0.0-ucrt-r3/winlibs-x86_64-posix-seh-gcc-16.2.0-mingw-w64ucrt-14.0.0-r3.zip' `
+  Get-File 'https://github.com/brechtsanders/winlibs_mingw/releases/download/16.2.0posix-23.1.3-14.0.0-ucrt-r3/winlibs-x86_64-posix-seh-gcc-16.2.0-mingw-w64ucrt-14.0.0-r3.zip' `
            "$mingw\mingw.zip" '3C69305081E4A647144339A936244FCF7D3D9E558319E1AD7BE2CD2886D4B6A1'
   Expand-Archive "$mingw\mingw.zip" $mingw -Force
 }
