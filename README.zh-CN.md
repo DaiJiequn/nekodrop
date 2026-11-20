@@ -96,28 +96,6 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 | `C:\ProgramData\nekodrop\install.log` | 安装过程：驱动、TAP 网卡、防火墙、服务 |
 | `C:\ProgramData\nekodrop\restore.log` | 一键回退 |
 
-<details>
-<summary>English</summary>
-
-Logs are what let us fix things, especially on cards we don't have. Please attach them to every [issue](../../issues).
-
-1. Start menu → **nekodrop - diagnostic report** (or tray icon → **Diagnostic report…**, or **Diagnostic report** at the bottom of the main window). Allow the administrator prompt; the logs and driver state are readable by administrators only.
-2. Two files appear on your Desktop and the report opens in Notepad:
-   - `nekodrop-report-<time>.md`: a summary, a step-by-step check of the last radio start (driver bind → firmware → PNVM → init → ready), system, card, driver, network and Bluetooth details, a discovery timeline and the key log lines. It is also copied to the clipboard: **paste it into the issue**.
-   - `nekodrop-logs-<time>.txt`: the full logs. **Drag it into the issue** as an attachment.
-3. SSIDs, MAC and private IP addresses, your user name and the computer name are replaced by placeholders such as `<SSID-1>` and `<MAC-2>`. Nothing is uploaded. Please look the report over before posting.
-
-**On an older nekodrop without this entry**, download [`installer/report.ps1`](installer/report.ps1) and run it from a command prompt: `powershell -ExecutionPolicy Bypass -File report.ps1`. Or collect the logs by hand:
-
-| File | What's in it |
-|---|---|
-| `C:\ProgramData\nekodrop\service.log` (and `service.log.1`) | the service, the radio (firmware, AWDL, Wi-Fi) and awdld; readable by administrators |
-| `%LocalAppData%\nekodrop\engine.log` (and `engine.log.old`) | the AirDrop engine: discovery, Bluetooth beacon, transfers |
-| `C:\ProgramData\nekodrop\install.log` | the installer: driver, TAP adapter, firewall, service |
-| `C:\ProgramData\nekodrop\restore.log` | the one-click restore |
-
-</details>
-
 ## 系统要求
 
 - Windows 10 2004（版本 19041）或更新的 64 位系统，推荐 Windows 11。
