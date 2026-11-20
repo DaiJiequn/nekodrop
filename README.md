@@ -248,6 +248,10 @@ nekodrop as a whole is **GPL-2.0** (see [LICENSE](LICENSE)), because `iwxradio/`
 
 The installer copies every license into `licenses\`.
 
+## Community
+
+- [LINUX DO](https://linux.do/) — friendly community link
+
 ## Disclaimer
 
 nekodrop is an independent project, not affiliated with or endorsed by Apple or Intel. AirDrop, iPhone, iPad and Mac are trademarks of Apple Inc.; Intel is a trademark of Intel Corporation. nekodrop replaces your Wi-Fi driver while it runs. It's experimental software, provided as is, without warranty.

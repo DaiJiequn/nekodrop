@@ -248,6 +248,10 @@ nekodrop 整体以 **GPL-2.0** 发布（见 [LICENSE](LICENSE)），因为 `iwxr
 
 安装包会把所有许可证复制到 `licenses\`。
 
+## 社区友链
+
+- [LINUX DO](https://linux.do/) — 新的理想型社区
+
 ## 免责声明
 
 nekodrop 是独立项目，与 Apple、Intel 没有任何关系，也未获得它们的认可。AirDrop、iPhone、iPad、Mac 是 Apple Inc. 的商标，Intel 是 Intel Corporation 的商标。nekodrop 运行期间会替换你的 Wi-Fi 驱动。这是实验性软件，按原样提供，不附带任何担保。
