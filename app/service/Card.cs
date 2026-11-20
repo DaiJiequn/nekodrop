@@ -11,6 +11,9 @@ namespace NekoDrop.Service;
 /// INSTALLFLAG_FORCE, since Intel's driver ranks higher); giving it back binds
 /// Intel's own INF the same way, so no package is ever deleted.
 /// </summary>
+/// <summary>Windows refused to bind a driver to the card (with its error code).</summary>
+public sealed class CardBindException(string message, Exception inner) : Exception(message, inner);
+
 public static class Card
 {
     /// <summary>
@@ -64,7 +67,11 @@ public static class Card
         var call = Task.Run(() =>
         {
             if (!UpdateDriverForPlugAndPlayDevicesW(IntPtr.Zero, hardwareId, inf, INSTALLFLAG_FORCE, out _))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), $"binding {Path.GetFileName(inf)} failed");
+            {
+                var w = new Win32Exception(Marshal.GetLastWin32Error());
+                throw new CardBindException(
+                    $"binding {Path.GetFileName(inf)} failed: 0x{w.NativeErrorCode:x8} {w.Message}", w);
+            }
         });
         if (!call.Wait(timeout ?? TimeSpan.FromSeconds(45)))
             return; /* still running; the device state decides */

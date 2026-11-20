@@ -245,8 +245,16 @@ public sealed class Supervisor : IDisposable
         catch (Exception e)
         {
             try { File.Delete(Path.Combine(ServiceConfig.Folder, "run", "sta.conf")); } catch (Exception) { }
-            Say("start failed: " + e.Message);
-            lock (_lock) { State = _wanted ? RadioState.Error : RadioState.Off; _detail = e.Message; }
+            var bind = e as CardBindException ?? e.InnerException as CardBindException;
+            Say("start failed: " + (bind?.Message ?? e.Message));
+            lock (_lock)
+            {
+                // Windows refusing the driver is not cured by retrying: no restart loop
+                // (it ran five times, each time leaving the card without a driver).
+                if (bind is not null) _wanted = false;
+                State = _wanted || bind is not null ? RadioState.Error : RadioState.Off;
+                _detail = bind?.Message ?? e.Message;
+            }
             Publish();
         }
     }
@@ -590,7 +598,15 @@ public sealed class Supervisor : IDisposable
         }
         var inf = Path.Combine(_root, "driver", "winawdl_regproxy.inf");
         Say($"taking the card from {Path.GetFileName(card.InfPath)}");
-        Card.Bind(card.HardwareId, inf);
+        try { Card.Bind(card.HardwareId, inf); }
+        catch (CardBindException e)
+        {
+            // A failed bind can leave the card with no driver at all, and so
+            // Windows without Wi-Fi (issue #3): give it straight back.
+            Say("taking the card failed: " + e.Message);
+            EnsureVendorDriver();
+            throw;
+        }
         // The proxy's device interface appears once the UMDF host has started.
         for (int i = 0; i < 300; i++)
         {
@@ -779,7 +795,8 @@ public sealed class Supervisor : IDisposable
     void EnsureVendorDriver()
     {
         var card = Card.Find();
-        if (card is null || !Card.TakenByProxy(card)) return;
+        // Ours, or left with no driver by a failed bind: Intel's driver goes back on.
+        if (card is null || (!Card.TakenByProxy(card) && card.InfPath != "")) return;
         if (_cfg.VendorInf == "" || !File.Exists(_cfg.VendorInf))
         {
             Say("cannot give the card back: Intel's INF is not known; run give-card.ps1");

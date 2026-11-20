@@ -3,7 +3,8 @@
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\..\scripts\toolchain.ps1"
 
-$umdfVersion = '2.33'
+# 2.31: the newest UMDF Windows 10 2004-22H2 has (2.33 is Windows 11 only, issue #3).
+$umdfVersion = '2.31'
 $tools = Initialize-Toolchain -UmdfVersion $umdfVersion
 $umdfMajor, $umdfMinor = $umdfVersion.Split('.')
 $out = Join-Path $PSScriptRoot 'build'

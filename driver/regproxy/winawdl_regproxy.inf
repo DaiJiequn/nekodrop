@@ -78,7 +78,7 @@ UmdfDirectHardwareAccess  = AllowDirectHardwareAccess
 UmdfRegisterAccessMode    = RegisterAccessUsingUserModeMapping
 
 [RegProxy_Umdf]
-UmdfLibraryVersion = 2.33.0
+UmdfLibraryVersion = 2.31.0
 ServiceBinary      = %13%\winawdl_regproxy.dll
 
 [Strings]
