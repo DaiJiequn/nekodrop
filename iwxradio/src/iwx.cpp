@@ -448,7 +448,12 @@ bool IwxDevice::load_firmware(std::string &error) {
     error = "APM init failed";
     return false;
   }
-  nic_config();
+  /* Not on the AX210 family: OpenBSD's AX210 support (commit 4735940a10,
+   * tested on AX210 hardware) stopped calling iwx_nic_config there. The
+   * MAC/PHY step and radio type it writes into CSR_HW_IF_CONFIG_REG follow
+   * the 22000 layout; on AX210-family cards the firmware asserted at
+   * NVM_ACCESS_COMPLETE (issue #7). */
+  if (!gen3()) nic_config();
   _proxy.write8(IWX_CSR_INT_COALESCING, IWX_HOST_INT_TIMEOUT_DEF);
   setb(IWX_CSR_MAC_SHADOW_REG_CTRL, 0x800fffff);
 
