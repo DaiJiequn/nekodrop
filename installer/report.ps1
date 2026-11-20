@@ -178,7 +178,7 @@ if ($start -lt 0) {
   W '| Step | Result | Line |'
   W '|---|---|---|'
   W (Stage 'Take the card (driver bind)' 'radio: card 0x' 'taking the card failed|binding .* failed')
-  W (Stage 'Identify the card' 'radio: .*\((AX210|22000) family' 'unsupported card|not an Intel|does not answer')
+  W (Stage 'Identify the card' 'radio: .*\((AX210|22000) family' 'unsupported card|not an Intel device|card does not answer')
   W (Stage 'DMA memory' 'DMA: \d+ pages in use' 'out of DMA memory for (the rings|receive|the transmit|command|the firmware|the peripheral)|could not lock|DMA: .*fail')
   W (Stage 'Load the firmware' 'radio: firmware \S+: \d+ LMAC' 'firmware has more sections|no image loader|cannot read|firmware file')
   W (Stage 'Firmware alive' 'radio: firmware alive' 'did not come alive|failed ALIVE|no ALIVE notification|card not ready|APM init failed|hardware start failed')
@@ -256,7 +256,7 @@ W ''
 
 W '## Bluetooth'
 W ''
-$bt = @(Try-Get { Get-PnpDevice -PresentOnly -Class Bluetooth -ErrorAction Stop | Where-Object { $_.FriendlyName -notmatch 'Enumerator|RFCOMM|LE Generic|Avrcp|Hands-?free|Audio' } | Select-Object -First 6 })
+$bt = @(Try-Get { Get-PnpDevice -PresentOnly -Class Bluetooth -ErrorAction Stop | Where-Object { $_.FriendlyName -notmatch 'Enumerator|RFCOMM|LE Generic|Avrcp|Hands-?free|Audio' } | Select-Object -First 6 } | Where-Object { $_ })
 if ($bt.Count) { $bt | ForEach-Object { W "- $(Redact $_.FriendlyName): $($_.Status)" } } else { W 'No Bluetooth adapter found.' }
 W ''
 

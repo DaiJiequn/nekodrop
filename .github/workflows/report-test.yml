@@ -34,12 +34,13 @@ jobs:
           $r = Get-Content $md.FullName -Raw
           $all = $r + (Get-Content $txt.FullName -Raw)
           $fail = @()
-          foreach ($want in '## Bring-up', '| Firmware alive | ok |', '| PNVM (AX210 family) | ok |', '| Firmware init (INIT_COMPLETE) | FAIL |', 'UMAC error 0x2010070d', '## Discovery timeline', '## Network') {
+          foreach ($want in '## Bring-up', '| Identify the card | ok |', '| Firmware alive | ok |', '| PNVM (AX210 family) | ok |', '| Firmware init (INIT_COMPLETE) | FAIL |', 'UMAC error 0x2010070d', '## Discovery timeline', '## Network') {
             if (-not $r.Contains($want)) { $fail += "missing: $want" }
           }
           foreach ($secret in 'Home-5G-Secret', 'a4:b1:c2:d3:e4:f5', '486f6d652d35472d536563726574', '192.168.31.1', 'zhangsan', 'fe80::1c2b', $env:COMPUTERNAME) {
             if ($all.Contains($secret)) { $fail += "not redacted: $secret" }
           }
+          if ($r -match '(?m)^- : $') { $fail += 'empty Bluetooth line' }
           Get-Content $md.FullName | Select-Object -First 60
           if ($fail) { $fail | ForEach-Object { Write-Error $_ }; exit 1 }
           'report checks passed'
