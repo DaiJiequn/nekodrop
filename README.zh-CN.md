@@ -188,7 +188,7 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 git clone https://github.com/zheznanohana/nekodrop.git
 cd nekodrop
 .\scripts\fetch-deps.ps1        # 下载 winawdl、ForbiddenItlwm（固件）、MinGW、WDK NuGet 到 third_party\
-.\scripts\build-installer.ps1   # 全部构建 → build\nekodrop-0.1.2-setup.exe
+.\scripts\build-installer.ps1   # 全部构建 → build\nekodrop-0.1.3-setup.exe
 .\scripts\build-radio.ps1       # 只构建用户态驱动并跑离线自检
 ```
 

@@ -188,7 +188,7 @@ Needs Visual Studio 2022 Build Tools (C++, Windows SDK, CMake), the .NET 8 SDK a
 git clone https://github.com/zheznanohana/nekodrop.git
 cd nekodrop
 .\scripts\fetch-deps.ps1        # winawdl, ForbiddenItlwm (firmware), MinGW, WDK NuGet → third_party\
-.\scripts\build-installer.ps1   # everything → build\nekodrop-0.1.2-setup.exe
+.\scripts\build-installer.ps1   # everything → build\nekodrop-0.1.3-setup.exe
 .\scripts\build-radio.ps1       # just the user-mode driver, plus its offline self-tests
 ```
 
