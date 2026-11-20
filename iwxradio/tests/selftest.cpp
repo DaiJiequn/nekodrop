@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
       {0x34F0, 0x338, 0x0010a100, "iwlwifi-Qu-c0-hr-b0-68.ucode", false, true},
       {0x02F0, 0x354, 0x00108000, "iwlwifi-QuZ-a0-jf-b0-68.ucode", false, true},  /* 9560 on QuZ */
       {0x2723, 0x340, 0x0010a100, "iwlwifi-cc-a0-68.ucode", false, false},        /* AX200 */
-      {0x2725, 0x420, 0x0010d000, "iwlwifi-ty-a0-gf-a0-68.ucode", true, true},     /* AX210 */
+      {0x2725, 0x420, 0x0010d000, "iwlwifi-ty-a0-gf-a0-68.ucode", true, false},    /* AX210: discrete */
       {0x7AF0, 0x370, 0x0010d000, "iwlwifi-so-a0-gf-a0-68.ucode", true, true},     /* AX211 */
       {0x51F0, 0x370, 0x1010d000, "iwlwifi-so-a0-gf4-a0-68.ucode", true, true},    /* AX411 */
       {0x2726, 0x420, 0x0010d000, nullptr, true, true},                             /* SnJ: no firmware */
@@ -77,6 +77,14 @@ int main(int argc, char **argv) {
     const CardInfo c = cards::select(0x43F0, 0x354, 0x0010a100);
     if (c.xtal_latency != 12000 || c.ltr_delay != IWX_SOC_FLAGS_LTR_APPLY_DELAY_2500 || !c.low_latency_xtal || !c.tested) {
       std::printf("FAIL the tested AX201 lost its transport parameters\n");
+      failures++;
+    }
+  }
+  {
+    /* The Raptor Lake AX211 (issue #2): Linux's so_long_latency_imr parameters. */
+    const CardInfo c = cards::select(0x7A70, 0x370, 0x0010d000);
+    if (!c.known || !c.integrated || !c.imr || !c.low_latency_xtal || c.xtal_latency != 12000) {
+      std::printf("FAIL the 7A70 AX211 lost its IMR / long-latency parameters\n");
       failures++;
     }
   }

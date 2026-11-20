@@ -298,6 +298,8 @@ private:
 
   /* Notifications the bring-up waits for */
   bool _alive_seen = false, _alive_ok = false, _init_complete = false;
+  int _trace_packets = 0; /* packets still to log during the init handshake */
+  static constexpr uint32_t kPrphScratchImrDebugEn = 1u << 1; /* IWX_PRPH_SCRATCH_IMR_DEBUG_EN */
   uint32_t _lmac_error_table = 0, _umac_error_table = 0;
 
   /* NVM */

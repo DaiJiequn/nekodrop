@@ -528,9 +528,10 @@ bool IwxDevice::load_firmware(std::string &error) {
     ctrl.version.version = 0;
     ctrl.version.mac_id = htole16(static_cast<uint16_t>(rd(IWX_CSR_HW_REV)));
     ctrl.version.size = htole16(sizeof(*scratch) / 4);
-    ctrl.control.control_flags =
-        htole32(IWX_PRPH_SCRATCH_RB_SIZE_4K | IWX_PRPH_SCRATCH_MTR_MODE |
-                (IWX_PRPH_MTR_FORMAT_256B & IWX_PRPH_SCRATCH_MTR_FORMAT));
+    uint32_t control_flags = IWX_PRPH_SCRATCH_RB_SIZE_4K | IWX_PRPH_SCRATCH_MTR_MODE |
+                             (IWX_PRPH_MTR_FORMAT_256B & IWX_PRPH_SCRATCH_MTR_FORMAT);
+    if (_card.imr) control_flags |= kPrphScratchImrDebugEn;
+    ctrl.control.control_flags = htole32(control_flags);
     ctrl.rbd_cfg.free_rbd_addr = htole64(_rx_free.pa);
     auto *g3 = reinterpret_cast<iwx_context_info_gen3 *>(_ctxt_info.va);
     std::memset(g3, 0, sizeof(*g3));
@@ -727,6 +728,9 @@ bool IwxDevice::run_init_sequence(std::string &error) {
   iwx_init_extended_cfg_cmd init_cfg{};
   init_cfg.init_flags = htole32(IWX_INIT_NVM);
   _init_complete = false;
+  /* What the firmware sends while it initialises goes to the log, so a card
+   * that never answers INIT_COMPLETE can be told apart (issue #2). */
+  _trace_packets = 24;
   if (send_cmd(IWX_WIDE_ID(IWX_SYSTEM_GROUP, IWX_INIT_EXTENDED_CFG_CMD), &init_cfg,
                sizeof(init_cfg), false, nullptr)) {
     error = "INIT_EXTENDED_CFG failed";
@@ -738,7 +742,9 @@ bool IwxDevice::run_init_sequence(std::string &error) {
     error = "NVM_ACCESS_COMPLETE failed";
     return false;
   }
-  if (!wait_for([&] { return _init_complete; }, 2000)) {
+  const bool init_done = wait_for([&] { return _init_complete; }, 5000);
+  _trace_packets = 0;
+  if (!init_done) {
     error = "no INIT_COMPLETE from the firmware";
     return false;
   }
@@ -1682,6 +1688,15 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
   if (iwx_cmd_groupid(code) == IWX_LONG_GROUP && qid == IWX_DQA_CMD_QUEUE &&
       idx < int(_cmd_slots.size()) && _cmd_slots[idx].narrow)
     code = iwx_cmd_opcode(code);
+  /* So may a notification with a legacy ID: Linux's notification wait
+   * takes WIDE_ID(LONG_GROUP, x) for x (DEF_ID). Missing that loses
+   * INIT_COMPLETE on AX210-family firmware (issue #2). */
+  if ((qid & 0x80) && iwx_cmd_groupid(code) == IWX_LONG_GROUP) code = iwx_cmd_opcode(code);
+  if (_trace_packets > 0) {
+    _trace_packets--;
+    _log("init: packet " + hex(IWX_WIDE_ID(pkt->hdr.group_id, pkt->hdr.cmd)) + " qid " + hex(uint32_t(qid)) +
+         " idx " + std::to_string(idx) + " len " + std::to_string(plen));
+  }
 
   switch (code) {
   case IWX_REPLY_RX_MPDU_CMD:

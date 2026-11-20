@@ -19,6 +19,7 @@ struct CardInfo {
   uint32_t xtal_latency = 0;
   uint32_t ltr_delay = 0; /* IWX_SOC_FLAGS_LTR_APPLY_DELAY_* */
   bool low_latency_xtal = false;
+  bool imr = false;       /* IWX_PRPH_SCRATCH_IMR_DEBUG_EN (Linux's *_imr_trans_cfg) */
   bool tested = false;    /* run on real hardware by the project */
 };
 
@@ -49,10 +50,15 @@ inline CardInfo select(uint16_t device, uint32_t hw_rev, uint32_t rf_id) {
     c.xtal_latency = 12000; c.ltr_delay = kLtr2500; c.low_latency_xtal = true; break;
   case 0x2723: /* iwl_ax200_trans_cfg: discrete */
     c.integrated = false; break;
-  case 0x2725: case 0x7AF0: case 0x7F70: /* iwl_so_trans_cfg */
+  case 0x2725: /* iwl_ma_trans_cfg: the discrete AX210 (Linux and OpenBSD alike) */
+    c.ax210 = true; c.integrated = false; break;
+  case 0x7AF0: case 0x7F70: /* iwl_so_trans_cfg */
     c.ax210 = true; c.xtal_latency = 500; c.ltr_delay = kLtr200; break;
-  case 0x7A70: case 0x51F0: case 0x51F1: case 0x54F0: /* iwl_so_long_latency_trans_cfg */
-    c.ax210 = true; c.xtal_latency = 12000; c.ltr_delay = kLtr2500; break;
+  case 0x51F0: case 0x54F0: /* iwl_so_long_latency_trans_cfg */
+    c.ax210 = true; c.xtal_latency = 12000; c.ltr_delay = kLtr2500; c.low_latency_xtal = true; break;
+  case 0x7A70: case 0x51F1: /* iwl_so_long_latency_imr_trans_cfg (OpenBSD: sc_imr_enabled) */
+    c.ax210 = true; c.xtal_latency = 12000; c.ltr_delay = kLtr2500; c.low_latency_xtal = true;
+    c.imr = true; break;
   case 0x2720: c.why = "Intel QnJ (8086:2720): its firmware (QuQnj, API 48) is not shipped upstream"; return c;
   case 0x2726: c.why = "Intel SnJ (8086:2726): its firmware (SoSnj, API 63) is not shipped upstream"; return c;
   case 0x2729: case 0x7E40: c.why = "Intel Ma (Meteor Lake CNVi): its firmware (ma, API 63) is not shipped upstream"; return c;
