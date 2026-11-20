@@ -87,7 +87,8 @@ if ($LASTEXITCODE -ne 0) { throw 'service publish failed' }
 dotnet publish "$repo\app\client\NekoDrop.csproj" -c Release -o "$stage" --nologo -v q @single
 if ($LASTEXITCODE -ne 0) { throw 'client publish failed' }
 Copy-Item "$repo\installer\install.ps1", "$repo\installer\uninstall.ps1", "$repo\installer\setup-tap.ps1",
-          "$repo\installer\restore.ps1", "$repo\installer\restore.cmd" $stage
+          "$repo\installer\restore.ps1", "$repo\installer\restore.cmd",
+          "$repo\installer\report.ps1", "$repo\installer\report.cmd" $stage
 
 'downloads'
 $py = "$downloads\python-$PythonVersion-embed-amd64.zip"
@@ -132,7 +133,7 @@ if ($iscc) {
   if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
   Get-ChildItem "$repo\build\nekodrop-*-setup.exe" | Select-Object Name, Length
 } else {
-  $zip = "$repo\build\nekodrop-0.1.6-windows-x64.zip"
+  $zip = "$repo\build\nekodrop-0.1.7-windows-x64.zip"
   Compress-Archive "$stage\*" $zip -Force
   "Inno Setup not found: made $zip instead (unzip, then run install.ps1 as administrator)."
 }

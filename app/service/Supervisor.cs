@@ -78,6 +78,10 @@ public sealed class Supervisor : IDisposable
 
     void Publish() => Changed?.Invoke(Snapshot());
 
+    static readonly object LogFileLock = new();
+    /// <summary>service.log moves to service.log.1 at this size (the radio adds ~3 lines every 5 s).</summary>
+    const long LogFileLimit = 8 * 1024 * 1024;
+
     void Say(string line)
     {
         Log?.Invoke(line);
@@ -86,10 +90,54 @@ public sealed class Supervisor : IDisposable
             ServiceConfig.EnsureSecureDirectory();
             var logPath = Path.Combine(ServiceConfig.Folder, "service.log");
             ServiceConfig.RejectReparsePoint(logPath);
-            File.AppendAllText(logPath,
-                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {line}{Environment.NewLine}");
+            // Several threads log at once (radio, awdld, watchdog): one writer at a time.
+            lock (LogFileLock)
+            {
+                if (File.Exists(logPath) && new FileInfo(logPath).Length > LogFileLimit)
+                {
+                    var old = logPath + ".1";
+                    ServiceConfig.RejectReparsePoint(old);
+                    File.Move(logPath, old, true);
+                }
+                File.AppendAllText(logPath,
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {line}{Environment.NewLine}");
+            }
         }
         catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
+    /// <summary>
+    /// The first lines of every service start: which build, on which Windows,
+    /// in which mode, with which card and driver, so a log says what it came
+    /// from without asking the reporter.
+    /// </summary>
+    void SayHeader()
+    {
+        var asm = typeof(Supervisor).Assembly;
+        var version = asm.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion
+            ?? asm.GetName().Version?.ToString() ?? "?";
+        string windows = "?";
+        try
+        {
+            using var cv = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion");
+            var build = cv?.GetValue("CurrentBuild") as string ?? "";
+            var name = cv?.GetValue("ProductName") as string ?? "Windows";
+            // ProductName still says "Windows 10" on Windows 11.
+            if (int.TryParse(build, out var b) && b >= 22000) name = name.Replace("Windows 10", "Windows 11");
+            windows = $"{name} {cv?.GetValue("DisplayVersion")} (build {build}.{cv?.GetValue("UBR")}, {cv?.GetValue("EditionID")})";
+        }
+        catch (Exception) { }
+        Say($"===== nekodrop service {version}; {windows}; mode {_cfg.Mode}, country \"{_cfg.Country}\" =====");
+        try
+        {
+            var card = Card.Find();
+            Say(card is null ? "card: no supported Intel Wi-Fi card present"
+                : $"card: {card.InstanceId}; driver service {card.Service}, INF {Path.GetFileName(card.InfPath)}" +
+                  $"; Intel INF on record {Path.GetFileName(_cfg.VendorInf)}");
+        }
+        catch (Exception e) { Say("card: " + e.Message); }
     }
 
     /// <summary>Called once when the service starts.</summary>
@@ -98,6 +146,7 @@ public sealed class Supervisor : IDisposable
         // A config the radio never read (it deletes it once read) holds the
         // Wi-Fi key: never leave one behind across a restart.
         try { File.Delete(Path.Combine(ServiceConfig.Folder, "run", "sta.conf")); } catch (Exception) { }
+        SayHeader();
         _ = Task.Run(SetTapMetric);
         if (KernelDriver) Start("boot (kernel driver: Windows keeps Wi-Fi)");
         else if (_cfg.Mode == NetMode.Concurrent) Start("boot (concurrent mode)");
@@ -780,8 +829,18 @@ public sealed class Supervisor : IDisposable
                 foreach (var a in new[] { "interface", family, "set", "interface", "nekodrop", $"metric={TapMetric}" })
                     psi.ArgumentList.Add(a);
                 using var p = Process.Start(psi);
-                p?.WaitForExit(10000);
-                if (p is { HasExited: true, ExitCode: not 0 }) Say($"could not set the nekodrop adapter's {family} metric");
+                if (p is null) continue;
+                // Read before waiting: a full pipe would block netsh.
+                var output = p.StandardOutput.ReadToEndAsync();
+                var errors = p.StandardError.ReadToEndAsync();
+                p.WaitForExit(10000);
+                if (p is { HasExited: true, ExitCode: not 0 })
+                {
+                    // What netsh said, so the log tells a missing adapter from a refusal (issue #3).
+                    var why = string.Join(" ", (output.Wait(1000) ? output.Result : "") + " " + (errors.Wait(1000) ? errors.Result : ""))
+                        .Replace("\r", " ").Replace("\n", " ").Trim();
+                    Say($"could not set the nekodrop adapter's {family} metric (netsh exit {p.ExitCode}): {why}");
+                }
             }
             catch (Exception e) { Say("could not set the nekodrop adapter's metric: " + e.Message); }
         }

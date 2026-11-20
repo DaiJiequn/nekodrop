@@ -77,6 +77,25 @@ To check your card: *Device Manager → Network adapters*. The installer refuses
 
 Start menu → **nekodrop - restore Windows Wi-Fi** (or double-click `restore.cmd` in `C:\Program Files\nekodrop`). It stops nekodrop, gives the card back to Intel's driver, removes nekodrop's driver packages and brings Windows Wi-Fi back, whatever state nekodrop left the card in. nekodrop stays installed; run the installer again to use it. Log: `C:\ProgramData\nekodrop\restore.log`.
 
+### Reporting a problem: the diagnostic report
+
+Logs are what let us fix things, especially on cards we don't have. Please attach them to every [issue](../../issues).
+
+1. Start menu → **nekodrop - diagnostic report** (or tray icon → **Diagnostic report…**, or **Diagnostic report** at the bottom of the main window). Allow the administrator prompt; the logs and driver state are readable by administrators only.
+2. Two files appear on your Desktop and the report opens in Notepad:
+   - `nekodrop-report-<time>.md`: a summary, a step-by-step check of the last radio start (driver bind → firmware → PNVM → init → ready), system, card, driver, network and Bluetooth details, a discovery timeline and the key log lines. It is also copied to the clipboard: **paste it into the issue**.
+   - `nekodrop-logs-<time>.txt`: the full logs. **Drag it into the issue** as an attachment.
+3. SSIDs, MAC and private IP addresses, your user name and the computer name are replaced by placeholders such as `<SSID-1>` and `<MAC-2>`. Nothing is uploaded. Please look the report over before posting.
+
+**On an older nekodrop without this entry**, download [`installer/report.ps1`](installer/report.ps1) and run it from a command prompt: `powershell -ExecutionPolicy Bypass -File report.ps1`. Or collect the logs by hand:
+
+| File | What's in it |
+|---|---|
+| `C:\ProgramData\nekodrop\service.log` (and `service.log.1`) | the service, the radio (firmware, AWDL, Wi-Fi) and awdld; readable by administrators |
+| `%LocalAppData%\nekodrop\engine.log` (and `engine.log.old`) | the AirDrop engine: discovery, Bluetooth beacon, transfers |
+| `C:\ProgramData\nekodrop\install.log` | the installer: driver, TAP adapter, firewall, service |
+| `C:\ProgramData\nekodrop\restore.log` | the one-click restore |
+
 ## Requirements
 
 - Windows 10 2004 (build 19041) or later, x64. Windows 11 recommended.
@@ -178,7 +197,7 @@ Design notes: [docs/DESIGN.md](docs/DESIGN.md) (driver, DMA, risks) · [docs/CLI
 | The PC shows up twice on the iPhone | A cached record from an earlier run. Toggle AirDrop on the iPhone |
 | No internet | Tray → **Wi-Fi…**: check you're connected. The network may need a sign-in page or be WPA3-only/802.1X (see above) |
 | The Windows Wi-Fi icon disappeared | Expected in *together* mode: nekodrop owns the card. Use **Wi-Fi…**, or switch to *on demand* |
-| Something else | Logs: `C:\ProgramData\nekodrop\service.log` (radio, AWDL, Wi-Fi) and `%LocalAppData%\nekodrop\engine.log` (AirDrop). Please attach them to an issue |
+| Something else | Open an [issue](../../issues) with the [diagnostic report](#reporting-a-problem-the-diagnostic-report) |
 
 ## Building from source
 
@@ -188,7 +207,7 @@ Needs Visual Studio 2022 Build Tools (C++, Windows SDK, CMake), the .NET 8 SDK a
 git clone https://github.com/zheznanohana/nekodrop.git
 cd nekodrop
 .\scripts\fetch-deps.ps1        # winawdl, ForbiddenItlwm (firmware), MinGW, WDK NuGet → third_party\
-.\scripts\build-installer.ps1   # everything → build\nekodrop-0.1.6-setup.exe
+.\scripts\build-installer.ps1   # everything → build\nekodrop-0.1.7-setup.exe
 .\scripts\build-radio.ps1       # just the user-mode driver, plus its offline self-tests
 ```
 

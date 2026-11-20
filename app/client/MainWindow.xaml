@@ -182,6 +182,8 @@
           <Hyperlink Click="Settings_Click" Foreground="{DynamicResource AccentText}"><Run Text="{local:T main.settings}"/></Hyperlink>
           <Run Text="   "/>
           <Hyperlink Click="Wifi_Click" Foreground="{DynamicResource AccentText}"><Run Text="{local:T wifi.tray}"/></Hyperlink>
+          <Run Text="   "/>
+          <Hyperlink Click="Report_Click" Foreground="{DynamicResource AccentText}"><Run Text="{local:T main.report}"/></Hyperlink>
         </TextBlock>
       </StackPanel>
     </ScrollViewer>

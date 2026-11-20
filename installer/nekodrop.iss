@@ -2,7 +2,7 @@
 ; One exe installs everything: the client and service (self-contained, no .NET
 ; needed), the user-mode radio, awdld + Wintun, the AirDrop engine with its own
 ; Python, the register-proxy driver, TAP-Windows, firewall rules and the service.
-#define AppVersion "0.1.6"
+#define AppVersion "0.1.7"
 
 [Setup]
 AppId={{6C1F2E7A-4B8E-4E57-9C61-5E2B1D0A9F31}
@@ -50,6 +50,8 @@ Name: "{autoprograms}\nekodrop"; Filename: "{app}\nekodrop.exe"; AppUserModelID:
 Name: "{autodesktop}\nekodrop"; Filename: "{app}\nekodrop.exe"; AppUserModelID: "nekodrop.app"; Tasks: desktop
 ; One-click rollback: gives the Wi-Fi card back to Intel's driver (restore.ps1).
 Name: "{autoprograms}\nekodrop - restore Windows Wi-Fi"; Filename: "{app}\restore.cmd"; IconFilename: "{sys}\netshell.dll"; IconIndex: 0
+; Diagnostic report for bug reports: logs and system details, redacted (report.ps1).
+Name: "{autoprograms}\nekodrop - diagnostic report"; Filename: "{app}\report.cmd"; IconFilename: "{sys}\imageres.dll"; IconIndex: 76
 
 [Run]
 ; Started as the signed-in user: the first start registers the Explorer

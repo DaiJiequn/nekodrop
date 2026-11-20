@@ -77,6 +77,25 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 
 开始菜单 → **nekodrop - restore Windows Wi-Fi**（或双击 `C:\Program Files\nekodrop` 里的 `restore.cmd`）。它会停掉 nekodrop，把网卡还给 Intel 驱动，删除 nekodrop 的驱动包，恢复 Windows 自带的 Wi-Fi，不管 nekodrop 把网卡留在什么状态。nekodrop 本身不会被卸载，想再用时重新运行安装程序即可。日志：`C:\ProgramData\nekodrop\restore.log`。
 
+### 反馈问题：诊断报告
+
+日志是我们修问题的依据，尤其是我们手上没有的网卡。提 [Issue](../../issues) 时请务必附上。
+
+1. 开始菜单 → **nekodrop - diagnostic report**（或托盘图标 → **生成诊断报告…**，或主窗口底部的 **诊断报告**）。会弹出管理员权限提示，请允许，因为日志和驱动状态只有管理员能读。
+2. 桌面上会生成两个文件，报告会用记事本打开：
+   - `nekodrop-report-<时间>.md`：摘要、最近一次 radio 启动的逐步检查（驱动绑定 → 固件 → PNVM → 初始化 → 就绪）、系统、网卡、驱动、网络和蓝牙信息、发现设备的时间线，以及关键日志行。它也已经复制到剪贴板，**直接粘贴到 issue 里**即可。
+   - `nekodrop-logs-<时间>.txt`：完整日志，**拖进 issue 作为附件**。
+3. SSID、MAC 地址、内网 IP、用户名和电脑名都会替换成 `<SSID-1>`、`<MAC-2>` 这样的占位符，不会上传任何东西。发出前请先看一眼报告内容。
+
+**旧版本没有这个入口时**，可以下载 [`installer/report.ps1`](installer/report.ps1)，在命令提示符里运行：`powershell -ExecutionPolicy Bypass -File report.ps1`。也可以手动收集日志：
+
+| 文件 | 内容 |
+|---|---|
+| `C:\ProgramData\nekodrop\service.log`（以及 `service.log.1`） | 服务、radio（固件、AWDL、Wi-Fi）和 awdld 的日志，需要管理员权限才能读 |
+| `%LocalAppData%\nekodrop\engine.log`（以及 `engine.log.old`） | AirDrop 引擎：发现设备、蓝牙信标、收发文件 |
+| `C:\ProgramData\nekodrop\install.log` | 安装过程：驱动、TAP 网卡、防火墙、服务 |
+| `C:\ProgramData\nekodrop\restore.log` | 一键回退 |
+
 ## 系统要求
 
 - Windows 10 2004（版本 19041）或更新的 64 位系统，推荐 Windows 11。
@@ -178,7 +197,7 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 | iPhone 上出现两个电脑 | 之前运行留下的缓存记录，在 iPhone 上把 AirDrop 关掉再打开 |
 | 没网 | 托盘 → **Wi-Fi…**，确认已连接。网络可能需要网页登录，或者是纯 WPA3 / 企业网（见上表） |
 | Windows 的 Wi-Fi 图标没了 | 同时模式下是正常的：网卡归 nekodrop 管。用 **Wi-Fi…**，或者切到“按需” |
-| 其他问题 | 日志在 `C:\ProgramData\nekodrop\service.log`（radio、AWDL、Wi-Fi）和 `%LocalAppData%\nekodrop\engine.log`（AirDrop），提 issue 时请附上 |
+| 其他问题 | 提 [Issue](../../issues)，并附上[诊断报告](#反馈问题诊断报告) |
 
 ## 从源码构建
 
@@ -188,7 +207,7 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 git clone https://github.com/zheznanohana/nekodrop.git
 cd nekodrop
 .\scripts\fetch-deps.ps1        # 下载 winawdl、ForbiddenItlwm（固件）、MinGW、WDK NuGet 到 third_party\
-.\scripts\build-installer.ps1   # 全部构建 → build\nekodrop-0.1.6-setup.exe
+.\scripts\build-installer.ps1   # 全部构建 → build\nekodrop-0.1.7-setup.exe
 .\scripts\build-radio.ps1       # 只构建用户态驱动并跑离线自检
 ```
 

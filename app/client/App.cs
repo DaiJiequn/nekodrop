@@ -185,9 +185,31 @@ public sealed class App : Application
         menu.Items.Add(mode);
         menu.Items.Add(L.T("wifi.tray"), null, (_, _) => ShowWifi());
         menu.Items.Add(L.T("tray.settings"), null, (_, _) => new SettingsWindow().Show());
+        menu.Items.Add(L.T("tray.report"), null, (_, _) => RunReport());
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(L.T("tray.quit"), null, (_, _) => Quit());
         return menu;
+    }
+
+    /// <summary>
+    /// The diagnostic report (report.ps1 beside the app): it asks for
+    /// administrator rights itself and writes the redacted report and logs to
+    /// the Desktop, so it also works when the service does not.
+    /// </summary>
+    public static void RunReport()
+    {
+        var script = Path.Combine(AppContext.BaseDirectory, "report.ps1");
+        if (!File.Exists(script))
+        {
+            MessageBox.Show(L.T("report.missing"), "nekodrop");
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo("powershell.exe",
+                $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"") { UseShellExecute = true });
+        }
+        catch (Exception e) { MessageBox.Show(e.Message, "nekodrop"); }
     }
 
     public MainWindow? Window => _window;

@@ -48,6 +48,7 @@ public static class L
         ["mode.ondemand.short"] = ("按需接管网卡", "Take the card on demand"),
         ["mode.off.short"] = ("关闭 AirDrop", "AirDrop off"),
         ["tray.settings"] = ("设置…", "Settings…"),
+        ["tray.report"] = ("生成诊断报告…", "Diagnostic report…"),
         ["tray.quit"] = ("退出", "Quit"),
 
         // Status
@@ -99,6 +100,8 @@ public static class L
         ["main.change"] = ("更改…", "Change…"),
         ["main.openFolder"] = ("打开接收文件夹", "Open the folder"),
         ["main.settings"] = ("设置", "Settings"),
+        ["main.report"] = ("诊断报告", "Diagnostic report"),
+        ["report.missing"] = ("找不到诊断脚本 report.ps1，请重新安装 nekodrop。", "report.ps1 is missing; reinstall nekodrop."),
         ["pick.files"] = ("选择要通过 AirDrop 发送的文件", "Choose files to AirDrop"),
         ["pick.folder"] = ("选择接收文件的保存位置", "Choose where received files are saved"),
 
