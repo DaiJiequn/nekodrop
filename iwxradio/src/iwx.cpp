@@ -517,6 +517,25 @@ bool IwxDevice::load_firmware(std::string &error) {
     error = "out of DMA memory for the firmware image";
     return false;
   }
+  /* The PNVM section is chosen after ALIVE (by the SKU the firmware reports),
+   * but its buffer has to come from the pool before trim() hands the rest
+   * back: allocated afterwards it never fit ("PNVM: out of DMA memory"), and
+   * the firmware asserted at NVM_ACCESS_COMPLETE (issues #2, #7, #8). The
+   * whole file is an upper bound for one SKU's section (at most ~41 KiB). */
+  if (gen3() && !_card.pnvm.empty()) {
+    std::string path = _opt.firmware_dir, err;
+    if (!path.empty() && path.back() != '\\' && path.back() != '/') path += '\\';
+    if (!plat_read_file(path + _card.pnvm, _pnvm_raw, err)) {
+      _log("PNVM: " + err);
+      _pnvm_raw.clear();
+    } else if (!_pnvm_raw.empty()) {
+      _pnvm_buf = _dma.alloc(_pnvm_raw.size(), 4096);
+      if (!_pnvm_buf) {
+        error = "out of DMA memory for the platform NVM (PNVM)";
+        return false;
+      }
+    }
+  }
   _dma.trim();
   _log("DMA: " + std::to_string(_dma.pages_used()) + " pages in use, the rest returned");
   _log("firmware " + _fw.version + ": " + std::to_string(lmac) + " LMAC, " +
@@ -653,12 +672,8 @@ uint16_t le16_at(const uint8_t *p) { return static_cast<uint16_t>(p[0] | p[1] <<
 bool IwxDevice::load_pnvm() {
   if (!_sku_id[0] && !_sku_id[1] && !_sku_id[2]) return true; /* nothing to do */
   std::vector<uint8_t> section;
-  if (!_card.pnvm.empty()) {
-    std::string path = _opt.firmware_dir, err;
-    if (!path.empty() && path.back() != '\\' && path.back() != '/') path += '\\';
-    if (!plat_read_file(path + _card.pnvm, _pnvm_raw, err)) {
-      _log("PNVM: " + err);
-    } else {
+  if (!_pnvm_raw.empty()) { /* read in load_firmware, before the pool was trimmed */
+    {
       const uint8_t *data = _pnvm_raw.data();
       size_t len = _pnvm_raw.size();
       while (len >= 8 && section.empty()) {
@@ -696,9 +711,8 @@ bool IwxDevice::load_pnvm() {
     }
   }
   if (!section.empty()) {
-    _pnvm_buf = _dma.alloc(section.size(), 4096);
-    if (!_pnvm_buf) {
-      _log("PNVM: out of DMA memory");
+    if (!_pnvm_buf || section.size() > _pnvm_buf.size) {
+      _log("PNVM: no buffer for " + std::to_string(section.size()) + " bytes");
     } else {
       std::memcpy(_pnvm_buf.va, section.data(), section.size());
       auto &ctrl = reinterpret_cast<iwx_prph_scratch *>(_prph_scratch.va)->ctrl_cfg;
