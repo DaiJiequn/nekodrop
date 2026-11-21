@@ -509,6 +509,14 @@ public sealed class App : Application
         var id = (string?)o["id"] ?? "";
         switch (ev)
         {
+            case "ready":
+                /* A new engine (the watchdog starts one over when the radio
+                 * moves channel and re-creates awdl0) knows no peers and is not
+                 * looking: the old one's devices go, and an open window looks
+                 * again (#9: the send window stayed empty after a move to 149). */
+                foreach (var stale in Model.Devices.Where(x => !x.Busy).ToList()) Model.Devices.Remove(stale);
+                if (_send is not null || _window is not null) Engine.Look(true);
+                break;
             case "receiving":
                 /* Not receiving (ports or mDNS held, a socket error): the watchdog starts over after a while. */
                 _notReceivingSince = (bool?)o["on"] == true ? null : _notReceivingSince ?? DateTime.UtcNow;
