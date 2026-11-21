@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Checks that need no card: the firmware ABI struct sizes the driver depends
- * on, and that each bundled Qu/QuZ firmware parses into the section layout
- * and command versions the bring-up expects.
+ * on, that each bundled Qu/QuZ firmware parses into the section layout
+ * and command versions the bring-up expects, and the radio backend contract
+ * (tests/radio_backend_test.h).
  * Usage: iwx_selftest <firmware dir> */
 #include <cstdio>
 #include <string>
@@ -12,6 +13,7 @@
 #include "../src/awdl_policy.h"
 #include "../src/crypto.h"
 #include "../src/wpa3.h"
+#include "radio_backend_test.h"
 #include <cstring>
 #include <vector>
 
@@ -316,6 +318,10 @@ int main(int argc, char **argv) {
     wpa3::Owe owe_a, owe_b;
     CHECK(owe_a.generate() && owe_b.generate() && owe_a.derive(owe_b.public_x()), "OWE key agreement");
   }
+
+  /* Radio backends: capability matrix, per-capability policies, and a
+   * station-less backend meeting the contract without stubs. */
+  failures += radio_backend_test::run();
 
   std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
   return failures ? 1 : 0;

@@ -74,7 +74,7 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 
 怎么看自己的网卡：打开 *设备管理器 → 网络适配器*。不在上表里的网卡，安装程序会直接拒绝安装。在未测试的网卡上，nekodrop 可能启动不了固件；这时网卡不会坏，运行下面的**一键回退**即可，也欢迎在 [Issues](../../issues) 附上日志反馈。
 
-不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。**Realtek RTL8852CE**（`10EC:C852`）现在就可以用上游的 [winawdl](https://github.com/raph559/winawdl)（只有 AirDrop，不能同时连 Wi-Fi）。已安装 nekodrop 时，运行 `NekoDropService.exe --status` 可查看匹配到的网卡档案、能力与当前驱动提供者，`NekoDropService.exe --selftest` 可在无网卡、无管理员权限下运行网卡目录离线自检（目录中的 RTL8852CE 目前仅为未启用占位条目，暂不代表新增 Realtek 硬件支持）。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
+不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。**Realtek RTL8852CE**（`10EC:C852`）现在就可以用上游的 [winawdl](https://github.com/raph559/winawdl)（只有 AirDrop，不能同时连 Wi-Fi）。已安装 nekodrop 时，运行 `NekoDropService.exe --status` 可查看匹配到的网卡档案、能力与当前驱动提供者，`NekoDropService.exe --selftest` 可在无网卡、无管理员权限下运行网卡目录离线自检（目录中的 RTL8852CE 目前仅为未启用占位条目，暂不代表新增 Realtek 硬件支持）。radio 启动时会记一行 `backend …` 日志，写明当前驱动后端具备哪些能力（Wi-Fi 站点、固件扫描、A-MPDU 发送等）；离线自检 `iwx_selftest` 在每次构建时校验这套能力契约，其中包括一个模拟的、无 Wi-Fi 站点的未来 Realtek 后端。这对 Intel 网卡没有任何行为变化，也不代表新增 Realtek 支持。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
 
 ### 出问题了？一键回退
 

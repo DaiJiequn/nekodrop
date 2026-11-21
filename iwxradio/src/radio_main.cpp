@@ -41,6 +41,7 @@
 #include "wifi_sta.h"
 #include "pipe_server.h"
 #include "kdev.h"
+#include "radio_backend.h"
 
 #include <type_traits>
 #include <map>
@@ -68,7 +69,7 @@ void log_line(const std::string &line) {
 struct Options {
   uint8_t channel = 0;
   unsigned width = 0; /* 0: 80 on 5 GHz, 20 on 2.4 GHz, as winawdl */
-  IwxDevice::Options dev;
+  RadioOpenOptions dev; /* any backend's open() takes these */
   TxRate data_rate{TxRate::Legacy, 48, 0}; /* 24 Mb/s */
   bool fixed_rate = false;  /* --data-rate given: no rate ladder */
   bool no_block_ack = false;
@@ -120,9 +121,9 @@ bool parse_options(int argc, char **argv, Options &o) {
     else if (a == "--firmware") o.dev.firmware_dir = value();
     else if (a == "--mac-type") {
       const std::string t = value();
-      if (t == "listener") o.dev.mac_type = IwxDevice::MacType::Listener;
-      else if (t == "ibss") o.dev.mac_type = IwxDevice::MacType::Ibss;
-      else if (t == "sta") o.dev.mac_type = IwxDevice::MacType::Sta;
+      if (t == "listener") o.dev.mac_type = RadioMacType::Listener;
+      else if (t == "ibss") o.dev.mac_type = RadioMacType::Ibss;
+      else if (t == "sta") o.dev.mac_type = RadioMacType::Sta;
       else return false;
     } else if (a == "--data-rate") o.fixed_rate = parse_rate(value(), o.data_rate);
     else if (a == "--verbose") o.dev.verbose = true;
@@ -409,7 +410,13 @@ int main(int argc, char **argv) {
     /* The same AWDL engine on either backend: the user-mode hardware layer,
      * or the kernel driver's listener (--kernel). */
     const auto run = [&](auto &dev) {
-    constexpr bool kOwnCard = std::is_same_v<std::decay_t<decltype(dev)>, IwxDevice>;
+    /* What this backend can do (radio_backend.h), instead of asking whether
+     * it is IwxDevice: every call outside the core listener sits under
+     * `if constexpr` on its capability, so a backend implements only what it
+     * declares (no stubs). Nested lambdas read Dev::kCapabilities directly. */
+    using Dev = std::decay_t<decltype(dev)>;
+    constexpr RadioCapabilities caps = Dev::kCapabilities;
+    static_assert(radio::check_backend_contract<Dev>(), "radio backend contract");
     std::string error;
     if (!dev.open(opt.dev, error)) {
       log_line("bring-up failed: " + error);
@@ -417,15 +424,18 @@ int main(int argc, char **argv) {
       g_stop = true;
       return;
     }
+    /* One informational line for reports; it matches no pattern report.ps1
+     * or Supervisor.cs reacts to (iwx_selftest checks the wording). */
+    log_line(radio::format_capabilities_summary(caps));
     std::unique_ptr<WifiStation> sta;
     StaConfig sta_cfg;
     if (!opt.sta_config.empty()) {
       std::string err;
-      if constexpr (kOwnCard) {
+      if constexpr (caps.supports_station) {
         if (sta_cfg.load(opt.sta_config, err)) sta = std::make_unique<WifiStation>(dev, log_line);
         else log_line("station config: " + err);
       } else {
-        log_line("station config ignored: Windows runs the station on the kernel driver");
+        log_line(radio::station_policy_message(caps));
       }
       /* The file holds the Wi-Fi password: gone once read. */
       DeleteFileA(opt.sta_config.c_str());
@@ -478,6 +488,26 @@ int main(int argc, char **argv) {
     } agg;
     agg.sched.reset();
     agg.sched.assumeZero = true; /* upstream's default (iface161) */
+    /* The A-MPDU queue as seen from code that runs on every backend: one
+     * without supports_aggregate never turns agg.on and has no queue. */
+    const auto agg_ready = [&]() -> bool {
+      if constexpr (Dev::kCapabilities.supports_aggregate) return dev.agg_ready();
+      else return false;
+    };
+    const auto agg_queued = [&]() -> unsigned {
+      if constexpr (Dev::kCapabilities.supports_aggregate) return dev.agg_queued();
+      else return 0u;
+    };
+    /* The card's channel flags; a backend that does not enforce passive
+     * channels reads every channel as active (radio::channel_allows_tx). */
+    const auto chan_flags = [&](uint8_t ch) -> uint32_t {
+      if constexpr (Dev::kCapabilities.enforces_passive_channel) {
+        return dev.channel_flags(ch);
+      } else {
+        (void)ch;
+        return radio::kChannelActiveFlag;
+      }
+    };
     const auto now_us = [] {
       static LARGE_INTEGER f = [] {
         LARGE_INTEGER v;
@@ -669,11 +699,8 @@ int main(int argc, char **argv) {
         });
       }
     }
-    {
-      const uint32_t cf = dev.channel_flags(opt.channel);
-      log_line(std::string("event: channel ") + std::to_string(opt.channel) + " " +
-               (opt.channel <= 14 || (cf & (1u << 3)) ? "active" : "passive"));
-    }
+    log_line(std::string("event: channel ") + std::to_string(opt.channel) + " " +
+             (radio::channel_active(opt.channel, chan_flags(opt.channel)) ? "active" : "passive"));
 
     /* Host-side resend (ForbiddenItlwm's ResendState): frames to one station
      * go out one at a time; a failed one is sent again, with the retry flag,
@@ -698,15 +725,22 @@ int main(int argc, char **argv) {
      * connection dies. Keep a small window of frames in flight instead; the
      * station path already sends that way. Management frames keep their
      * per-frame retry so ADDBA answers stay reliable. */
-    const unsigned kTxWindow = opt.tx_window;
-    const bool batch_kick = opt.tx_window > 8;
+    /* Window, batched doorbell and ladder start, per backend
+     * (radio::resolve_tx_config): above 8 the doorbell is rung once per batch
+     * where the backend has one, and faster sending (experimental) starts one
+     * step up, at HT MCS 4: a short send spent most of itself climbing from
+     * legacy 24 (#4). */
+    const radio::TxConfig txc = radio::resolve_tx_config(opt.tx_window, caps);
+    if (txc.window_clamped)
+      log_line("tx window " + std::to_string(opt.tx_window) + " is above what backend " + caps.backend +
+               " takes: using " + std::to_string(txc.window));
+    const unsigned kTxWindow = txc.window;
+    const bool batch_kick = txc.batch_kick;
     constexpr size_t kQueueLimit = 4096; /* large uploads must not overflow at 1024 */
     unsigned inflight = 0;
     uint64_t resent = 0, gave_up = 0, uq_dropped = 0;
     awdl::RateLadder ladder;
-    /* Faster sending (experimental) also starts one step up, at HT MCS 4:
-     * a short send spent most of itself climbing from legacy 24 (#4). */
-    if (opt.tx_window > 8) ladder.step = 1;
+    ladder.step = txc.initial_rate_step;
     const bool wide80 = opt.channel > 14 && opt.width >= 80;
     const auto data_rate = [&]() -> TxRate {
       if (opt.fixed_rate) return opt.data_rate;
@@ -816,20 +850,21 @@ int main(int argc, char **argv) {
         inflight++;
         sent = true;
       }
-      if (sent && batch_kick) dev.kick_data(); /* one doorbell for the batch */
+      if constexpr (Dev::kCapabilities.supports_batched_kick) {
+        if (sent && batch_kick) dev.kick_data(); /* one doorbell for the batch */
+      }
       return sent || removed;
     };
     const auto may_send = [&] {
-      const uint32_t cf = dev.channel_flags(dev.channel());
-      return dev.channel() <= 14 || (cf & (1u << 3)) || beacon_heard;
+      return radio::channel_allows_tx(dev.channel(), chan_flags(dev.channel()), beacon_heard, Dev::kCapabilities);
     };
-    bool channel_open = dev.channel() <= 14 || (dev.channel_flags(dev.channel()) & (1u << 3));
+    bool channel_open = radio::channel_active(dev.channel(), chan_flags(dev.channel()));
     /* One scan, 10 s after start, while the AWDL channel is passive and no
      * beacon unlocked it: access points' Country elements let the firmware
      * learn the country and send its notice (ForbiddenItlwm's discovery scan). */
     const uint64_t country_scan_at = GetTickCount64() + 10000;
     bool country_scan_done = false;
-    agg.on = opt.aggregate && dev.agg_available();
+    if constexpr (caps.supports_aggregate) agg.on = opt.aggregate && dev.agg_available();
     if (opt.aggregate) log_line(agg.on ? "experimental A-MPDU sending: on" : "experimental A-MPDU sending: not available on this path");
     awdl::BaFilter ba_filter;
     uint16_t mgmt_seq = 0;
@@ -877,8 +912,8 @@ int main(int argc, char **argv) {
               if (to_peer) agg.last_peer_us = t;
               /* One path, in order, for the peer while its aggregate queue
                * holds or waits for frames (upstream's awdlCoexOrder). */
-              via_agg = to_peer && agg.step == Agg::Agreed && dev.agg_ready() &&
-                        (agg.bulk.bulk || len >= 1200 || !agg.wait.empty() || dev.agg_queued() > 0 ||
+              via_agg = to_peer && agg.step == Agg::Agreed && agg_ready() &&
+                        (agg.bulk.bulk || len >= 1200 || !agg.wait.empty() || agg_queued() > 0 ||
                          (agg.last_agg_us && t - agg.last_agg_us < 300000));
             }
             if (via_agg) {
@@ -914,23 +949,32 @@ int main(int argc, char **argv) {
       }
       /* Block Ack: open the firmware session, then answer from our queue. The
        * peer repeats its request until it hears an answer. */
-      while (!addba_pending.empty()) {
-        const awdl::AddbaRequest r = addba_pending.front();
-        addba_pending.pop_front();
-        if (!r.immediate || opt.no_block_ack) continue;
-        if (!dev.add_rx_ba(r.peer, r.tid, r.ssn, r.window, r.token)) continue;
-        uint8_t answer[awdl::kAddbaResponseLength];
-        awdl::build_addba_response(answer, r, dev_address, ++mgmt_seq);
-        if (may_send()) {
-          uq.push_front({std::vector<uint8_t>(answer, answer + sizeof(answer)), TxRate{}, false});
-          ba_answers++;
+      if constexpr (caps.supports_rx_ba) {
+        while (!addba_pending.empty()) {
+          const awdl::AddbaRequest r = addba_pending.front();
+          addba_pending.pop_front();
+          if (!r.immediate || opt.no_block_ack) continue;
+          if (!dev.add_rx_ba(r.peer, r.tid, r.ssn, r.window, r.token)) continue;
+          uint8_t answer[awdl::kAddbaResponseLength];
+          awdl::build_addba_response(answer, r, dev_address, ++mgmt_seq);
+          if (may_send()) {
+            uq.push_front({std::vector<uint8_t>(answer, answer + sizeof(answer)), TxRate{}, false});
+            ba_answers++;
+          }
         }
+        while (!delba_pending.empty()) {
+          dev.remove_rx_ba(delba_pending.front());
+          delba_pending.pop_front();
+        }
+      } else {
+        /* No receive Block Ack: requests go unanswered, as when a session
+         * cannot be opened, and the peer sends unaggregated. */
+        addba_pending.clear();
+        delba_pending.clear();
       }
-      while (!delba_pending.empty()) {
-        dev.remove_rx_ba(delba_pending.front());
-        delba_pending.pop_front();
-      }
-      if (agg.on) {
+      /* A-MPDU sending: compiled only for backends that declare it (agg.on
+       * is never set on the others). */
+      if constexpr (caps.supports_aggregate) if (agg.on) {
         const uint64_t t = now_us();
         const auto back_to_uq = [&] {
           /* Frames held for the aggregate queue go the ordinary way, first. */
@@ -1055,34 +1099,44 @@ int main(int argc, char **argv) {
       /* Promiscuous receive off while a session's data is busy; with A-MPDU
        * sending, for as long as the peer's station exists (upstream #57: with
        * it on, the firmware does not acknowledge the station's frames). */
-      bool any_ba = false;
-      for (unsigned t = 0; t < 8; t++) any_ba |= dev.rx_ba_open(t);
-      if (agg.on && agg.step != Agg::Off) {
-        if (dev.promiscuous()) dev.set_promiscuous(false);
-      } else if (any_ba && ba_filter.note(now_us(), rx_data_to_us)) {
-        dev.set_promiscuous(!ba_filter.off);
-      } else if (!any_ba && !dev.promiscuous()) {
-        ba_filter = awdl::BaFilter{};
-        dev.set_promiscuous(true);
+      if constexpr (caps.supports_promiscuous_toggle) {
+        bool any_ba = false;
+        if constexpr (caps.supports_rx_ba) {
+          for (unsigned t = 0; t < 8; t++) any_ba |= dev.rx_ba_open(t);
+        }
+        if (agg.on && agg.step != Agg::Off) {
+          if (dev.promiscuous()) dev.set_promiscuous(false);
+        } else if (any_ba && ba_filter.note(now_us(), rx_data_to_us)) {
+          dev.set_promiscuous(!ba_filter.off);
+        } else if (!any_ba && !dev.promiscuous()) {
+          ba_filter = awdl::BaFilter{};
+          dev.set_promiscuous(true);
+        }
       }
       {
-        std::string learned;
-        if (dev.answer_country_notice(&learned) && learned.size() == 2 && learned != "00" && learned != have_country) {
-          have_country = learned;
-          log_line("event: country " + have_country); /* the service keeps two letters only */
+        if constexpr (caps.supports_country_notice) {
+          std::string learned;
+          if (dev.answer_country_notice(&learned) && learned.size() == 2 && learned != "00" && learned != have_country) {
+            have_country = learned;
+            log_line("event: country " + have_country); /* the service keeps two letters only */
+          }
         }
         /* The channel's state as the firmware now gives it: a country taken
          * (or withdrawn) shows up here, and may_send() follows. */
-        const bool open = dev.channel() <= 14 || (dev.channel_flags(dev.channel()) & (1u << 3));
+        const bool open = radio::channel_active(dev.channel(), chan_flags(dev.channel()));
         if (open != channel_open) {
           channel_open = open;
           log_line(std::string("event: channel ") + std::to_string(dev.channel()) + (open ? " active" : " passive"));
         }
       }
       if (!want_country.empty() && want_country != have_country) {
-        if (dev.set_country(want_country)) {
-          have_country = want_country;
-          log_line("event: country " + have_country);
+        /* A peer's country (TLV 12) is applied only where the card takes one;
+         * elsewhere it is dropped, as a refused one is. */
+        if constexpr (caps.supports_set_country) {
+          if (dev.set_country(want_country)) {
+            have_country = want_country;
+            log_line("event: country " + have_country);
+          }
         }
         want_country.clear();
       }
@@ -1095,15 +1149,17 @@ int main(int argc, char **argv) {
           published_wifi = sta->state();
           log_line(std::string("event: wifi ") + sta->state_name());
         }
-        std::vector<uint8_t> ans;
-        while (sta->take_addba(ans)) {
-          TxRate r;
-          dev.sta_transmit(ans.data(), ans.size(), r, sta->state() == WifiStation::State::Running);
+        if constexpr (caps.supports_station) {
+          std::vector<uint8_t> ans;
+          while (sta->take_addba(ans)) {
+            TxRate r;
+            dev.sta_transmit(ans.data(), ans.size(), r, sta->state() == WifiStation::State::Running);
+          }
         }
         if (sta->state() != WifiStation::State::Running) busy = true;
       }
       if (pump()) busy = true;
-      if (inflight > 0 || !uq.empty() || !agg.wait.empty() || dev.agg_queued() > 0) busy = true;
+      if (inflight > 0 || !uq.empty() || !agg.wait.empty() || agg_queued() > 0) busy = true;
       if (busy) {
         idle_rounds = 0;
       } else if (++idle_rounds > 200) {
@@ -1114,7 +1170,7 @@ int main(int argc, char **argv) {
       const uint64_t now = GetTickCount64();
       if (!country_scan_done && now >= country_scan_at) {
         country_scan_done = true;
-        if (kOwnCard && !may_send() && !scan_started && !scan_wanted) {
+        if (radio::should_start_passive_discovery_scan(may_send(), scan_started, scan_wanted, caps)) {
           log_line("channel " + std::to_string(dev.channel()) + " is passive: scanning once so the firmware can learn the country");
           scan_wanted = true;
           scan_ssid.clear();
@@ -1123,7 +1179,7 @@ int main(int argc, char **argv) {
       if (scan_wanted && !scan_started) {
         scan_wanted = false;
         bool started = false;
-        if constexpr (kOwnCard) {
+        if constexpr (caps.supports_umac_scan) {
           started = dev.umac_scan(kScanChannels, sizeof(kScanChannels), scan_ssid.data(), scan_ssid.size(),
                                   dev.hw_address().data());
         }
@@ -1131,10 +1187,9 @@ int main(int argc, char **argv) {
         scan_started = true;
         log_line(started ? "event: scan-started" : "event: scan-started (beacons on this channel only)");
       }
-      bool scan_finished = false;
-      if constexpr (kOwnCard) scan_finished = scan_started && !dev.scan_running() && now - scan_started_ms > 300;
-      else scan_finished = scan_started && now - scan_started_ms > 2000;
-      if (scan_started && (scan_finished || now - scan_started_ms > 15000)) {
+      bool scan_running = false;
+      if constexpr (caps.supports_umac_scan) scan_running = scan_started && dev.scan_running();
+      if (radio::is_scan_complete(scan_started, scan_running, now - scan_started_ms, caps)) {
         scan_started = false;
         unsigned n = 0;
         for (const auto &[bssid, b] : bss_seen) {
@@ -1158,6 +1213,8 @@ int main(int argc, char **argv) {
       if (now - last_report >= 5000) {
         last_report = now;
         const TxStats &s = dev.tx_stats();
+        bool promiscuous = true; /* without the toggle the backend never turns it off */
+        if constexpr (caps.supports_promiscuous_toggle) promiscuous = dev.promiscuous();
         log_line("rx: " + std::to_string(rx_all) + " frames, " + std::to_string(rx_awdl) +
                  " AWDL action frames (" + std::to_string(rx_psf) + " PSF, " + std::to_string(rx_mif) +
                  " MIF; last " + std::to_string(awdl_dbm) + " dBm), " +
@@ -1168,9 +1225,9 @@ int main(int argc, char **argv) {
                  " waiting, " + std::to_string(uq_dropped) + " dropped; rate step " +
                  std::to_string(ladder.step) + " (" + std::to_string(ladder.ups) + " up, " +
                  std::to_string(ladder.downs) + " down); BA answers " + std::to_string(ba_answers) +
-                 (dev.promiscuous() ? "" : ", promiscuous off") +
+                 (promiscuous ? "" : ", promiscuous off") +
                  (tx_held_passive ? "; " + std::to_string(tx_held_passive) + " held (passive channel)" : ""));
-        if (agg.on) {
+        if constexpr (caps.supports_aggregate) if (agg.on) {
           const auto &a = dev.agg_stats();
           static const char *const kStep[] = {"idle", "asking", "agreed"};
           char rate[16];
@@ -1194,9 +1251,14 @@ int main(int argc, char **argv) {
         }
         if (sta) {
           const auto &r = sta->rx_stats();
+          unsigned sta_acked = 0, sta_failed = 0; /* sta is only ever set with supports_station */
+          if constexpr (caps.supports_station) {
+            sta_acked = dev.sta_tx_acked();
+            sta_failed = dev.sta_tx_failed();
+          }
           log_line(std::string("wifi: ") + sta->state_name() + ", " + std::to_string(sta->rx_packets()) +
                    " packets in, " + std::to_string(sta->tx_packets()) + " out; frames to the AP " +
-                   std::to_string(dev.sta_tx_acked()) + " acknowledged, " + std::to_string(dev.sta_tx_failed()) +
+                   std::to_string(sta_acked) + " acknowledged, " + std::to_string(sta_failed) +
                    " not; from the AP " + std::to_string(r.data) + " data frames (" + std::to_string(r.unicast) + " unicast), " + std::to_string(r.amsdu) +
                    " A-MSDU, dropped " + std::to_string(r.undecrypted) + " undecrypted, " +
                    std::to_string(r.not_llc) + " not LLC, " + std::to_string(r.tap_failed) + " TAP");

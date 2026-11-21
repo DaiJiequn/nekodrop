@@ -30,16 +30,9 @@
 #include "dma.h"
 #include "fw.h"
 #include "proxy.h"
-
-struct RxFrame {
-  const uint8_t *data; /* 802.11 frame, header first, no FCS */
-  size_t len;
-  int8_t dbm;          /* -127 when unknown */
-  uint8_t channel;
-  uint32_t rate_n_flags;
-  uint16_t status; /* IWX_RX_MPDU_RES_STATUS_*: decryption result */
-  bool mic_stripped = false; /* hardware removed the CCMP MIC (RADA) */
-};
+/* RxFrame, TxRate, TxStats, the open options and the backend contract: shared
+ * with KernelDevice and future backends, which need none of the headers above. */
+#include "radio_backend.h"
 
 /* The network the station joins, read from Windows before the card is taken. */
 struct StaParams {
@@ -51,34 +44,16 @@ struct StaParams {
   bool ht = false, vht = false, mimo = false;
 };
 
-struct TxRate {
-  enum Kind { Legacy, Ht, Vht, Auto } kind = Legacy; /* Auto: firmware rate control (TLC) */
-  unsigned mbps_x2 = 12; /* legacy rate in 500 kb/s units: 12 = 6 Mb/s */
-  unsigned mcs = 0;      /* HT MCS 0..15, VHT MCS 0..9 */
-  unsigned nss = 1;      /* VHT spatial streams, 1 or 2 */
-  bool wide80 = false;   /* VHT at 80 MHz */
-};
-
-struct TxStats {
-  uint64_t submitted = 0, completed = 0, acked = 0, failed = 0, retries = 0,
-           dropped_full = 0;
-};
-
 class IwxDevice {
 public:
-  enum class MacType { Listener, Ibss, Sta };
-
-  struct Options {
-    std::string firmware_dir;  /* holds iwlwifi-*.ucode */
-    std::string country = "ZZ"; /* MCC to ask for; ZZ keeps what the card has */
-    MacType mac_type = MacType::Listener;
-    bool verbose = false;
-    /* Experimental A-MPDU sending to the AWDL peer: one more TX ring. */
-    bool aggregate = false;
-  };
-
-  using Logger = std::function<void(const std::string &)>;
-  using RxHandler = std::function<void(const RxFrame &)>;
+  /* The names this class always had, now the shared types (radio_backend.h),
+   * so iwx.cpp, wifi_sta and kdriver/khal.cpp read the same. */
+  using MacType = RadioMacType;
+  using Options = RadioOpenOptions;
+  using Logger = RadioLogger;
+  using RxHandler = RadioRxHandler;
+  /* Everything radio_main may call on this backend (radio_backend.h). */
+  static constexpr RadioCapabilities kCapabilities = radio::iwx_capabilities();
 
   explicit IwxDevice(Logger log) : _log(std::move(log)) {}
   ~IwxDevice();
@@ -112,10 +87,7 @@ public:
   /* Goes up whenever the peer station is replaced: everything set up for the old one is gone. */
   uint32_t ba_epoch() const { return _ba_epoch; }
   const uint8_t *ba_peer() const { return _ba_station ? _ba_peer : nullptr; }
-  struct AggStats {
-    uint64_t frames = 0, notifs = 0, txed = 0, acked = 0, singles = 0;
-    uint32_t last_rate = 0, peak_frames = 0;
-  };
+  using AggStats = RadioAggStats;
   const AggStats &agg_stats() const { return _agg_stats; }
   bool rx_ba_open(unsigned tid) const { return tid < 8 && (_ba_tids >> tid) & 1; }
   /* Promiscuous receive on the listener on/off (off while a BA session is busy). */
@@ -177,7 +149,7 @@ public:
   void sta_leave();
   bool sta_active() const { return _sta_mac_added; }
   const StaParams &sta_params() const { return _sta; }
-  using TxStatusHandler = std::function<void(unsigned slot, bool acked)>;
+  using TxStatusHandler = RadioTxStatusHandler;
   void set_tx_status_handler(TxStatusHandler handler) { _on_tx = std::move(handler); }
   /* Firmware scan (iwx_scan.cpp): the firmware visits `channels` between the
    * station's and listener's slots; beacons and probe responses arrive through

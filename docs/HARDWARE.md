@@ -88,6 +88,47 @@ every CI build) checks the multi-vendor parsing, the forced *on demand* and
 the provider matching without a card or administrator rights.
 `NekoDropService.exe --status` prints the profile of the card it finds.
 
+### The radio's backend contract
+
+The radio daemon (`iwxradio/src/radio_main.cpp`) runs one AWDL engine over a
+*backend*: `IwxDevice` (the user-mode Intel driver) or `KernelDevice`
+(nekodrop-wlan.sys, `--kernel`). `iwxradio/src/radio_backend.h` is the
+contract between them: the shared frame, rate and option types, and a
+`RadioCapabilities` set that each backend declares as `kCapabilities`.
+`radio_main.cpp` branches on those bits (`if constexpr`) instead of asking
+whether the backend is `IwxDevice`, so a call a backend does not declare is
+never compiled for it, and `radio::check_backend_contract<Dev>()` turns a
+declared capability without its calls into a compile error.
+
+| Capability | `iwx` | `kernel` | a Realtek backend (devourer) |
+|---|---|---|---|
+| Wi-Fi station beside AWDL | yes | Windows keeps it | no |
+| Firmware scan for the Wi-Fi list | yes | no (beacons on the channel) | no |
+| Receive Block Ack, promiscuous on/off | yes | yes | no |
+| A-MPDU sending (experimental) | yes | no | no |
+| Batched doorbell for faster sending | yes | no (the driver rings itself) | no |
+| Firmware country notice | yes | no (the driver answers it) | no |
+| Set country, passive-channel rule | yes | yes | no |
+| Largest `--tx-window` | 64 | 64 | 8 |
+
+At start the radio logs one line with its backend's set, for example
+`radio: backend iwx: station yes, firmware-scan yes, rx-ba yes, …, tx-window up to 64`
+(worded so the diagnostic report's and the service's patterns ignore it).
+`iwx_selftest` (run by `scripts/build-radio.ps1`, so on every CI build)
+checks the matrix, refuses inconsistent sets, checks each per-capability
+policy against what the radio did before (TX window, passive channels,
+discovery scan, scan end, station message), and compiles a stand-in for a
+Realtek backend that has only the core listener calls, with no stubs. The
+Intel and kernel paths behave exactly as before; nothing Realtek runs.
+
+A new backend then means: a class with the core calls (`open`,
+`start_monitor`, `set_channel`, `set_address`, `transmit`, `transmit_slot`,
+the RX and TX-status handlers, `poll`, `check_health`, `healthy`,
+`tx_stats`, `channel`, `width_mhz`, `hw_address`, `stop`), a
+`kCapabilities` naming what else it has, and one more branch where
+`radio_main.cpp` picks the backend. `WifiStation` is still written for
+`IwxDevice`, so only it can declare a station.
+
 ## The steps
 
 1. **Detection (done).** The diagnostic report names every wireless card, its
@@ -96,13 +137,18 @@ the provider matching without a card or administrator rights.
 2. **Service card catalog (done).** `CardCatalog.cs` above: profiles and
    capabilities instead of Intel assumptions in `Card.cs` and
    `Supervisor.cs`, with an offline self-test. No change for Intel cards.
-3. **Installer message.** Once the Windows 10 INF is confirmed (#18, #12),
+3. **Radio backend contract (done).** `radio_backend.h` above: capabilities
+   instead of `IwxDevice` checks in `radio_main.cpp`, no Intel-only stubs in
+   `KernelDevice`, with offline checks in `iwx_selftest`. No change for Intel
+   cards or the kernel driver.
+4. **Installer message.** Once the Windows 10 INF is confirmed (#18, #12),
    `install.ps1` refuses with the same classification: which card it found,
    its PCI ID, and an alternative (winawdl for an RTL8852CE).
-4. **Experimental RTL8852CE.** After the register proxy picks its BAR by device
+5. **Experimental RTL8852CE.** After the register proxy picks its BAR by device
    and `restore.ps1` no longer assumes Intel: winawdl's RTL8852CE support
    behind an experimental switch, off by default (its profile becomes active
-   only with the switch on), forced to *on demand* by its profile.
+   only with the switch on), forced to *on demand* by its profile, as a radio
+   backend declaring the capabilities in the table above.
 
 When adding IDs, keep `AllProfiles` in `app/service/CardCatalog.cs`,
 `$SupportedIntelIds` in `installer/report.ps1`, `kDeviceIds` in
