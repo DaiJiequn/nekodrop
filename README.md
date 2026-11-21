@@ -255,6 +255,12 @@ nekodrop is built on other open-source projects. This section says exactly what 
 - `app/shellext/`: the Windows 11 context-menu handler.
 - `installer/`: the Inno Setup installer, the on-PC driver signing, TAP setup and uninstall.
 
+## Contributors
+
+Thanks to everyone who sent code and careful test reports:
+
+- [@BaiBaiAi](https://github.com/BaiBaiAi): Windows → iPhone sending without a client certificate ([#13](../../pull/13)), pipelined AWDL transmit so large uploads finish ([#15](../../pull/15)), and the first AX210 test report ([#14](../../issues/14)).
+
 ## License
 
 nekodrop as a whole is **GPL-2.0** (see [LICENSE](LICENSE)), because `iwxradio/` derives from itlwm/ForbiddenItlwm.

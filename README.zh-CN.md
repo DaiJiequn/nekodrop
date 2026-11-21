@@ -255,6 +255,12 @@ nekodrop 是在其他开源项目的基础上做的。这里写清楚哪些是**
 - `app/shellext/`：Windows 11 右键菜单。
 - `installer/`：Inno Setup 安装包、本机驱动签名、TAP 配置和卸载。
 
+## 贡献者
+
+感谢提交代码和细致测试报告的各位：
+
+- [@BaiBaiAi](https://github.com/BaiBaiAi)：Windows → iPhone 发送不再出示客户端证书（[#13](../../pull/13)）、AWDL 发送流水线化让大文件能传完（[#15](../../pull/15)），以及第一份 AX210 实测报告（[#14](../../issues/14)）。
+
 ## 许可
 
 nekodrop 整体以 **GPL-2.0** 发布（见 [LICENSE](LICENSE)），因为 `iwxradio/` 派生自 itlwm/ForbiddenItlwm。
