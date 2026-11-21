@@ -15,7 +15,7 @@
 
 <p align="center">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078d4">
-  <img alt="card" src="https://img.shields.io/badge/card-Intel%20AX201%20(tested)%20%7C%20AX200%2FAX210%2FAX211%20(untested)-6c5ce7">
+  <img alt="card" src="https://img.shields.io/badge/card-Intel%20AX201%20%7C%20AX200%20%7C%20AX210%20%7C%20AX211%20(user%20reports)-6c5ce7">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--2.0-blue">
   <img alt="status" src="https://img.shields.io/badge/status-experimental-orange">
 </p>
@@ -57,15 +57,16 @@
 
 ## 支持的网卡
 
-nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上游驱动（[ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`）带了固件的网卡都已支持。**只有 AX201 做过实机测试**，其他网卡是照上游移植的，未经测试。
+nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上游驱动（[ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`）带了固件的网卡都已支持。作者用 AX201 测试；AX200、AX210、AX211 已有用户反馈双向 AirDrop 可用（见下表链接），其余网卡照上游移植，未经测试。
 
 | 网卡 | PCI ID（`8086:`） | 固件 | 状态 |
 |---|---|---|---|
 | **Intel Wi-Fi 6 AX201** 160 MHz（CNVi） | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | ✅ **已实测**（`43F0` 上的 QuZ） |
 | Qu/QuZ 上的 Intel Wireless-AC 9560 / 9462 / 9461（CNVi） | 与 AX201 相同 | `Qu/QuZ-jf-b0-68` | ⚠️ 未测试 |
-| Intel Wi-Fi 6 AX200（独立网卡） | `2723` | `cc-a0-68` | ✅ 用户反馈 iPhone → PC 接收正常（[#1](../../issues/1)） |
-| Intel Wi-Fi 6E AX210（独立网卡） | `2725` | `ty-a0-gf-a0-68` + PNVM | ⚠️ 未测试 |
-| Intel Wi-Fi 6E AX211 / AX411（CNVi，第 12 代及以后） | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf(4)-a0-68` + PNVM | ⚠️ 未测试 |
+| Intel Wi-Fi 6 AX200（独立网卡） | `2723` | `cc-a0-68` | ✅ 用户反馈双向 AirDrop 可用（[#1](../../issues/1)、[#4](../../issues/4)） |
+| Intel Wi-Fi 6E AX210（独立网卡） | `2725` | `ty-a0-gf-a0-68` + PNVM | ✅ 用户反馈双向 AirDrop 可用（[#14](../../issues/14)）；部分机器仍在修（[#11](../../issues/11)） |
+| Intel Wi-Fi 6E AX211（CNVi，第 12 代及以后） | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM | ✅ 用户反馈双向 AirDrop 可用（[#9](../../issues/9)）；部分机器发现设备还不稳定（[#16](../../issues/16)） |
+| Intel Wi-Fi 6E AX411 / Killer AX1690（CNVi） | 与 AX211 相同 | `so-a0-gf4-a0-68` + PNVM | ⚠️ 未测试（[#7](../../issues/7)） |
 | So 平台上的 Intel Wi-Fi 6 AX203 / 9560 | 与 AX211 相同 | `so-a0-hr/jf-b0-68` | ⚠️ 未测试 |
 | Intel SnJ `2726`、QnJ `2720`、Meteor Lake `7E40`/`2729` | | 上游没有固件 | ❌ |
 | Intel BE200 / BE201（Wi-Fi 7） | | 上游没有驱动 | ❌ |
@@ -98,8 +99,8 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 
 ## 系统要求
 
-- Windows 10 2004（版本 19041）或更新的 64 位系统，推荐 Windows 11。
-- 受支持的 Intel 网卡（见上表；实测过的是 AX201）。
+- Windows 10 2004（版本 19041）或更新的 64 位系统，推荐 Windows 11：Windows 10 上部分机器的注册表代理驱动目前起不来（[#18](../../issues/18)、[#12](../../issues/12)），排查中。
+- 受支持的 Intel 网卡（见上表）。
 - 安装需要管理员权限。
 - 发送文件需要蓝牙：AirDrop 用蓝牙低功耗信标唤醒附近的苹果设备。
 - 苹果设备那边把 AirDrop 设为 **所有人（10 分钟）**。“仅限联系人”需要 Apple ID 证书，nekodrop 没有。
@@ -160,15 +161,17 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 
 | 部分 | 状态 |
 |---|---|
-| 用户态 Intel 驱动：固件启动、监听、注入、扫描 | ✅ AX201 上可用；AX210 系列的启动路径（gen3 context info、IML、PNVM）已移植 |
+| 用户态 Intel 驱动：固件启动、监听、注入、扫描 | ✅ AX201、AX200、AX210、AX211 上可用（后三者为用户反馈） |
 | iPhone → Windows | ✅ 可用（收到的照片完整，哈希一致） |
-| Windows → iPhone | ✅ 可用（AX201 实测） |
+| Windows → iPhone | ✅ 可用（AX201 实测；AX200、AX210、AX211 用户反馈可用） |
 | 联网同时 AirDrop | ✅ 可用（WPA2、DHCP、DNS 都走“nekodrop”网卡） |
 | Wi-Fi 管理、已保存网络、网页登录识别 | ✅ |
 | 服务、托盘程序、通知、右键菜单、安装包 | ✅ |
 | 纯 WPA3、OWE | 🧪 0.1.12，未实机测试 |
 | 802.1X（企业版） | ⏳ 计划中 |
-| 其他 Intel 网卡（AX200/AX210/AX211/AX411、Qu 上的 9560） | 🧪 已照上游移植，未实机测试 |
+| AX200、AX210、AX211 | ✅ 用户反馈双向 AirDrop 可用 |
+| AX411、Qu/So 上的 9560、AX203 | 🧪 已照上游移植，未实机测试 |
+| Windows 10 | ⚠️ 部分机器上注册表代理驱动起不来（[#18](../../issues/18)），排查中 |
 | 内核 WiFiCx 驱动（`kdriver/`） | 🧊 已搁置：实验性，安装包**不会安装**它，见 [docs/KERNEL.md](docs/KERNEL.md) |
 
 ## 工作原理
