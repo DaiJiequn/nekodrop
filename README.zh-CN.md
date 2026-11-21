@@ -5,12 +5,12 @@
 <h1 align="center">nekodrop</h1>
 
 <p align="center">
-  <b>用笔记本自带的 Intel 网卡在 Windows 上收发 AirDrop，Wi-Fi 照常上网。</b><br>
+  <b>用笔记本自带无线网卡在 Windows 上原生收发 AirDrop，Wi-Fi 照常上网。</b><br>
   不需要 USB 网卡，不需要 Linux 虚拟机，也不需要 Mac。
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · 简体中文
+  <a href="README.md">English</a> · 简体中文 · <a href="docs/COMPATIBILITY.zh-CN.md">网卡兼容性文档</a> · <a href="CHANGELOG.md">更新日志</a>
 </p>
 
 <p align="center">
@@ -57,7 +57,11 @@
 
 ## 支持的网卡
 
-nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上游驱动（[ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`）带了固件的网卡都已支持。作者用 AX201 测试；AX200、AX210、AX211 已有用户反馈双向 AirDrop 可用（见下表链接），其余网卡照上游移植，未经测试。
+nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`）直接驱动无线网卡芯片。当前已原生支持 Intel 22000 / AX210 族网卡（移植自 [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`），并正在以底层原生自带的方式快速扩展 Realtek（`RTL8852CE` / `RTL8852BE`）与 MediaTek（`MT7921` / `MT7922`）等跨品牌网卡。
+
+**完整跨品牌网卡兼容性文档（Intel / Realtek / MediaTek / 高通）：[docs/COMPATIBILITY.zh-CN.md](docs/COMPATIBILITY.zh-CN.md)** · **更新日志：[CHANGELOG.md](CHANGELOG.md)** · **底层多网卡架构：[docs/HARDWARE.md](docs/HARDWARE.md)**
+
+当前已内置启用的 Intel 网卡速览：
 
 | 网卡 | PCI ID（`8086:`） | 固件 | 状态 |
 |---|---|---|---|

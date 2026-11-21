@@ -5,12 +5,12 @@
 <h1 align="center">nekodrop</h1>
 
 <p align="center">
-  <b>AirDrop on Windows, with the Intel Wi-Fi card already in your laptop. Wi-Fi keeps working.</b><br>
+  <b>Native AirDrop on Windows with your laptop's built-in Wi-Fi card. Wi-Fi keeps working.</b><br>
   No USB dongle, no Linux VM, no Mac.
 </p>
 
 <p align="center">
-  English · <a href="README.zh-CN.md">简体中文</a>
+  English · <a href="README.zh-CN.md">简体中文</a> · <a href="docs/COMPATIBILITY.md">Card Compatibility</a> · <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 <p align="center">
@@ -57,7 +57,11 @@ Other AX201 laptops should behave the same, since the chip and firmware are iden
 
 ## Supported hardware
 
-nekodrop talks to the Wi-Fi chip directly, so it only works on chips it has a driver for. It supports every card the upstream driver ([ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)'s `hal_iwx`) ships firmware for. The author tests on an AX201; AX200, AX210 and AX211 have two-way AirDrop working in user reports (links below). The rest are ported from upstream and untested.
+nekodrop talks to the Wi-Fi chip directly through modular backends (`CardCatalog` + `radio_backend.h`). Today's built-in driver supports Intel 22000/AX210-family cards (ported from [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)'s `hal_iwx`), with Realtek (`RTL8852CE` / `RTL8852BE`) and MediaTek (`MT7921` / `MT7922`) multi-vendor backends actively being integrated as native built-in support.
+
+**Full multi-vendor compatibility matrix (Intel / Realtek / MediaTek / Qualcomm): [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)** · **Release history: [CHANGELOG.md](CHANGELOG.md)** · **Driver architecture: [docs/HARDWARE.md](docs/HARDWARE.md)**
+
+Quick summary of currently active Intel cards:
 
 | Card | PCI IDs (`8086:`) | Firmware | Status |
 |---|---|---|---|
