@@ -38,6 +38,22 @@ public:
   uint32_t channel_flags(uint8_t channel) const;
   /* The kernel driver answers the firmware's country notice itself. */
   bool answer_country_notice(std::string *) { return false; }
+  /* Experimental A-MPDU sending is a user-mode feature: never available here. */
+  struct AggStats {
+    uint64_t frames = 0, notifs = 0, txed = 0, acked = 0, singles = 0;
+    uint32_t last_rate = 0, peak_frames = 0;
+  };
+  bool agg_available() const { return false; }
+  bool agg_ready() const { return false; }
+  bool agg_setup(const uint8_t *, bool, bool) { return false; }
+  bool agg_enable(bool) { return false; }
+  bool agg_pause(bool) { return false; }
+  int transmit_agg(const uint8_t *, size_t) { return -1; }
+  unsigned agg_queued() const { return 0; }
+  uint16_t agg_seq() const { return 0; }
+  uint32_t ba_epoch() const { return 0; }
+  const uint8_t *ba_peer() const { return nullptr; }
+  const AggStats &agg_stats() const { return _agg_stats; }
   bool transmit(const uint8_t *frame, size_t len, const TxRate &rate) { return transmit_slot(frame, len, rate) >= 0; }
   /* The driver rings the doorbell itself: `kick` and kick_data() are for the user-mode path. */
   int transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate, bool kick = true);
@@ -47,6 +63,7 @@ public:
   int poll();
   void check_health();
   bool healthy() const { return _handle != INVALID_HANDLE_VALUE && _healthy; }
+  AggStats _agg_stats;
   const TxStats &tx_stats() const { return _stats; }
   uint8_t channel() const { return _channel; }
   unsigned width_mhz() const { return _width; }

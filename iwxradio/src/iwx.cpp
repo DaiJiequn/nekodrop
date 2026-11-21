@@ -12,6 +12,7 @@
 #include "plat.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 
@@ -300,6 +301,13 @@ bool IwxDevice::alloc_rings(std::string &error) {
             std::to_string(_dma.longest_run()) + "; " + std::to_string(pages_of(tx_count * sizeof(iwx_tfh_tfd))) +
             " needed)";
     return false;
+  }
+  /* Experimental A-MPDU sending: its own ring for the peer's TID 0. Only when
+   * asked for, so the default memory need is unchanged; without it the radio
+   * just sends as before. */
+  if (_opt.aggregate && !make_ring(_aggq, tx_count, 0, kTxPayloadSlot)) {
+    _log("aggregate: no DMA memory for its ring; sending without A-MPDU");
+    _aggq = TxRing{};
   }
   _cmd_slots.resize(cmd_count);
   _cmd_big.resize(cmd_count);
@@ -1190,35 +1198,9 @@ bool IwxDevice::add_rx_ba(const uint8_t peer[6], unsigned tid, uint16_t ssn, uin
   constexpr uint8_t kBaStation = 3; /* ForbiddenItlwm's kAwdlBaStationId */
   int err = 0;
   uint32_t status = 0;
-  if (_ba_station && std::memcmp(_ba_peer, peer, 6) != 0) {
-    /* A new peer: the old station and its sessions go. */
-    iwx_rm_sta_cmd rm{};
-    rm.sta_id = kBaStation;
-    send_cmd(IWX_REMOVE_STA, &rm, sizeof(rm), false, nullptr);
-    _ba_station = false;
-    _ba_tids = 0;
-  }
-  if (!_ba_station) {
-    iwx_add_sta_cmd cmd{};
-    cmd.sta_id = kBaStation;
-    cmd.station_type = IWX_STA_LINK;
-    cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
-    std::memcpy(cmd.addr, peer, 6);
-    cmd.tid_disable_tx = htole16(0xffff);
-    cmd.station_flags = htole32((_width >= 80 && _channel > 14 ? IWX_STA_FLG_FAT_EN_80MHZ
-                                                               : IWX_STA_FLG_FAT_EN_20MHZ) |
-                                IWX_STA_FLG_MIMO_EN_MIMO2);
-    cmd.station_flags_msk = htole32(IWX_STA_FLG_FAT_EN_MSK | IWX_STA_FLG_MIMO_EN_MSK);
-    status = IWX_ADD_STA_SUCCESS;
-    err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
-    if (err || (status & IWX_ADD_STA_STATUS_MASK) != IWX_ADD_STA_SUCCESS) {
-      nic_unlock();
-      _log("Block Ack: peer station refused (err " + std::to_string(err) + ", status " +
-           hex(status) + ")");
-      return false;
-    }
-    _ba_station = true;
-    std::memcpy(_ba_peer, peer, 6);
+  if (!ensure_ba_station(peer)) {
+    nic_unlock();
+    return false;
   }
   /* A new token is a new session with its own start: drop the old one first. */
   if (((_ba_tids >> tid) & 1) && _ba_token[tid] != token) {
@@ -1256,6 +1238,177 @@ bool IwxDevice::add_rx_ba(const uint8_t peer[6], unsigned tid, uint16_t ssn, uin
   }
   nic_unlock();
   return true;
+}
+
+/* The peer's firmware station, bound to the listener; replaces another
+ * peer's (with its sessions and aggregation queue). nic_lock() held. */
+bool IwxDevice::ensure_ba_station(const uint8_t peer[6]) {
+  constexpr uint8_t kBaStation = 3;
+  if (_ba_station && std::memcmp(_ba_peer, peer, 6) == 0) return true;
+  if (_ba_station) {
+    /* A new peer: the old station and its sessions go; the firmware frees
+     * its queues with it (new TX API). */
+    iwx_rm_sta_cmd rm{};
+    rm.sta_id = kBaStation;
+    send_cmd(IWX_REMOVE_STA, &rm, sizeof(rm), false, nullptr);
+    _ba_station = false;
+    _ba_tids = 0;
+    _agg_queue_enabled = false;
+    _aggq.queued = 0;
+    _ba_epoch++;
+  }
+  iwx_add_sta_cmd cmd{};
+  cmd.sta_id = kBaStation;
+  cmd.station_type = IWX_STA_LINK;
+  cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+  std::memcpy(cmd.addr, peer, 6);
+  cmd.tid_disable_tx = htole16(0xffff);
+  const bool wide = _width >= 80 && _channel > 14;
+  uint32_t flags = (wide ? IWX_STA_FLG_FAT_EN_80MHZ : IWX_STA_FLG_FAT_EN_20MHZ) | IWX_STA_FLG_MIMO_EN_MIMO2;
+  uint32_t mask = IWX_STA_FLG_FAT_EN_MSK | IWX_STA_FLG_MIMO_EN_MSK;
+  if (_aggq.count) {
+    /* As ForbiddenItlwm adds the peer for sending: the largest aggregate the
+     * width allows. Only with A-MPDU sending on; the default is unchanged. */
+    flags |= wide ? IWX_STA_FLG_MAX_AGG_SIZE_1024K : IWX_STA_FLG_MAX_AGG_SIZE_64K;
+    mask |= IWX_STA_FLG_MAX_AGG_SIZE_MSK | IWX_STA_FLG_AGG_MPDU_DENS_MSK;
+  }
+  cmd.station_flags = htole32(flags);
+  cmd.station_flags_msk = htole32(mask);
+  uint32_t status = IWX_ADD_STA_SUCCESS;
+  const int err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+  if (err || (status & IWX_ADD_STA_STATUS_MASK) != IWX_ADD_STA_SUCCESS) {
+    _log("Block Ack: peer station refused (err " + std::to_string(err) + ", status " + hex(status) + ")");
+    return false;
+  }
+  _ba_station = true;
+  std::memcpy(_ba_peer, peer, 6);
+  _ba_epoch++;
+  return true;
+}
+
+bool IwxDevice::agg_setup(const uint8_t peer[6], bool vht80, bool mimo) {
+  if (!_aggq.count || !_mac_added) return false;
+  if (!nic_lock()) return false;
+  bool ok = ensure_ba_station(peer);
+  if (ok && !_agg_queue_enabled) {
+    const int err = enable_queue(_aggq, 3, 0);
+    if (err) {
+      _log("aggregate: queue refused (" + std::to_string(err) + ")");
+      ok = false;
+    } else {
+      _agg_queue_enabled = true;
+      /* Our sequence numbers follow the ring, as upstream starts them. */
+      _agg_seq = static_cast<uint16_t>(_aggq.cur & 0xfff);
+    }
+  }
+  if (ok) {
+    /* Firmware rate control for the peer: VHT at 80 MHz when the listener
+     * is, two streams when both antennas can send (upstream's iwx_rs_init). */
+    iwx_tlc_config_cmd_v4 c{};
+    c.sta_id = 3;
+    c.non_ht_rates = htole16(static_cast<uint16_t>(_channel <= 14 ? 0x0fff : 0x0ff0));
+    const uint8_t ant = valid_tx_ant();
+    c.chains = static_cast<uint8_t>(((ant & 1) ? IWX_TLC_MNG_CHAIN_A_MSK : 0) |
+                                    ((ant & 2) ? IWX_TLC_MNG_CHAIN_B_MSK : 0));
+    const bool two = mimo && (ant & 3) == 3;
+    const bool vht = vht80 && _channel > 14;
+    c.mode = vht ? IWX_TLC_MNG_MODE_VHT : IWX_TLC_MNG_MODE_HT;
+    const uint16_t mcs = vht ? 0x03ff : 0x00ff;
+    c.ht_rates[IWX_TLC_NSS_1][IWX_TLC_MCS_PER_BW_80] = htole16(mcs);
+    if (two) c.ht_rates[IWX_TLC_NSS_2][IWX_TLC_MCS_PER_BW_80] = htole16(mcs);
+    c.max_ch_width = static_cast<uint8_t>(vht && _width >= 80 ? IWX_TLC_MNG_CH_WIDTH_80MHZ : IWX_TLC_MNG_CH_WIDTH_20MHZ);
+    c.sgi_ch_width_supp = static_cast<uint8_t>((1u << IWX_TLC_MNG_CH_WIDTH_20MHZ) |
+                                               (vht ? (1u << IWX_TLC_MNG_CH_WIDTH_80MHZ) : 0u));
+    const uint32_t id = iwx_cmd_id(IWX_TLC_MNG_CONFIG_CMD, IWX_DATA_PATH_GROUP, 0);
+    const uint8_t ver = cmd_version(IWX_DATA_PATH_GROUP, IWX_TLC_MNG_CONFIG_CMD);
+    int err;
+    if (ver == 4) {
+      err = send_cmd(id, &c, sizeof(c), false, nullptr);
+    } else {
+      iwl_tlc_config_cmd_v3 v3{};
+      v3.sta_id = c.sta_id;
+      v3.max_ch_width = c.max_ch_width;
+      v3.mode = c.mode;
+      v3.chains = c.chains;
+      v3.flags = c.flags;
+      v3.non_ht_rates = c.non_ht_rates;
+      v3.ht_rates[0][0] = c.ht_rates[0][0];
+      v3.ht_rates[1][0] = c.ht_rates[1][0];
+      v3.sgi_ch_width_supp = c.sgi_ch_width_supp;
+      err = send_cmd(id, &v3, sizeof(v3), false, nullptr);
+    }
+    if (err) _log("aggregate: rate control refused (" + std::to_string(err) + ")");
+    ok = err == 0;
+  }
+  nic_unlock();
+  return ok;
+}
+
+bool IwxDevice::agg_enable(bool on) {
+  if (!_ba_station || !_agg_queue_enabled) return false;
+  iwx_add_sta_cmd cmd{};
+  cmd.sta_id = 3;
+  cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+  cmd.add_modify = IWX_STA_MODE_MODIFY;
+  /* iwlmvm enables aggregation for a TID by clearing its tid_disable_tx bit. */
+  cmd.tid_disable_tx = htole16(static_cast<uint16_t>(on ? 0xfffe : 0xffff));
+  cmd.modify_mask = IWX_STA_MODIFY_TID_DISABLE_TX;
+  uint32_t status = IWX_ADD_STA_SUCCESS;
+  if (!nic_lock()) return false;
+  const int err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+  nic_unlock();
+  return !err && (status & IWX_ADD_STA_STATUS_MASK) == IWX_ADD_STA_SUCCESS;
+}
+
+bool IwxDevice::agg_pause(bool on) {
+  if (!_ba_station) return false;
+  iwx_add_sta_cmd cmd{};
+  cmd.sta_id = 3;
+  cmd.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(0, 0));
+  cmd.add_modify = IWX_STA_MODE_MODIFY;
+  cmd.station_flags = htole32(on ? IWX_STA_FLG_DISABLE_TX : 0u);
+  cmd.station_flags_msk = htole32(IWX_STA_FLG_DISABLE_TX);
+  uint32_t status = IWX_ADD_STA_SUCCESS;
+  if (!nic_lock()) return false;
+  const int err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+  nic_unlock();
+  return !err && (status & IWX_ADD_STA_STATUS_MASK) == IWX_ADD_STA_SUCCESS;
+}
+
+int IwxDevice::transmit_agg(const uint8_t *frame, size_t len) {
+  if (!_agg_queue_enabled || _fw_error) return -1;
+  TxRate rate;
+  rate.kind = TxRate::Auto; /* the firmware's rate control picks */
+  const int slot = transmit_on(_aggq, frame, len, rate, false);
+  if (slot >= 0) {
+    _agg_seq = static_cast<uint16_t>((_agg_seq + 1) & 0xfff);
+    _agg_stats.frames++;
+  }
+  return slot;
+}
+
+/* Compressed Block Ack notification (new TX API): the aggregation queue's
+ * progress. Frees the ring up to the index the firmware gives. */
+void IwxDevice::handle_ba_notif(const uint8_t *payload, size_t len) {
+  if (!_agg_queue_enabled || len < offsetof(iwx_compressed_ba_notif, tfd)) return;
+  const auto *r = reinterpret_cast<const iwx_compressed_ba_notif *>(payload);
+  const unsigned n = le16toh(r->tfd_cnt);
+  if (len < offsetof(iwx_compressed_ba_notif, tfd) + n * sizeof(iwx_compressed_ba_tfd)) return;
+  for (unsigned i = 0; i < n; i++) {
+    const iwx_compressed_ba_tfd &t = r->tfd[i];
+    if (le16toh(t.q_num) != _aggq.qid) continue;
+    _agg_stats.notifs++;
+    _agg_stats.txed += le16toh(r->txed);
+    _agg_stats.acked += le16toh(r->done);
+    _agg_stats.last_rate = le32toh(r->tx_rate);
+    _agg_stats.peak_frames = std::max<uint32_t>(_agg_stats.peak_frames, le16toh(r->txed));
+    const unsigned idx = le16toh(t.tfd_index) & (_aggq.count - 1);
+    const unsigned freed = (idx + _aggq.count - _aggq.tail) % _aggq.count;
+    if (freed <= _aggq.queued) {
+      _aggq.tail = idx;
+      _aggq.queued -= freed;
+    }
+  }
 }
 
 bool IwxDevice::remove_rx_ba(unsigned tid) {
@@ -1883,6 +2036,9 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
       _notice_pending = true; /* answered from the main loop: no commands from here */
     }
     break;
+  case IWX_BA_NOTIF:
+    handle_ba_notif(payload, plen);
+    break;
   case IWX_REPLY_ERROR: {
     if (plen >= sizeof(iwx_error_resp)) {
       const auto *r = reinterpret_cast<const iwx_error_resp *>(payload);
@@ -1954,6 +2110,21 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot
       len < sizeof(*r) + size_t(r->frame_count - 1) * sizeof(r->status) + sizeof(uint32_t))
     return;
   const unsigned queue = le16toh(r->tx_queue);
+  if (_agg_queue_enabled && queue == _aggq.qid) {
+    /* A frame of the aggregation queue the firmware sent on its own; the
+     * Block Ack notification reclaims the rest. */
+    _agg_stats.singles += r->frame_count == 1;
+    uint32_t ssn;
+    std::memcpy(&ssn, reinterpret_cast<const uint8_t *>(&r->status) + r->frame_count * sizeof(r->status),
+                sizeof(ssn));
+    const unsigned idx = (le32toh(ssn) & 0xfff) & (_aggq.count - 1);
+    const unsigned freed = (idx + _aggq.count - _aggq.tail) % _aggq.count;
+    if (freed <= _aggq.queued) {
+      _aggq.tail = idx;
+      _aggq.queued -= freed;
+    }
+    return;
+  }
   if (_sta_queue_enabled && queue == _staq.qid) {
     /* The station's frames: the firmware retries them itself; only the ring
      * is reclaimed. Failures are logged, they mean the AP never acknowledged. */

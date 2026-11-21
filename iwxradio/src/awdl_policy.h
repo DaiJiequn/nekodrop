@@ -7,6 +7,7 @@
  * around them is replaced by plain structs.
  */
 #pragma once
+#include <vector>
 
 #include <cstddef>
 #include <cstdint>
@@ -241,6 +242,106 @@ struct RateLadder {
     }
     if (step >= top) step = top - 1;
     ok = failed = 0;
+  }
+};
+
+
+/* ---- Sending with Block Ack (experimental --aggregate), from ForbiddenItlwm's
+ * include/AWDLBlockAck.hpp. */
+
+/* Asks `peer` for a session to send to it: immediate, no A-MSDU, no timeout. */
+inline size_t build_addba_request(uint8_t *out, const uint8_t *peer, const uint8_t *own, const uint8_t *bssid,
+                                  uint8_t token, uint8_t tid, uint16_t window, uint16_t start_seq, uint16_t seq) {
+  std::memset(out, 0, kAddbaResponseLength);
+  out[0] = 0xd0;
+  std::memcpy(out + 4, peer, 6);
+  std::memcpy(out + 10, own, 6);
+  std::memcpy(out + 16, bssid, 6);
+  const uint16_t sc = static_cast<uint16_t>(seq << 4);
+  out[22] = static_cast<uint8_t>(sc);
+  out[23] = static_cast<uint8_t>(sc >> 8);
+  out[24] = 3; /* Block Ack */
+  out[25] = 0; /* ADDBA request */
+  out[26] = token;
+  const uint16_t params = static_cast<uint16_t>(2u | unsigned(tid & 7) << 2 | unsigned(window) << 6);
+  out[27] = static_cast<uint8_t>(params);
+  out[28] = static_cast<uint8_t>(params >> 8);
+  const uint16_t start = static_cast<uint16_t>(start_seq << 4);
+  out[31] = static_cast<uint8_t>(start);
+  out[32] = static_cast<uint8_t>(start >> 8);
+  return kAddbaResponseLength;
+}
+
+struct AddbaAnswer {
+  uint8_t token, tid;
+  uint16_t status, window;
+  bool immediate;
+};
+/* The peer's answer to our request: category 3, action 1, to `own`. */
+inline bool parse_addba_answer(const uint8_t *f, size_t length, const uint8_t *own, AddbaAnswer *out) {
+  if (length < 33 || f[0] != 0xd0 || std::memcmp(f + 4, own, 6) != 0 || f[24] != 3 || f[25] != 1) return false;
+  out->token = f[26];
+  out->status = static_cast<uint16_t>(f[27] | f[28] << 8);
+  const uint16_t params = static_cast<uint16_t>(f[29] | f[30] << 8);
+  out->tid = static_cast<uint8_t>((params >> 2) & 15u);
+  out->window = params >> 6;
+  out->immediate = params & 2u;
+  return true;
+}
+
+/* A plain data frame as QoS data on `tid` with our sequence number: the new
+ * length, or 0 if `in` is not plain data. */
+inline size_t build_qos_data(const uint8_t *in, size_t length, uint8_t tid, uint16_t seq, std::vector<uint8_t> &out) {
+  if (length < 24 || in[0] != 0x08) return 0;
+  out.assign(in, in + 24);
+  out[0] = 0x88;
+  const uint16_t sc = static_cast<uint16_t>(seq << 4);
+  out[22] = static_cast<uint8_t>(sc);
+  out[23] = static_cast<uint8_t>(sc >> 8);
+  out.push_back(tid & 7u);
+  out.push_back(0);
+  out.insert(out.end(), in + 24, in + length);
+  return out.size();
+}
+
+/* The A-MPDU path only while a bulk send runs: short exchanges such as a
+ * connection's setup stay on the monitor queue, where the host resends a
+ * frame lost while the peer is away (the firmware's aggregate queue does
+ * not, and those stalled through it upstream). */
+constexpr uint64_t kBaTxCheckUS = 1000000;
+constexpr uint32_t kBaTxBulkFrames = 200, kBaTxQuietFrames = 40, kBaTxQuietChecks = 2;
+struct BaTxBulk {
+  uint64_t last_us = 0;
+  uint32_t last_frames = 0, quiet_checks = 0;
+  bool bulk = false;
+  /* `frames` counts payload-sized unicast data frames to the peer. True on a change. */
+  bool note(uint64_t now_us, uint32_t frames, bool fast_entry) {
+    const bool short_sample = fast_entry && !bulk;
+    const uint64_t sample = short_sample ? kBaTxCheckUS / 4 : kBaTxCheckUS;
+    const uint32_t entry = short_sample ? kBaTxBulkFrames / 4 : kBaTxBulkFrames;
+    if (!last_us) {
+      last_us = now_us;
+      last_frames = frames;
+      return false;
+    }
+    if (now_us - last_us < sample) return false;
+    const uint32_t delta = frames - last_frames;
+    last_us = now_us;
+    last_frames = frames;
+    if (!bulk) {
+      quiet_checks = 0;
+      if (delta < entry) return false;
+      bulk = true;
+      return true;
+    }
+    if (delta >= kBaTxQuietFrames) {
+      quiet_checks = 0;
+      return false;
+    }
+    if (++quiet_checks < kBaTxQuietChecks) return false;
+    quiet_checks = 0;
+    bulk = false;
+    return true;
   }
 };
 

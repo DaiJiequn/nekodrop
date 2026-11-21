@@ -94,6 +94,8 @@
           <TextBlock Text="{local:T set.experimental}" FontWeight="SemiBold"/>
           <CheckBox x:Name="FastSendBox" Content="{local:T set.fastSend}"/>
           <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.fastSend.hint}"/>
+          <CheckBox x:Name="AggregateBox" Content="{local:T set.aggregate}" Margin="0,8,0,0"/>
+          <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.aggregate.hint}"/>
         </StackPanel>
       </Border>
 

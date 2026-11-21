@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "awdl_policy.h"
+#include "awdl_schedule.h"
 #include "iwx.h"
 #include "wifi_sta.h"
 #include "pipe_server.h"
@@ -83,6 +84,9 @@ struct Options {
   /* --tx-window N (experimental "faster sending"): AWDL unicast frames kept in
    * flight, 8 by default; above 8 the doorbell is also rung once per batch. */
   unsigned tx_window = 8;
+  /* --aggregate (experimental "A-MPDU sending"): Block Ack and firmware
+   * aggregation to the iPhone, with ForbiddenItlwm's peer-schedule pause. */
+  bool aggregate = false;
 };
 
 bool parse_rate(const std::string &s, TxRate &rate) {
@@ -128,6 +132,7 @@ bool parse_options(int argc, char **argv, Options &o) {
     else if (a == "--sta-config") o.sta_config = value();
     else if (a == "--retries" || a == "--capture") value();
     else if (a == "--no-block-ack") o.no_block_ack = true;
+    else if (a == "--aggregate") o.aggregate = o.dev.aggregate = true;
     else if (a == "--tx-window") {
       const int n = std::atoi(value().c_str());
       if (n < 1 || n > 64) return false;
@@ -445,6 +450,34 @@ int main(int argc, char **argv) {
     int8_t awdl_dbm = -127;
     std::deque<awdl::AddbaRequest> addba_pending;
     std::deque<uint8_t> delba_pending;
+    /* Experimental A-MPDU sending to one peer (ForbiddenItlwm's
+     * -itlawdlcoexbatx, awdlCoexBaHandle and awdlCoexDataPump): a bulk send to
+     * a peer gets its firmware station, an aggregation queue and our ADDBA
+     * request; once it agrees, its data goes out as QoS frames on TID 0 and
+     * the firmware aggregates them. While the peer's own schedule has it off
+     * our channel, its queue is paused and other frames for it wait. */
+    struct Agg {
+      enum Step { Off, Asking, Agreed } step = Off;
+      bool on = false;
+      uint8_t dest[6] = {}, peer[6] = {}, sched_peer[6] = {};
+      bool have_dest = false, have_sched_peer = false;
+      uint32_t dest_frames = 0, epoch = 0;
+      awdl::BaTxBulk bulk;
+      uint8_t token = 0x5a;
+      unsigned asks = 0, resume_failures = 0;
+      uint64_t last_ask_us = 0, rest_until_us = 0, last_peer_us = 0, last_agg_us = 0, retry_us = 0;
+      bool answered = false, refused = false, delba = false;
+      std::deque<std::vector<uint8_t>> wait; /* frames for the peer, in order, for the aggregate queue */
+      awdl_sched::PeerSchedule sched{};
+      awdl_sched::PeerPauseState pause{};
+      awdl_sched::PeerBulkState peer_bulk{};
+      uint64_t sched_rx_us = 0, gate_since_us = 0, gate_limit_us = 0;
+      uint8_t gate_kind = 0;
+      uint64_t asks_total = 0, agreements = 0, refusals = 0, delbas = 0, setup_failures = 0, pause_errors = 0,
+               gate_holds = 0, sync_frames = 0, dropped = 0;
+    } agg;
+    agg.sched.reset();
+    agg.sched.assumeZero = true; /* upstream's default (iface161) */
     const auto now_us = [] {
       static LARGE_INTEGER f = [] {
         LARGE_INTEGER v;
@@ -508,6 +541,36 @@ int main(int argc, char **argv) {
         sta->on_frame(f);
         return;
       }
+      if (agg.on && f.len >= 16 && !(f.data[10] & 1) && std::memcmp(f.data + 10, dev_address, 6) != 0 &&
+          f.channel == dev.channel()) {
+        /* The peer's schedule, from its sync frames: the Block Ack peer once
+         * there is one, else the first peer heard (upstream's selection). */
+        const uint8_t *from = f.data + 10;
+        const uint64_t heard = now_us();
+        const bool is_sched = agg.have_sched_peer && std::memcmp(from, agg.sched_peer, 6) == 0;
+        const bool want = agg.step != Agg::Off ? std::memcmp(from, agg.peer, 6) == 0
+                                               : is_sched || !agg.sched.fresh(heard);
+        if (want && awdl::is_awdl_action(f.data, f.len)) {
+          awdl_sched::PeerSyncInfo info{};
+          bool bad = false;
+          if (awdl_sched::peerSyncFromAction(f.data, f.len, &info, &bad)) {
+            if (!is_sched) {
+              agg.sched.reset();
+              std::memcpy(agg.sched_peer, from, 6);
+              agg.have_sched_peer = true;
+            }
+            agg.sched.notePeerFrame(heard);
+            agg.sched.note(info, heard, dev.channel());
+            agg.sync_frames++;
+          } else if (is_sched) {
+            if (bad) agg.sched.invalidate();
+            else agg.sched.notePeerFrame(heard);
+          }
+        } else if (is_sched) {
+          agg.sched_rx_us = heard;
+          agg.sched.notePeerFrame(heard);
+        }
+      }
       if (awdl::is_awdl_action(f.data, f.len)) {
         rx_awdl++;
         /* Peer hint: an Apple device sending AWDL on our channel has the channel
@@ -544,10 +607,16 @@ int main(int argc, char **argv) {
         awdl::AddbaRequest req;
         bool sender = false;
         uint8_t tid = 0;
+        awdl::AddbaAnswer ans;
         if (awdl::parse_addba_request(f.data, f.len, dev_address, &req)) {
           if (addba_pending.size() < 16) addba_pending.push_back(req);
-        } else if (awdl::parse_delba(f.data, f.len, dev_address, &sender, &tid) && sender) {
-          delba_pending.push_back(tid);
+        } else if (awdl::parse_delba(f.data, f.len, dev_address, &sender, &tid)) {
+          if (sender) delba_pending.push_back(tid);
+          else if (agg.on && tid == 0 && std::memcmp(f.data + 10, agg.peer, 6) == 0) agg.delba = true;
+        } else if (agg.on && agg.step == Agg::Asking && awdl::parse_addba_answer(f.data, f.len, dev_address, &ans) &&
+                   std::memcmp(f.data + 10, agg.peer, 6) == 0 && ans.token == agg.token && ans.tid == 0) {
+          if (ans.status == 0 && ans.immediate) agg.answered = true;
+          else agg.refused = true;
         }
       }
       if (capture_on) {
@@ -702,12 +771,38 @@ int main(int argc, char **argv) {
           resent++;
         }
       }
+      /* Upstream's send gate (A-MPDU sending only): frames for the schedule
+       * peer wait while its schedule has it away, or dozing past the start of
+       * an availability window, for at most the away run; then they go
+       * rather than starve. Frames for others still go. */
+      bool gate_closed = false;
+      if (agg.on && agg.have_sched_peer && agg.sched.known() && agg.sched.fresh(now)) {
+        const bool dozing = agg.sched.presentEntries() <= awdl_sched::kPeerDozeMaxEntries &&
+                            (!agg.sched_rx_us || now - agg.sched_rx_us > 100000);
+        const auto gate = agg.sched.sendGate(now, dozing, 4000);
+        if (gate == awdl_sched::PeerSchedule::SendGate::Open) {
+          agg.gate_since_us = 0;
+          agg.gate_kind = 0;
+        } else {
+          const uint8_t kind = static_cast<uint8_t>(gate);
+          if (!agg.gate_since_us || kind != agg.gate_kind) {
+            if (!agg.gate_since_us) agg.gate_holds++;
+            agg.gate_since_us = now;
+            agg.gate_kind = kind;
+            agg.gate_limit_us = gate == awdl_sched::PeerSchedule::SendGate::Away ? agg.sched.pauseLimitUS(now)
+                                                                                  : agg.sched.awUS() + 2000;
+          }
+          if (now - agg.gate_since_us < agg.gate_limit_us) gate_closed = true;
+          else agg.gate_limit_us = 0;
+        }
+      }
       /* Fill the window, skipping frames that are still waiting on a status
        * or on their retry backoff. */
       bool sent = false;
       for (auto &f : uq) {
         if (inflight >= kTxWindow) break;
         if (f.slot >= 0 || now < f.next_us) continue;
+        if (gate_closed && f.frame.size() >= 10 && std::memcmp(f.frame.data() + 4, agg.sched_peer, 6) == 0) continue;
         if (!f.attempts) {
           f.first_us = now;
           if (f.data) f.rate = data_rate();
@@ -733,6 +828,8 @@ int main(int argc, char **argv) {
      * learn the country and send its notice (ForbiddenItlwm's discovery scan). */
     const uint64_t country_scan_at = GetTickCount64() + 10000;
     bool country_scan_done = false;
+    agg.on = opt.aggregate && dev.agg_available();
+    if (opt.aggregate) log_line(agg.on ? "experimental A-MPDU sending: on" : "experimental A-MPDU sending: not available on this path");
     awdl::BaFilter ba_filter;
     uint16_t mgmt_seq = 0;
     uint64_t ba_answers = 0;
@@ -765,7 +862,28 @@ int main(int argc, char **argv) {
           if (!may_send()) {
             tx_held_passive++; /* no initiating on a passive channel */
           } else if (unicast) {
-            if (uq.size() >= kQueueLimit) uq_dropped++;
+            bool via_agg = false;
+            if (agg.on && frame[0] == 0x08 && len >= 24) {
+              const uint64_t t = now_us();
+              if (!agg.have_dest || std::memcmp(frame + 4, agg.dest, 6) != 0) {
+                std::memcpy(agg.dest, frame + 4, 6);
+                agg.have_dest = true;
+                agg.bulk = awdl::BaTxBulk{};
+              }
+              /* Payload-sized frames only, so incoming TCP ACK bursts do not start a bulk send. */
+              if (len >= 1200) agg.dest_frames++;
+              const bool to_peer = agg.step != Agg::Off && std::memcmp(frame + 4, agg.peer, 6) == 0;
+              if (to_peer) agg.last_peer_us = t;
+              /* One path, in order, for the peer while its aggregate queue
+               * holds or waits for frames (upstream's awdlCoexOrder). */
+              via_agg = to_peer && agg.step == Agg::Agreed && dev.agg_ready() &&
+                        (agg.bulk.bulk || len >= 1200 || !agg.wait.empty() || dev.agg_queued() > 0 ||
+                         (agg.last_agg_us && t - agg.last_agg_us < 300000));
+            }
+            if (via_agg) {
+              if (agg.wait.size() >= kQueueLimit) agg.dropped++;
+              else agg.wait.emplace_back(frame, frame + len);
+            } else if (uq.size() >= kQueueLimit) uq_dropped++;
             else uq.push_back({std::vector<uint8_t>(frame, frame + len), rate, data});
           } else {
             dev.transmit(frame, len, rate);
@@ -811,11 +929,138 @@ int main(int argc, char **argv) {
         dev.remove_rx_ba(delba_pending.front());
         delba_pending.pop_front();
       }
-      /* Promiscuous receive off while a session's data is busy. */
+      if (agg.on) {
+        const uint64_t t = now_us();
+        const auto back_to_uq = [&] {
+          /* Frames held for the aggregate queue go the ordinary way, first. */
+          while (!agg.wait.empty()) {
+            uq.push_front({std::move(agg.wait.back()), TxRate{}, true});
+            agg.wait.pop_back();
+          }
+        };
+        const auto stop = [&](const char *why) {
+          if (agg.step == Agg::Agreed) dev.agg_enable(false);
+          if (agg.pause.paused) dev.agg_pause(false);
+          agg.pause = awdl_sched::PeerPauseState{};
+          back_to_uq();
+          agg.step = Agg::Off;
+          agg.answered = agg.refused = agg.delba = false;
+          log_line(std::string("aggregate: stopped (") + why + ")");
+        };
+        /* The peer's station was replaced (a receive session with another peer). */
+        if (agg.step != Agg::Off && dev.ba_epoch() != agg.epoch) stop("peer station replaced");
+        agg.bulk.note(t, agg.dest_frames, agg.step == Agg::Agreed);
+        if (agg.step == Agg::Off && agg.bulk.bulk && agg.have_dest && t >= agg.retry_us) {
+          if (dev.agg_setup(agg.dest, opt.channel > 14 && opt.width >= 80, true)) {
+            std::memcpy(agg.peer, agg.dest, 6);
+            agg.epoch = dev.ba_epoch();
+            agg.step = Agg::Asking;
+            agg.asks = 0;
+            agg.token++;
+            agg.last_ask_us = agg.rest_until_us = 0;
+            agg.last_peer_us = t;
+            agg.answered = agg.refused = agg.delba = false;
+            log_line("aggregate: bulk send to a peer; asking it for Block Ack");
+          } else {
+            agg.setup_failures++;
+            agg.retry_us = t + 10000000;
+            log_line("aggregate: could not set up the peer's station and queue; retrying in 10 s");
+          }
+        }
+        if (agg.step == Agg::Asking) {
+          if (agg.answered) {
+            agg.answered = false;
+            if (dev.agg_enable(true)) {
+              agg.step = Agg::Agreed;
+              agg.agreements++;
+              agg.resume_failures = 0;
+              log_line("aggregate: the peer agreed; sending A-MPDUs");
+            } else {
+              agg.setup_failures++;
+              agg.retry_us = t + 10000000;
+              stop("the firmware refused aggregation");
+            }
+          } else if (agg.refused) {
+            agg.refused = false;
+            agg.refusals++;
+            agg.asks = 0;
+            agg.token++;
+            agg.rest_until_us = t + 20000000;
+          } else if (!agg.bulk.bulk && t - agg.last_peer_us > 30000000) {
+            agg.asks = 0; /* idle peer: hold, the next data asks afresh */
+            agg.rest_until_us = 0;
+          } else if (t >= agg.rest_until_us && (!agg.last_ask_us || t - agg.last_ask_us >= 200000) &&
+                     !(agg.have_sched_peer && agg.sched.shouldPause(t))) {
+            if (agg.asks >= 40) {
+              agg.asks = 0;
+              agg.token++;
+              agg.rest_until_us = t + 20000000;
+            } else if (may_send()) {
+              static const uint8_t kAwdlBssid[6] = {0x00, 0x25, 0x00, 0xff, 0x94, 0x73};
+              uint8_t ask[awdl::kAddbaResponseLength];
+              awdl::build_addba_request(ask, agg.peer, dev_address, kAwdlBssid, agg.token, 0, 64, dev.agg_seq(),
+                                        ++mgmt_seq);
+              uq.push_front({std::vector<uint8_t>(ask, ask + sizeof(ask)), TxRate{}, false});
+              agg.asks++;
+              agg.asks_total++;
+              agg.last_ask_us = t;
+            }
+          }
+        }
+        if (agg.step == Agg::Agreed && agg.delba) {
+          agg.delba = false;
+          agg.delbas++;
+          dev.agg_enable(false);
+          if (agg.pause.paused) dev.agg_pause(false);
+          agg.pause = awdl_sched::PeerPauseState{};
+          back_to_uq();
+          agg.step = Agg::Asking;
+          agg.asks = 0;
+          agg.token++;
+          agg.last_ask_us = 0;
+          log_line("aggregate: the peer ended our Block Ack session; asking again");
+        }
+        if (agg.step == Agg::Agreed) {
+          /* Pause the peer's queue while its schedule has it away (upstream's
+           * awdlCoexBaPauseStep): only while aggregate frames move or wait. */
+          const bool moving = agg.peer_bulk.note(t, static_cast<uint32_t>(dev.agg_stats().frames)) || agg.bulk.bulk ||
+                              (agg.last_agg_us && t - agg.last_agg_us < 300000);
+          const bool want = (moving || dev.agg_queued() > 0) && agg.have_sched_peer &&
+                            std::memcmp(agg.sched_peer, agg.peer, 6) == 0 && agg.sched.shouldPause(t);
+          const auto before = agg.pause;
+          const int change = agg.pause.step(want, t, agg.sched.pauseLimitUS(t));
+          if (change && !dev.agg_pause(change > 0)) {
+            agg.pause = before;
+            agg.pause_errors++;
+            /* A station left with transmit disabled blocks everything to the
+             * peer: after five failed resumes aggregation stops. */
+            if (change < 0 && ++agg.resume_failures >= 5) stop("the firmware would not resume the peer's queue");
+          } else if (change < 0) {
+            agg.resume_failures = 0;
+          }
+          while (agg.step == Agg::Agreed && !agg.wait.empty() && !agg.pause.paused && dev.agg_queued() < 64) {
+            std::vector<uint8_t> qos;
+            if (!awdl::build_qos_data(agg.wait.front().data(), agg.wait.front().size(), 0, dev.agg_seq(), qos)) {
+              uq.push_back({std::move(agg.wait.front()), TxRate{}, true});
+              agg.wait.pop_front();
+              continue;
+            }
+            if (dev.transmit_agg(qos.data(), qos.size()) < 0) break;
+            agg.wait.pop_front();
+            agg.last_agg_us = t;
+          }
+        }
+      }
+      /* Promiscuous receive off while a session's data is busy; with A-MPDU
+       * sending, for as long as the peer's station exists (upstream #57: with
+       * it on, the firmware does not acknowledge the station's frames). */
       bool any_ba = false;
       for (unsigned t = 0; t < 8; t++) any_ba |= dev.rx_ba_open(t);
-      if (any_ba && ba_filter.note(now_us(), rx_data_to_us)) dev.set_promiscuous(!ba_filter.off);
-      if (!any_ba && !dev.promiscuous()) {
+      if (agg.on && agg.step != Agg::Off) {
+        if (dev.promiscuous()) dev.set_promiscuous(false);
+      } else if (any_ba && ba_filter.note(now_us(), rx_data_to_us)) {
+        dev.set_promiscuous(!ba_filter.off);
+      } else if (!any_ba && !dev.promiscuous()) {
         ba_filter = awdl::BaFilter{};
         dev.set_promiscuous(true);
       }
@@ -857,7 +1102,7 @@ int main(int argc, char **argv) {
         if (sta->state() != WifiStation::State::Running) busy = true;
       }
       if (pump()) busy = true;
-      if (inflight > 0 || !uq.empty()) busy = true;
+      if (inflight > 0 || !uq.empty() || !agg.wait.empty() || dev.agg_queued() > 0) busy = true;
       if (busy) {
         idle_rounds = 0;
       } else if (++idle_rounds > 200) {
@@ -924,6 +1169,24 @@ int main(int argc, char **argv) {
                  std::to_string(ladder.downs) + " down); BA answers " + std::to_string(ba_answers) +
                  (dev.promiscuous() ? "" : ", promiscuous off") +
                  (tx_held_passive ? "; " + std::to_string(tx_held_passive) + " held (passive channel)" : ""));
+        if (agg.on) {
+          const auto &a = dev.agg_stats();
+          static const char *const kStep[] = {"idle", "asking", "agreed"};
+          char rate[16];
+          std::snprintf(rate, sizeof(rate), "0x%08x", a.last_rate);
+          log_line(std::string("aggregate: ") + kStep[agg.step] + (agg.pause.paused ? ", paused" : "") + "; queue " +
+                   std::to_string(dev.agg_queued()) + ", waiting " + std::to_string(agg.wait.size()) + "; " +
+                   std::to_string(a.frames) + " frames, " + std::to_string(a.notifs) + " Block Acks (" +
+                   std::to_string(a.txed) + " sent, " + std::to_string(a.acked) + " acked, largest " +
+                   std::to_string(a.peak_frames) + ", rate " + rate + "), " + std::to_string(a.singles) +
+                   " singles; asks " + std::to_string(agg.asks_total) + ", agreed " + std::to_string(agg.agreements) +
+                   ", refused " + std::to_string(agg.refusals) + ", DELBA " + std::to_string(agg.delbas) +
+                   "; pauses " + std::to_string(agg.pause.pauses) + " (forced " + std::to_string(agg.pause.forcedResumes) +
+                   ", errors " + std::to_string(agg.pause_errors) + "), gate holds " + std::to_string(agg.gate_holds) +
+                   "; schedule " + (agg.sched.calibrated ? "calibrated" : agg.sched.known() ? "assumed" : "unknown") +
+                   ", " + std::to_string(agg.sched.presentEntries()) + "/16 entries here, " +
+                   std::to_string(agg.sync_frames) + " sync frames");
+        }
         if (sta) {
           const auto &r = sta->rx_stats();
           log_line(std::string("wifi: ") + sta->state_name() + ", " + std::to_string(sta->rx_packets()) +

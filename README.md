@@ -157,6 +157,30 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 | WPA2/WPA3-Enterprise (802.1X, PEAP…) | ❌ not yet. nekodrop switches to *on demand* |
 | WEP, WPA/TKIP | ❌ (insecure; not planned) |
 
+### Experimental features
+
+*Settings → Experimental*. Both are **off by default**, and with them off nekodrop behaves exactly as without them. Turning either on or off restarts AirDrop for a few seconds. They are experimental because they haven't been confirmed on enough hardware yet: if sending gets worse, turn them off, and please post a diagnostic report in an [issue](../../issues) either way.
+
+**Faster sending to iPhone** (0.1.9+)
+- Keeps up to 48 AWDL frames in flight instead of 8, rings the card's doorbell once per batch, and starts the rate ladder one step higher (HT MCS 4).
+- Helps where the per-frame round trip was the limit. Measured so far: about the same 1.3 MB/s as the default on an AX200 ([#4](../../issues/4)), a little faster on an AX210 ([#14](../../issues/14)).
+
+**Aggregated sending (A-MPDU)** (0.1.15+, not yet tested on hardware)
+
+Sending to an iPhone is slow, about 1.3 MB/s, while receiving runs at about 9 MB/s. The reason: every frame we send goes out on its own and waits for its own acknowledgement, and only while the iPhone happens to be on our channel. The iPhone aggregates its frames, so receiving is fast. This switch ports ForbiddenItlwm's way of aggregating our side too (its `-itlawdlcoexbatx`, which reaches about 22 MB/s Mac → iPhone there):
+1. When a large send to an iPhone starts (about 200 full-size frames a second), nekodrop gives that iPhone a firmware station of its own, with an aggregation queue and the firmware's rate control (VHT 80 MHz, two streams where the card has them).
+2. It asks the iPhone for a Block Ack session (ADDBA), every 200 ms while it is on our channel, up to 40 times, then rests 20 s and tries again.
+3. Once the iPhone agrees, the transfer's frames go out as QoS data on TID 0 and the firmware sends them as A-MPDUs. Short exchanges, such as a connection being set up, keep the ordinary path with its resends.
+4. nekodrop follows the iPhone's AWDL schedule from its sync frames: which of its 16 slots it spends on our channel and when each starts. While the iPhone is away, its queue in the firmware is paused instead of burning retries, and other frames for it wait too, for at most the away time.
+5. Promiscuous receive is off while the iPhone's station exists, so the firmware acknowledges the iPhone's frames.
+
+What to check when testing:
+- The diagnostic report gets an **A-MPDU sending** row: `agreed` means the iPhone accepted Block Ack.
+- The service log gets an `aggregate:` line every 5 s. In it, *Block Acks* and *largest* say whether the firmware really sends aggregates (several frames per Block Ack), and *pauses* say whether the schedule pause works.
+- If it says `asking` for a long time, the iPhone isn't answering our ADDBA. Upstream saw that too. Please attach the report.
+
+Without enough memory for the extra ring, or on the kernel-driver path, the switch does nothing and sending stays as before.
+
 ## Status
 
 | Part | State |

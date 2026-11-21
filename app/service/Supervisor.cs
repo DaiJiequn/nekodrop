@@ -57,6 +57,7 @@ public sealed class Supervisor : IDisposable
                 ["channel"] = _channel,
                 ["country"] = _cfg.Country,
                 ["fastSend"] = _cfg.FastSend,
+                ["aggregate"] = _cfg.Aggregate,
                 ["wifi"] = _wifi,
                 ["detail"] = _detail,
                 ["ssid"] = _staSsid,
@@ -179,6 +180,21 @@ public sealed class Supervisor : IDisposable
             _cfg.Save();
         }
         Say($"experimental faster sending: {(on ? "on" : "off")}");
+        if (State is RadioState.On or RadioState.Starting)
+            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        Publish();
+    }
+
+    /// <summary>Experimental A-MPDU sending; a running radio restarts to take it.</summary>
+    public void SetAggregate(bool on)
+    {
+        lock (_lock)
+        {
+            if (_cfg.Aggregate == on) return;
+            _cfg.Aggregate = on;
+            _cfg.Save();
+        }
+        Say($"experimental A-MPDU sending: {(on ? "on" : "off")}");
         if (State is RadioState.On or RadioState.Starting)
             _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         Publish();
@@ -310,6 +326,7 @@ public sealed class Supervisor : IDisposable
             if (_cfg.Country != "") args.AddRange(["--country", _cfg.Country]);
             if (staConf is not null) args.AddRange(["--sta-config", staConf]);
             if (_cfg.FastSend && !kernel) args.AddRange(["--tx-window", "48"]);
+            if (_cfg.Aggregate && !kernel) args.Add("--aggregate");
             _radio = Spawn(Path.Combine(_root, "radio", "nekodrop-radio.exe"), args, OnRadioLine);
             _startedAt = DateTime.UtcNow;
             // awdld connects to the radio's pipe; give the firmware time to boot.

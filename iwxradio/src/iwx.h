@@ -73,6 +73,8 @@ public:
     std::string country = "ZZ"; /* MCC to ask for; ZZ keeps what the card has */
     MacType mac_type = MacType::Listener;
     bool verbose = false;
+    /* Experimental A-MPDU sending to the AWDL peer: one more TX ring. */
+    bool aggregate = false;
   };
 
   using Logger = std::function<void(const std::string &)>;
@@ -94,6 +96,27 @@ public:
    * BA agreement on `tid`. The firmware then answers aggregates by itself. */
   bool add_rx_ba(const uint8_t peer[6], unsigned tid, uint16_t ssn, uint16_t window, uint8_t token);
   bool remove_rx_ba(unsigned tid);
+  /* Experimental A-MPDU sending to one AWDL peer (ForbiddenItlwm's
+   * -itlawdlcoexbatx): the peer's firmware station (the one receive Block Ack
+   * uses), an aggregation queue on TID 0 and firmware rate control for it. */
+  bool agg_available() const { return _aggq.count != 0; }
+  bool agg_ready() const { return _agg_queue_enabled; }
+  bool agg_setup(const uint8_t peer[6], bool vht80, bool mimo);
+  /* Lets the firmware aggregate TID 0 (after the peer's ADDBA answer), or stops it. */
+  bool agg_enable(bool on);
+  /* Holds the peer's frames in the firmware while it is away from our channel. */
+  bool agg_pause(bool on);
+  int transmit_agg(const uint8_t *frame, size_t len);
+  unsigned agg_queued() const { return _aggq.queued; }
+  uint16_t agg_seq() const { return _agg_seq; }
+  /* Goes up whenever the peer station is replaced: everything set up for the old one is gone. */
+  uint32_t ba_epoch() const { return _ba_epoch; }
+  const uint8_t *ba_peer() const { return _ba_station ? _ba_peer : nullptr; }
+  struct AggStats {
+    uint64_t frames = 0, notifs = 0, txed = 0, acked = 0, singles = 0;
+    uint32_t last_rate = 0, peak_frames = 0;
+  };
+  const AggStats &agg_stats() const { return _agg_stats; }
   bool rx_ba_open(unsigned tid) const { return tid < 8 && (_ba_tids >> tid) & 1; }
   /* Promiscuous receive on the listener on/off (off while a BA session is busy). */
   bool set_promiscuous(bool on);
@@ -303,7 +326,13 @@ private:
   std::vector<DmaBuf> _fw_sections; /* kept until the card is reset */
   unsigned _rx_cur = 0;
   std::vector<unsigned> _rx_inflight; /* buffers being handled, oldest first (re-entrant poll) */
-  TxRing _cmdq, _dataq, _staq;
+  TxRing _cmdq, _dataq, _staq, _aggq;
+  bool _agg_queue_enabled = false;
+  uint16_t _agg_seq = 0;
+  uint32_t _ba_epoch = 0;
+  AggStats _agg_stats;
+  bool ensure_ba_station(const uint8_t peer[6]);
+  void handle_ba_notif(const uint8_t *payload, size_t len);
   std::vector<CmdSlot> _cmd_slots;
   std::vector<DmaBuf> _cmd_big; /* per slot, for commands over 316 bytes */
 

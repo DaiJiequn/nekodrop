@@ -219,6 +219,12 @@ if ($start -lt 0) {
     elseif ($txUnlock) { '`' + ($txUnlock -replace '^\S+ \S+ ', '') + '`' }
     elseif ($txLast) { '`' + (($txLast -replace '^\S+ \S+ ', '') -replace '; unicast.*', '') + '`' } else { 'no tx statistics yet' }
   W "| Transmitting | $txRow | $txWhy |"
+  # Experimental A-MPDU sending (0.1.15+): its last status line, when it is on.
+  $aggLast = $attempt | Where-Object { $_ -match 'radio: aggregate: (idle|asking|agreed)' } | Select-Object -Last 1
+  if ($aggLast) {
+    $aggRow = if ($aggLast -match 'aggregate: agreed') { 'ok' } elseif ($aggLast -match 'aggregate: asking') { 'asking' } else { '-' }
+    W "| A-MPDU sending (experimental) | $aggRow | ``$((($aggLast -replace '^\S+ \S+ radio: \S+ radio: ', '') -replace '\|', '/'))`` |"
+  }
   # The latest station event decides: "authenticating" is a step of every join,
   # not a failure (#4, #14, #16 all showed FAIL while connected).
   $wifiLast = $attempt | Where-Object { $_ -match 'event: wifi \S|not supported beside AirDrop|not joining a saved network' } | Select-Object -Last 1

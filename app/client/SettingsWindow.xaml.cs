@@ -24,6 +24,7 @@ public partial class SettingsWindow : Window
         ModeOnDemand.IsChecked = mode == "ondemand";
         ModeOff.IsChecked = mode == "off";
         FastSendBox.IsChecked = (bool?)A.Service.Last?["fastSend"] ?? false;
+        AggregateBox.IsChecked = (bool?)A.Service.Last?["aggregate"] ?? false;
     }
 
     void Browse_Click(object sender, RoutedEventArgs e)
@@ -56,6 +57,8 @@ public partial class SettingsWindow : Window
         if (mode != (string?)A.Service.Last?["mode"]) A.Service.SetMode(mode);
         var fast = FastSendBox.IsChecked == true;
         if (fast != ((bool?)A.Service.Last?["fastSend"] ?? false)) A.Service.SetFastSend(fast);
+        var aggregate = AggregateBox.IsChecked == true;
+        if (aggregate != ((bool?)A.Service.Last?["aggregate"] ?? false)) A.Service.SetAggregate(aggregate);
         A.Window?.FolderChanged();
         if (languageChanged) A.ApplyLanguage();
         Close();
