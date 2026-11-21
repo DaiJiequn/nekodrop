@@ -222,6 +222,7 @@ bool IwxDevice::alloc_rings(std::string &error) {
   need.push_back(pages_of(cmd_count * sizeof(iwx_tfh_tfd)));
   need.push_back(pages_of(tx_count * sizeof(iwx_tfh_tfd)));
   need.push_back(pages_of(tx_count * sizeof(iwx_tfh_tfd)));
+  if (_opt.aggregate) need.push_back(pages_of(tx_count * sizeof(iwx_tfh_tfd)));
   need.push_back(pages_of(IWX_RX_MQ_RING_COUNT * (gen3() ? sizeof(iwx_rx_completion_desc) : sizeof(uint32_t))));
   need.push_back(pages_of(IWX_RX_MQ_RING_COUNT * (gen3() ? sizeof(iwx_rx_transfer_desc) : sizeof(uint64_t))));
   if (gen3()) need.push_back(kPnvmPagesMax);

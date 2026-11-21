@@ -771,12 +771,13 @@ int main(int argc, char **argv) {
           resent++;
         }
       }
-      /* Upstream's send gate (A-MPDU sending only): frames for the schedule
-       * peer wait while its schedule has it away, or dozing past the start of
-       * an availability window, for at most the away run; then they go
-       * rather than starve. Frames for others still go. */
+      /* Upstream's send gate (A-MPDU sending only, once an aggregation session
+       * is active): frames for the schedule peer wait while its schedule has it
+       * away, or dozing past the start of an availability window, for at most
+       * the away run; then they go rather than starve. Never gate while idle
+       * (agg.step == Off), so discovery stays on the exact default path (#4). */
       bool gate_closed = false;
-      if (agg.on && agg.have_sched_peer && agg.sched.known() && agg.sched.fresh(now)) {
+      if (agg.on && agg.step != Agg::Off && agg.have_sched_peer && agg.sched.known() && agg.sched.fresh(now)) {
         const bool dozing = agg.sched.presentEntries() <= awdl_sched::kPeerDozeMaxEntries &&
                             (!agg.sched_rx_us || now - agg.sched_rx_us > 100000);
         const auto gate = agg.sched.sendGate(now, dozing, 4000);
@@ -1183,8 +1184,12 @@ int main(int argc, char **argv) {
                    ", refused " + std::to_string(agg.refusals) + ", DELBA " + std::to_string(agg.delbas) +
                    "; pauses " + std::to_string(agg.pause.pauses) + " (forced " + std::to_string(agg.pause.forcedResumes) +
                    ", errors " + std::to_string(agg.pause_errors) + "), gate holds " + std::to_string(agg.gate_holds) +
-                   "; schedule " + (agg.sched.calibrated ? "calibrated" : agg.sched.known() ? "assumed" : "unknown") +
-                   ", " + std::to_string(agg.sched.presentEntries()) + "/16 entries here, " +
+                   "; schedule " +
+                   (!agg.sched.valid ? "none"
+                    : agg.sched.calibrated ? "calibrated"
+                    : agg.sched.known() ? "assumed"
+                                        : "uncalibrated") +
+                   ", " + std::to_string(agg.sched.valid ? agg.sched.presentEntries() : 0u) + "/16 entries here, " +
                    std::to_string(agg.sync_frames) + " sync frames");
         }
         if (sta) {
