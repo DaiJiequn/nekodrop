@@ -84,6 +84,9 @@ $single = '--self-contained', 'true', '-p:PublishSingleFile=true', '-p:IncludeNa
           '-p:EnableCompressionInSingleFile=true', '-p:DebugType=none'
 dotnet publish "$repo\app\service\NekoDrop.Service.csproj" -c Release -o "$stage" --nologo -v q @single
 if ($LASTEXITCODE -ne 0) { throw 'service publish failed' }
+# The card catalog's offline checks (app/service/CardCatalog.cs): no card or admin rights needed.
+& "$stage\NekoDropService.exe" --selftest
+if ($LASTEXITCODE -ne 0) { throw 'service self-test failed' }
 dotnet publish "$repo\app\client\NekoDrop.csproj" -c Release -o "$stage" --nologo -v q @single
 if ($LASTEXITCODE -ne 0) { throw 'client publish failed' }
 Copy-Item "$repo\installer\install.ps1", "$repo\installer\uninstall.ps1", "$repo\installer\setup-tap.ps1",

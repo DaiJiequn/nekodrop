@@ -46,6 +46,21 @@ public sealed class Supervisor : IDisposable
 
     public NetMode Mode => _cfg.Mode;
 
+    /// <summary>
+    /// What the card can do, read when the service starts and whenever the card
+    /// is taken: the 2 s watchdog and the 15 s gateway probe ask it, and must
+    /// not enumerate PCI devices each time. Before a card is seen (or with none)
+    /// it is the Intel set, so those paths behave exactly as before the catalog.
+    /// </summary>
+    AdapterCapabilities _caps = AdapterCapabilities.IntelDefault;
+
+    /// <summary>
+    /// The mode the card can run: the user's choice, except Concurrent on a
+    /// card whose radio has no station, which runs on demand. For every Intel
+    /// card this is _cfg.Mode. The snapshot keeps reporting the user's choice.
+    /// </summary>
+    NetMode EffectiveMode() => CardCatalog.EffectiveMode(_cfg.Mode, _caps);
+
     public JsonObject Snapshot()
     {
         lock (_lock)
@@ -136,9 +151,21 @@ public sealed class Supervisor : IDisposable
         try
         {
             var card = Card.Find();
-            Say(card is null ? "card: no supported Intel Wi-Fi card present"
-                : $"card: {card.InstanceId}; driver service {card.Service}, INF {Path.GetFileName(card.InfPath)} ({card.Provider}), problem {card.Problem}" +
-                  $"; Intel INF on record {Path.GetFileName(_cfg.VendorInf)}");
+            if (card is null) Say("card: no supported Wi-Fi card present");
+            else
+            {
+                var p = card.Profile;
+                _caps = p.Capabilities;
+                // Same line as before the catalog for Intel cards ("Intel INF on record").
+                Say($"card: {card.InstanceId}; driver service {card.Service}, INF {Path.GetFileName(card.InfPath)} ({card.Provider}), problem {card.Problem}" +
+                    $"; {p.VendorName} INF on record {Path.GetFileName(_cfg.VendorInf)}");
+                var c = p.Capabilities;
+                Say($"card profile: {p.VendorName} {p.FamilyName} ({p.VendorId}:{p.DeviceId}), radio {p.Backend}, " +
+                    $"concurrent {c.SupportsConcurrentWifi}, fast send {c.SupportsFastSend}, A-MPDU {c.SupportsAggregate}, " +
+                    $"kernel driver {c.SupportsKernelDriver}, register BAR >= 0x{c.MinBarBytes:x}");
+                if (EffectiveMode() != _cfg.Mode)
+                    Say($"mode: {p.VendorName} {p.FamilyName} cannot keep Wi-Fi beside AirDrop; runs {EffectiveMode()} instead of {_cfg.Mode}");
+            }
         }
         catch (Exception e) { Say("card: " + e.Message); }
     }
@@ -152,7 +179,7 @@ public sealed class Supervisor : IDisposable
         SayHeader();
         _ = Task.Run(SetTapMetric);
         if (KernelDriver) Start("boot (kernel driver: Windows keeps Wi-Fi)");
-        else if (_cfg.Mode == NetMode.Concurrent) Start("boot (concurrent mode)");
+        else if (EffectiveMode() == NetMode.Concurrent) Start("boot (concurrent mode)");
         else
         {
             EnsureVendorDriver();
@@ -166,7 +193,8 @@ public sealed class Supervisor : IDisposable
     {
         lock (_lock) { _cfg.Mode = mode; _cfg.Save(); }
         Say($"mode: {mode}");
-        if (mode == NetMode.Concurrent) Start("mode changed");
+        // Saved as chosen; a card without a station runs Concurrent on demand.
+        if (EffectiveMode() == NetMode.Concurrent) Start("mode changed");
         else Stop("mode changed", giveBack: true);
         Publish();
     }
@@ -273,7 +301,7 @@ public sealed class Supervisor : IDisposable
             KillDaemons();
             string? staConf = null;
             var kernel = KernelDriver;
-            if (!kernel && _cfg.Mode == NetMode.Concurrent)
+            if (!kernel && EffectiveMode() == NetMode.Concurrent)
             {
                 var why = "";
                 var cardFree = !(Card.Find() is { } c && Card.TakenByProxy(c));
@@ -343,8 +371,9 @@ public sealed class Supervisor : IDisposable
             if (kernel) args.Add("--kernel");
             if (_cfg.Country != "") args.AddRange(["--country", _cfg.Country]);
             if (staConf is not null) args.AddRange(["--sta-config", staConf]);
-            if (_cfg.FastSend && !kernel) args.AddRange(["--tx-window", "48"]);
-            if (_cfg.Aggregate && !kernel) args.Add("--aggregate");
+            // Radio options only for a card whose radio has them (all Intel cards do).
+            if (_cfg.FastSend && !kernel && _caps.SupportsFastSend) args.AddRange(["--tx-window", "48"]);
+            if (_cfg.Aggregate && !kernel && _caps.SupportsAggregate) args.Add("--aggregate");
             _radio = Spawn(Path.Combine(_root, "radio", "nekodrop-radio.exe"), args, OnRadioLine);
             _startedAt = DateTime.UtcNow;
             // awdld connects to the radio's pipe; give the firmware time to boot.
@@ -599,11 +628,11 @@ public sealed class Supervisor : IDisposable
                 _restarts = 0;
             }
             // Wi-Fi down for a while: look for a known network to join.
-            if (_cfg.Mode == NetMode.Concurrent && State == RadioState.On && !_userOff && _wifi != "connected" &&
+            if (EffectiveMode() == NetMode.Concurrent && State == RadioState.On && !_userOff && _wifi != "connected" &&
                 !_scanBusy && DateTime.UtcNow - _wifiDownSince > TimeSpan.FromSeconds(20) &&
                 DateTime.UtcNow - _scanAt > TimeSpan.FromSeconds(30) && !Wlan.WiredUp())
                 WifiScan();
-            if (_cfg.Mode == NetMode.OnDemand && State == RadioState.On &&
+            if (EffectiveMode() == NetMode.OnDemand && State == RadioState.On &&
                 DateTime.UtcNow - _lastUse > TimeSpan.FromSeconds(_cfg.IdleSeconds))
                 Stop("idle", giveBack: true);
             if (DateTime.UtcNow - _probeAt >= TimeSpan.FromSeconds(15))
@@ -636,7 +665,7 @@ public sealed class Supervisor : IDisposable
         lock (_lock)
         {
             // Not judged when the user turned Wi-Fi off or no station is set up (round 2 #11).
-            wanted = _cfg.Mode == NetMode.Concurrent && State == RadioState.On && !_userOff && _staSsid != "";
+            wanted = EffectiveMode() == NetMode.Concurrent && State == RadioState.On && !_userOff && _staSsid != "";
             connected = wanted && _wifi == "connected";
         }
         if (!wanted)
@@ -726,9 +755,13 @@ public sealed class Supervisor : IDisposable
 
     void TakeCard()
     {
-        var card = Card.Find() ?? throw new InvalidOperationException("no supported Intel Wi-Fi card found");
+        var card = Card.Find() ?? throw new InvalidOperationException("no supported Wi-Fi card found");
+        _caps = card.Profile.Capabilities;
         if (Card.TakenByProxy(card)) return;
-        // Only Intel's INF is the one to give the card back to, never the proxy's (issue #12).
+        // Only the vendor's INF is the one to give the card back to, never the proxy's (issue #12).
+        // Not checked against the vendor's provider names: OEM repackages of
+        // Intel's driver carry other names, and refusing them would leave the
+        // card with no driver to go back to.
         if (card.InfPath != "" && !Card.BoundToProxy(card))
         {
             lock (_lock) { _cfg.VendorInf = card.InfPath; _cfg.Save(); }
@@ -741,7 +774,7 @@ public sealed class Supervisor : IDisposable
             WlanBackup.Restore(Say, TimeSpan.Zero);
             WlanBackup.Save(Say);
         }
-        var inf = Path.Combine(_root, "driver", "winawdl_regproxy.inf");
+        var inf = Path.Combine(_root, "driver", card.Profile.ProxyInfName);
         Say($"taking the card from {Path.GetFileName(card.InfPath)}");
         try { Card.Bind(card.HardwareId, inf); }
         catch (CardBindException e)
@@ -903,7 +936,7 @@ public sealed class Supervisor : IDisposable
             Publish();
             return;
         }
-        if (_userOff || _cfg.Mode != NetMode.Concurrent || _wifi == "connected") return;
+        if (_userOff || EffectiveMode() != NetMode.Concurrent || _wifi == "connected") return;
         if (DateTime.UtcNow - _wifiDownSince < TimeSpan.FromSeconds(20)) return;
         // Beside a wired connection Wi-Fi is joined only from the Wi-Fi window (issue #1).
         if (Wlan.WiredUp()) return;
@@ -966,11 +999,12 @@ public sealed class Supervisor : IDisposable
     void EnsureVendorDriver()
     {
         var card = Card.Find();
-        // Ours (running or not), or left with no driver by a failed bind: Intel's driver goes back on.
+        // Ours (running or not), or left with no driver by a failed bind: the vendor's driver goes back on.
         if (card is null || (!Card.BoundToProxy(card) && card.InfPath != "")) return;
+        var vendor = card.Profile.VendorName;
         if (_cfg.VendorInf == "" || !File.Exists(_cfg.VendorInf))
         {
-            Say("cannot give the card back: Intel's INF is not known; run give-card.ps1");
+            Say($"cannot give the card back: {vendor}'s INF is not known; run give-card.ps1");
             return;
         }
         var fullInf = Path.GetFullPath(_cfg.VendorInf);
@@ -988,10 +1022,10 @@ public sealed class Supervisor : IDisposable
         // binding it again would keep Windows without Wi-Fi.
         try
         {
-            if (File.ReadAllText(fullInf).Contains("winawdl_regproxy", StringComparison.OrdinalIgnoreCase))
+            if (File.ReadAllText(fullInf).Contains(card.Profile.ProxyInfStem, StringComparison.OrdinalIgnoreCase))
             {
-                Say($"{Path.GetFileName(fullInf)} on record is nekodrop's own driver, not Intel's; " +
-                    "run Start menu > nekodrop - restore Windows Wi-Fi to get Intel's driver back");
+                Say($"{Path.GetFileName(fullInf)} on record is nekodrop's own driver, not {vendor}'s; " +
+                    $"run Start menu > nekodrop - restore Windows Wi-Fi to get {vendor}'s driver back");
                 lock (_lock) { _cfg.VendorInf = ""; _cfg.Save(); }
                 return;
             }
@@ -1001,7 +1035,7 @@ public sealed class Supervisor : IDisposable
         {
             Say($"giving the card back to {Path.GetFileName(fullInf)}");
             Card.Bind(card.HardwareId, fullInf);
-            // Once Intel's WLAN interface is up, put back the saved networks it lacks.
+            // Once the vendor driver's WLAN interface is up, put back the saved networks it lacks.
             _ = Task.Run(() => WlanBackup.Restore(Say, TimeSpan.FromSeconds(60)));
         }
         catch (Exception e) { Say("giving the card back failed: " + e.Message); }
@@ -1048,6 +1082,6 @@ public sealed class Supervisor : IDisposable
     {
         _cts.Cancel();
         KillDaemons();
-        if (_cfg.Mode != NetMode.Concurrent) EnsureVendorDriver();
+        if (EffectiveMode() != NetMode.Concurrent) EnsureVendorDriver();
     }
 }

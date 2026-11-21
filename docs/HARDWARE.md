@@ -31,7 +31,7 @@ a card or administrator rights.
 |---|---|---|---|
 | Intel QnJ, SnJ, Meteor Lake (Ma) | `8086:2720` `2726` `2729` `7E40` | depends on upstream | `iwxradio/src/cards.h` knows them, but ForbiddenItlwm ships no firmware for them (QuQnj API 48, SoSnj and Ma API 63). `8086:7E40` is often sold as "AX211". |
 | Intel Wi-Fi 7: BE200, BE201/BE211 | `8086:272B` `A840` `7740` `E440` … | depends on upstream | ForbiddenItlwm has no Wi-Fi 7 driver. |
-| Another Intel device ID | `8086:*` | maybe easy | If upstream has firmware for it, adding the ID to `cards.h`, the register proxy's INF and `install.ps1` may be all. The report says *an Intel device ID nekodrop does not know*: please post it. |
+| Another Intel device ID | `8086:*` | maybe easy | If upstream has firmware for it, adding the ID to `cards.h`, `CardCatalog.cs`, the register proxy's INF and `install.ps1` may be all. The report says *an Intel device ID nekodrop does not know*: please post it. |
 | **Realtek RTL8852CE** | `10EC:C852` | **the most feasible** | See below. |
 | Other Realtek (RTL8852AE/BE, RTL8851BE, RTL8922AE, RTL8821CE/8822CE…) | `10EC:*` | low | No user-mode Windows driver; winawdl's devourer is built only for the 8852C on Windows. |
 | MediaTek MT7921/7922/7925/7927/7902, AMD RZ608/616/717 | `14C3:*` | low (long project) | No user-mode Windows driver exists. Would be a port of Linux `mt76` (registers, DMA, firmware, power) with nobody here owning the hardware. |
@@ -62,24 +62,50 @@ Bringing it into nekodrop is several high-risk changes at once:
    would need it.
 3. **Wi-Fi beside AirDrop.** devourer only monitors and injects; it has no
    station. nekodrop's default *together* mode (`NetMode.Concurrent`) cannot
-   work, so an RTL8852CE would have to be locked to *on demand*.
-4. **Taking and giving back the card.** `app/service/Card.cs`,
-   `installer/install.ps1` and `installer/restore.ps1` assume Intel
-   (`VEN_8086`, an Intel driver package to give the card back to).
+   work, so an RTL8852CE would have to be locked to *on demand*. The service
+   already does this from the card's profile (see below); the user's saved
+   mode stays as chosen.
+4. **Taking and giving back the card.** The service no longer assumes Intel
+   (see below), but `installer/install.ps1` and `installer/restore.ps1` still
+   do (`VEN_8086`, an Intel driver package to give the card back to).
+
+### The service's card catalog
+
+`app/service/CardCatalog.cs` is the service's one list of cards. Each
+`AdapterProfile` holds the PCI vendor and device ID, the vendor's name, the
+radio that drives it (`Iwx` today, `Devourer` for the RTL8852CE), its
+`AdapterCapabilities` (Wi-Fi beside AirDrop, faster sending, A-MPDU sending,
+nekodrop-wlan.sys, the smallest register BAR), the register proxy's INF,
+service and provider, and the provider names of the vendor's own driver.
+`Card.cs` takes only *active* profiles; `Supervisor.cs` runs the mode the
+card can run (`CardCatalog.EffectiveMode`: *together* becomes *on demand*
+without a station) and passes only the radio options the card has. The 15
+Intel profiles have every capability, so nothing changes for them.
+
+The RTL8852CE is listed but not active: it is never taken. It is there so
+`NekoDropService.exe --selftest` (run by `scripts/build-installer.ps1`, so on
+every CI build) checks the multi-vendor parsing, the forced *on demand* and
+the provider matching without a card or administrator rights.
+`NekoDropService.exe --status` prints the profile of the card it finds.
 
 ## The steps
 
 1. **Detection (done).** The diagnostic report names every wireless card, its
    chip and driver and why nekodrop does not run on it. Diagnostics and docs
    only: no driver, installer, service or radio change.
-2. **Installer message.** Once the Windows 10 INF is confirmed (#18, #12),
+2. **Service card catalog (done).** `CardCatalog.cs` above: profiles and
+   capabilities instead of Intel assumptions in `Card.cs` and
+   `Supervisor.cs`, with an offline self-test. No change for Intel cards.
+3. **Installer message.** Once the Windows 10 INF is confirmed (#18, #12),
    `install.ps1` refuses with the same classification: which card it found,
    its PCI ID, and an alternative (winawdl for an RTL8852CE).
-3. **Experimental RTL8852CE.** After the register proxy picks its BAR by device
-   and `Card.cs` / `restore.ps1` no longer assume Intel: winawdl's RTL8852CE
-   support behind an experimental switch, off by default, forced to *on
-   demand*.
+4. **Experimental RTL8852CE.** After the register proxy picks its BAR by device
+   and `restore.ps1` no longer assumes Intel: winawdl's RTL8852CE support
+   behind an experimental switch, off by default (its profile becomes active
+   only with the switch on), forced to *on demand* by its profile.
 
-When adding IDs, keep `$SupportedIntelIds` in `installer/report.ps1`,
-`kDeviceIds` in `iwxradio/src/cards.h`, the register proxy's INF and the check
-in `installer/install.ps1` in step.
+When adding IDs, keep `AllProfiles` in `app/service/CardCatalog.cs`,
+`$SupportedIntelIds` in `installer/report.ps1`, `kDeviceIds` in
+`iwxradio/src/cards.h`, the register proxy's INF and the check in
+`installer/install.ps1` in step. The service self-test expects exactly the 15
+Intel IDs: update its list too.
