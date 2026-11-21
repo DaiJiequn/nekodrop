@@ -334,11 +334,21 @@ W ''
 W '| Adapter | Description | Status | Speed | Metric (IPv4) |'
 W '|---|---|---|---|---|'
 $ifs = Try-Get { Get-NetIPInterface -AddressFamily IPv4 -ErrorAction Stop }
-foreach ($a in @(Try-Get { Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object { $_.Status -ne 'Not Present' } })) {
+$presentAdapters = @(Try-Get { Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object { $_.Status -ne 'Not Present' } })
+foreach ($a in $presentAdapters) {
   $metric = ($ifs | Where-Object { $_.InterfaceIndex -eq $a.ifIndex } | Select-Object -First 1).InterfaceMetric
   W "| $(Redact $a.Name) | $(Redact $a.InterfaceDescription) | $($a.Status) | $($a.LinkSpeed) | $metric |"
 }
 W ''
+if (-not ($presentAdapters | Where-Object { $_.Name -eq 'nekodrop' })) {
+  $hiddenTap = @(Try-Get { Get-NetAdapter -Name 'nekodrop' -IncludeHidden -ErrorAction Stop })
+  if ($hiddenTap.Count) {
+    W "nekodrop TAP adapter: $($hiddenTap[0].Status) ($($hiddenTap[0].InterfaceDescription))"
+  } else {
+    W 'nekodrop TAP adapter: missing'
+  }
+  W ''
+}
 $routes = @(Try-Get { Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop })
 W "Default routes: $($routes.Count)"
 foreach ($r in $routes) { W "- $(Redact $r.InterfaceAlias): route metric $($r.RouteMetric), interface metric $(($ifs | Where-Object { $_.InterfaceIndex -eq $r.ifIndex } | Select-Object -First 1).InterfaceMetric)" }
