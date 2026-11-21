@@ -293,7 +293,14 @@ if ($card) {
   $setupLog = Join-Path $env:windir 'INF\setupapi.dev.log'
   $setupLines = @(Try-Get { Get-Content $setupLog -Tail 6000 -ErrorAction Stop })
   if ($setupLines.Count) {
-    $starts = @(for ($i = 0; $i -lt $setupLines.Count; $i++) { if ($setupLines[$i] -match '^>>>  \[' -and ($setupLines[$i..([Math]::Min($i + 6, $setupLines.Count - 1))] -join ' ') -match 'winawdl_regproxy|VEN_8086&DEV_') { $i } })
+    # Section starts; the last one that installed the register proxy is the
+    # one that explains a failed bind (giving the card back installs Intel's
+    # driver afterwards, in its own section).
+    $all = @(for ($i = 0; $i -lt $setupLines.Count; $i++) { if ($setupLines[$i] -match '^>>>  \[') { $i } })
+    $starts = @(for ($k = 0; $k -lt $all.Count; $k++) {
+      $last = if ($k + 1 -lt $all.Count) { $all[$k + 1] - 1 } else { $setupLines.Count - 1 }
+      if (($setupLines[$all[$k]..$last] -join ' ') -match 'winawdl_regproxy|RegProxy|WUDFRd') { $all[$k] }
+    })
     if ($starts.Count) {
       $from = $starts[-1]
       $section = @($setupLines[$from..($setupLines.Count - 1)])

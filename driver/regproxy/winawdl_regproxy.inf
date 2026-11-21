@@ -68,8 +68,18 @@ AddReg  = RegProxy_HwAddReg
 HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GA;;;BA)"
 
 [RegProxy.NT.Services]
-Include = WUDFRD.inf
-Needs   = WUDFRD.NT.Services
+; The reflector as the function driver, added here (SPSVCINST_ASSOCSERVICE in
+; 0x1fa), as Microsoft documents for Windows 10 and earlier. Include/Needs of
+; WUDFRD.NT.Services left the device without a function driver on Windows 10
+; 22H2: code 31, status 0xC0000494 STATUS_PNP_FUNCTION_DRIVER_REQUIRED (#18, #12).
+AddService = WUDFRd, 0x000001fa, WUDFRD_ServiceInstall
+
+[WUDFRD_ServiceInstall]
+DisplayName   = %WudfRdDisplayName%
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 1
+ServiceBinary = %12%\WUDFRd.sys
 
 [RegProxy.NT.Wdf]
 UmdfService               = winawdl_regproxy, RegProxy_Umdf
@@ -86,3 +96,4 @@ Provider   = "winairdrop project"
 ClassName  = "winawdl user-space radios"
 DeviceDesc = "Intel Wi-Fi user-space register proxy (nekodrop)"
 DiskName   = "winawdl register proxy"
+WudfRdDisplayName = "Windows Driver Foundation - User-mode Driver Framework Reflector"
