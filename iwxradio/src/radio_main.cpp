@@ -235,12 +235,12 @@ struct BssSeen {
   std::string ssid;
   uint8_t channel = 0;
   int8_t dbm = -127;
-  std::string security; /* open, wep, wpa2-psk, wpa3-sae, wpa2/3-psk, 802.1x */
+  std::string security; /* open, wep, wpa2-psk, wpa3-sae, wpa2/3-psk, owe, 802.1x */
   uint64_t seen_ms = 0;
 };
 
 std::string bss_security(const uint8_t *ies, size_t len, uint16_t capability) {
-  bool psk = false, sae = false, dot1x = false, rsn = false;
+  bool psk = false, sae = false, dot1x = false, rsn = false, owe = false;
   for (size_t i = 0; i + 2 <= len;) {
     const uint8_t id = ies[i], n = ies[i + 1];
     if (i + 2 + n > len) break;
@@ -257,6 +257,7 @@ std::string bss_security(const uint8_t *ies, size_t len, uint16_t capability) {
           if (r[o] != 0x00 || r[o + 1] != 0x0f || r[o + 2] != 0xac) continue;
           if (r[o + 3] == 2 || r[o + 3] == 6) psk = true;
           else if (r[o + 3] == 8) sae = true;
+          else if (r[o + 3] == 18) owe = true;
           else if (r[o + 3] == 1 || r[o + 3] == 5) dot1x = true;
         }
       }
@@ -268,6 +269,7 @@ std::string bss_security(const uint8_t *ies, size_t len, uint16_t capability) {
     if (sae) return "wpa3-sae";
     if (psk) return "wpa2-psk";
     if (dot1x) return "802.1x";
+    if (owe) return "owe";
     return "rsn";
   }
   return (capability & 0x0010) ? "wep" : "open";

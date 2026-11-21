@@ -711,7 +711,7 @@ public sealed class Supervisor : IDisposable
 
     /* ------------------------------------------------------- Wi-Fi management */
 
-    static readonly string[] Joinable = ["open", "wpa2-psk", "wpa2/3-psk"];
+    static readonly string[] Joinable = ["open", "owe", "wpa2-psk", "wpa2/3-psk", "wpa3-sae"];
 
     void RadioCommand(string line)
     {
@@ -757,12 +757,12 @@ public sealed class Supervisor : IDisposable
         if (!Joinable.Contains(security))
             return security switch
             {
-                "wpa3-sae" => "WPA3-only networks are not supported yet (WPA2/WPA3 mixed works)",
                 "802.1x" => "enterprise (802.1X) networks are not supported yet",
                 "wep" => "WEP networks are not supported",
                 _ => "this network's security is not supported",
             };
-        var open = security == "open";
+        // Enhanced Open (OWE) has no password: the radio sees it in the beacon and encrypts.
+        var open = security is "open" or "owe";
         string? pass = null, psk = null;
         if (!open)
         {
@@ -778,6 +778,8 @@ public sealed class Supervisor : IDisposable
                 psk = k.PskHex;
             }
             else return "password needed";
+            // SAE works from the password itself; a stored 64-digit key cannot do WPA3.
+            if (security == "wpa3-sae" && pass is null) return "WPA3 needs the Wi-Fi password itself, not a 64-digit key";
         }
         _known.Remember(ssid, pass, psk, open, autoConnect);
         var net = new Wlan.Network(ssid, (string?)target["bssid"] ?? "", (int?)target["channel"] ?? 0, security, pass, psk, open);

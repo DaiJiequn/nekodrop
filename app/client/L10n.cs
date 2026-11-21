@@ -145,6 +145,7 @@ public static class L
         ["wifi.address"] = ("IP {0} · 网关 {1}", "IP {0} · gateway {1}"),
         ["wifi.scanning"] = ("正在扫描…", "Scanning…"),
         ["wifi.sec.open"] = ("开放", "Open"),
+        ["wifi.sec.owe"] = ("增强型开放（OWE）", "Enhanced Open (OWE)"),
         ["wifi.sec.enterprise"] = ("企业（802.1X）", "Enterprise (802.1X)"),
         ["wifi.portal.title"] = ("{0} 需要登录", "{0} needs you to sign in"),
         ["wifi.portal.body"] = ("已在浏览器中打开登录页面。", "The sign-in page is open in your browser."),

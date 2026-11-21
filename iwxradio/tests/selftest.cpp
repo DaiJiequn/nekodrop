@@ -11,6 +11,7 @@
 #include "../src/fw.h"
 #include "../src/awdl_policy.h"
 #include "../src/crypto.h"
+#include "../src/wpa3.h"
 #include <cstring>
 #include <vector>
 
@@ -254,7 +255,68 @@ int main(int argc, char **argv) {
     wrapped[3] ^= 1;
     CHECK(!crypto::aes_unwrap(kek, 16, wrapped.data(), wrapped.size(), back),
           "AES key unwrap rejects a corrupted key");
+
+    /* WPA3: AES-CMAC (RFC 4493), P-256, SAE (IEEE 802.11-2020 J.10, as hostap's sae_tests), OWE. */
+    auto unhex = [](const char *h, uint8_t *out) {
+      for (size_t i = 0; h[2 * i]; i++) {
+        unsigned b;
+        std::sscanf(h + 2 * i, "%2x", &b);
+        out[i] = static_cast<uint8_t>(b);
+      }
+    };
+    uint8_t ck[16], cm[64], tag[16];
+    unhex("2b7e151628aed2a6abf7158809cf4f3c", ck);
+    unhex("6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e51"
+          "30c81c46a35ce411e5fbc1191a0a52eff69f2445df4f9b17ad2b417be66c3710", cm);
+    CHECK(wpa3::aes_cmac(ck, cm, 0, tag) && hex_eq(tag, "bb1d6929e95937287fa37d129b756746"), "AES-CMAC RFC 4493 (empty)");
+    CHECK(wpa3::aes_cmac(ck, cm, 40, tag) && hex_eq(tag, "dfa66747de9ae63030ca32611497c827"), "AES-CMAC RFC 4493 (40 bytes)");
+    CHECK(wpa3::aes_cmac(ck, cm, 64, tag) && hex_eq(tag, "51f0bebf7e3b9d92fc49741779363cfe"), "AES-CMAC RFC 4493 (64 bytes)");
+    uint8_t two[32] = {}, g2[64];
+    two[31] = 2;
+    CHECK(wpa3::p256_mul_base(two, g2) &&
+              hex_eq(g2, "7cf27b188d034f7e8a52380304b51ac3c08969e277f21b35a60b48fc47669978"
+                         "07775510db8ed040293d9ac69f7430dbba7dade63ce982299e04b79d227873d1"),
+          "P-256 2G");
+    const uint8_t sa1[6] = {0x4d, 0x3f, 0x2f, 0xff, 0xe3, 0x87}, sa2[6] = {0xa5, 0xd8, 0xaa, 0x95, 0x8e, 0x3c};
+    uint8_t srand[32], smask[32], peer[98];
+    unhex("992465fd3daa3c60aa6565b7f62a2a7f2e12dd12f198faf4fbed89d7ff1ace94", srand);
+    unhex("9507a90f777a044d6a0830b91ea3d5dd70bece44e1acffb86983b5e1bf9fb322", smask);
+    unhex(
+        "1300591b96f3397fb945100848e7b550543b6720d88337ee93fc49fd6df7e08b"
+        "5223e71b9bb048d3873f20556953a96c91536fd8ee6ca9b4a68a148b056a909b"
+        "e03e83ae208f60f8ef5537858074db06687032399862999b511e0a1552a5fea3"
+        "17c2",
+        peer);
+    wpa3::Sae sae;
+    const bool sae_ok = sae.prepare(sa1, sa2, "mekmitasdigoat") && sae.commit(srand, smask);
+    const std::vector<uint8_t> body = sae.commit_body({});
+    CHECK(sae_ok && body.size() == 98 &&
+              hex_eq(body.data(),
+        "13002e2c0f0db52440ad146d967114ce005ce1eab0aa2c2e5c2871b774f6c257"
+        "5c65d5ad9e00829707aa36ba8b859738fc961d08243505f47c035376d7ac4bc8"
+        "d7b95083bf43827d0fc31ed778dd3671fd21a46d1091d64b6f9a1e1272621325"
+        "dbe1"),
+          "SAE commit matches IEEE 802.11-2020 J.10");
+    CHECK(sae.process_commit(peer, sizeof(peer)) &&
+              hex_eq(sae.kck(), "1e733f6d9bd53256287304338831b09a39406d121017073a5c30db36f36cb81a") &&
+              hex_eq(sae.pmk(), "4e4dfab1a2dd8ac1a91790f953faaa452ae5c6873ab75b63605ba663f8a7fe59") &&
+              hex_eq(sae.pmkid(), "8747a600eea3f9f22475df58ca1e5498"),
+          "SAE KCK, PMK and PMKID match J.10");
+    CHECK(!sae.process_commit(body.data(), body.size()), "SAE refuses a reflected commit");
+    {
+      wpa3::Sae a, b;
+      bool ok = a.prepare(sa1, sa2, "correct horse") && b.prepare(sa2, sa1, "correct horse") && a.commit() && b.commit();
+      const auto ba = a.commit_body({}), bb = b.commit_body({});
+      uint8_t ca[32], cb[32];
+      ok = ok && a.process_commit(bb.data(), bb.size()) && b.process_commit(ba.data(), ba.size()) && a.confirm(1, ca) &&
+           b.confirm(1, cb);
+      CHECK(ok && std::memcmp(a.pmk(), b.pmk(), 32) == 0 && a.verify(1, cb) && b.verify(1, ca),
+            "SAE peers with random values agree and confirm");
+    }
+    wpa3::Owe owe_a, owe_b;
+    CHECK(owe_a.generate() && owe_b.generate() && owe_a.derive(owe_b.public_x()), "OWE key agreement");
   }
+
   std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
   return failures ? 1 : 0;
 }

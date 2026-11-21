@@ -74,6 +74,7 @@ public partial class WifiWindow : Window
         "wpa2-psk" => "WPA2",
         "wpa2/3-psk" => "WPA2/WPA3",
         "wpa3-sae" => "WPA3",
+        "owe" => L.T("wifi.sec.owe"),
         "802.1x" => L.T("wifi.sec.enterprise"),
         "wep" => "WEP",
         _ => s,
@@ -198,7 +199,7 @@ public partial class WifiWindow : Window
         }
         action.Click += (_, _) =>
         {
-            if (saved || sec == "open") Connect(ssid, null, null);
+            if (saved || sec is "open" or "owe") Connect(ssid, null, null);
             else
             {
                 _expanded = ssid;

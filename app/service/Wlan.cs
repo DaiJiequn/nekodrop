@@ -173,7 +173,7 @@ public static class Wlan
             var ssid = doc.Descendants(ns + "SSID").FirstOrDefault()?.Element(ns + "name")?.Value;
             var auth = doc.Descendants(ns + "authentication").FirstOrDefault()?.Value ?? "";
             if (string.IsNullOrEmpty(ssid)) return null;
-            if (auth == "open" && doc.Descendants(ns + "encryption").FirstOrDefault()?.Value == "none")
+            if ((auth == "open" && doc.Descendants(ns + "encryption").FirstOrDefault()?.Value == "none") || auth == "OWE")
                 return new SavedProfile(ssid, null, null, true);
             if (auth is not ("WPA2PSK" or "WPAPSK" or "WPA3SAE")) return null; // enterprise: not yet
             var shared = doc.Descendants(ns + "sharedKey").FirstOrDefault();
@@ -247,16 +247,15 @@ public static class Wlan
         // DOT11_AUTH_ALGORITHM: 1 open, 6 RSNA (802.1X), 7 RSNA-PSK, 8 WPA3, 9 WPA3-SAE, 10 OWE.
         // DOT11_CIPHER_ALGORITHM: 0 none, 4 CCMP.
         string security = auth switch { 1 => "open", 7 => "WPA2-Personal", 6 => "WPA2-Enterprise", 8 or 9 => "WPA3", 10 => "OWE", _ => $"auth {auth}" };
-        if (auth == 1 && cipher == 0)
+        // Open, and Enhanced Open (OWE): no key; the radio finds OWE in the beacon.
+        if ((auth == 1 && cipher == 0) || (auth == 10 && cipher == 4))
             return new Network(ssid, bssid, channel, security, null, null, true);
-        // Windows picks WPA3 on a WPA2/WPA3 mixed network (issue #12). The station
-        // joins those with WPA2-PSK and the same passphrase; a WPA3-only network
-        // then fails at the handshake, which the radio logs.
+        // WPA3 (SAE): the radio uses WPA2-PSK where the network also offers it
+        // (mixed, issue #12) and SAE with the same password where it does not.
         var sae = (auth == 8 || auth == 9) && cipher == 4;
-        if (sae) security = "WPA3 (joined with WPA2-PSK: needs a WPA2/WPA3 mixed network)";
         if ((auth != 7 && !sae) || cipher != 4)
         {
-            why = $"{security} is not supported beside AirDrop (WPA2-Personal with AES only)";
+            why = $"{security} is not supported beside AirDrop (WPA2/WPA3-Personal or Enhanced Open with AES)";
             return new Network(ssid, bssid, channel, security, null, null, false);
         }
         if (!readKey) return new Network(ssid, bssid, channel, security, null, null, false);
