@@ -40,7 +40,7 @@ jobs:
               if ($_ -match '^(test\S+) \((\S+)\).* \.\.\. (ok|FAIL|ERROR|skipped.*)$') { $results[$which]["$($Matches[2]).$($Matches[1])"] = ($Matches[3] -split ' ')[0] }
             }
             Pop-Location
-            "== $which: $($results[$which].Count) tests"
+            "== ${which}: $($results[$which].Count) tests"
             Get-Content $log | Select-Object -Last 5
           }
           $regressions = $results['pinned'].Keys | Where-Object { $results['pinned'][$_] -eq 'ok' -and $results['patched'][$_] -ne 'ok' }
