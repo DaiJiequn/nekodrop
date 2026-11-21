@@ -89,3 +89,131 @@ if new not in text:
     text = text.replace(old, new, 1)
     sender.write_text(text, encoding='utf-8')
     print('sender patched')
+
+# engine.py: follow a receiver that announces itself again.  After a transfer
+# in either direction an iPhone withdraws its AirDrop service and comes back
+# under a new instance (#4: peer_gone, then WinError 10061 on its old port,
+# then every retry failed at once with "gone").  A send to a peer that is gone,
+# or refused on its old port, now waits up to FOLLOW_SECONDS for a receiver
+# with the same name and sends there.
+FOLLOW = [
+    (
+        '        self._shy_said = 0' + NL,
+        '        self._shy_said = 0' + NL +
+        '        self._gone_names = {}  # nekodrop: key -> name of receivers that went away' + NL,
+    ),
+    (
+        NL.join([
+            '            for key in [key for key in self._peers if key not in located]:',
+            '                if self._peers.pop(key).name:',
+            '                    gone.append(key)',
+        ]),
+        NL.join([
+            '            for key in [key for key in self._peers if key not in located]:',
+            '                old = self._peers.pop(key)',
+            '                if old.name:',
+            '                    self._gone_names[key] = old.name',
+            '                    gone.append(key)',
+        ]),
+    ),
+    (
+        '    def link(self, scope):' + NL,
+        NL.join([
+            '    def find(self, key, wait):',
+            '        """nekodrop: the receiver under `key`, or the one that came back with',
+            '        its name, waiting up to `wait` seconds for it."""',
+            '        deadline = time.monotonic() + wait',
+            '        while True:',
+            '            with self._lock:',
+            '                peer = self._peers.get(key)',
+            '                if peer and peer.name:',
+            '                    return peer',
+            '                name = self._gone_names.get(key)',
+            '                if name:',
+            '                    for other in self._peers.values():',
+            '                        if other.name == name:',
+            '                            return other',
+            '            if time.monotonic() >= deadline or not self.wanted.is_set():',
+            '                return None',
+            '            time.sleep(0.5)',
+            '',
+            '    def link(self, scope):',
+            '',
+        ]),
+    ),
+    (
+        NL.join([
+            '        peer = self.looking.peer(peer_key)',
+            '        if not peer or scope is None:',
+            "            failed('gone')",
+            '            return',
+        ]),
+        NL.join([
+            '        peer = self.looking.peer(peer_key)  # None: looked for again in _run',
+            '        if scope is None:',
+            "            failed('gone')",
+            '            return',
+        ]),
+    ),
+    (
+        NL.join([
+            '        watch = SendWatch(self.events, key, sender.archive_bytes(files))',
+            '        with self._lock:',
+        ]),
+        NL.join([
+            '        watch = SendWatch(self.events, key, sender.archive_bytes(files))',
+            '        watch.peer_key = peer_key',
+            '        with self._lock:',
+        ]),
+    ),
+    (
+        NL.join([
+            "        watch.state('asking')",
+            '        try:',
+            '            outcome = sender.deliver(peer.address, peer.port, scope, self.context,',
+            '                                     self.settings.name, files, watch)',
+        ]),
+        NL.join([
+            "        watch.state('asking')",
+            '        try:',
+            '            if peer is None:',
+            '                peer = self.looking.find(watch.peer_key, FOLLOW_SECONDS)',
+            '                if peer is None:',
+            "                    watch.state('failed', reason='gone')",
+            '                    return',
+            '            try:',
+            '                outcome = sender.deliver(peer.address, peer.port, scope, self.context,',
+            '                                         self.settings.name, files, watch)',
+            '            except (ConnectionRefusedError, TimeoutError):',
+            '                # Refused or silent before answering: the receiver may be',
+            '                # announcing itself again on another port.',
+            '                if watch.reached or watch.cancelled:',
+            '                    raise',
+            '                fresh = self.looking.find(watch.peer_key, FOLLOW_SECONDS)',
+            '                if fresh is None or (fresh.address, fresh.port) == (peer.address, peer.port):',
+            '                    raise',
+            "                logging.info('receiver came back on port %d; sending again', fresh.port)",
+            '                peer = fresh',
+            '                outcome = sender.deliver(peer.address, peer.port, scope, self.context,',
+            '                                         self.settings.name, files, watch)',
+        ]),
+    ),
+    (
+        'BIND_RETRY_SECONDS = 5' + NL,
+        'BIND_RETRY_SECONDS = 5' + NL +
+        'FOLLOW_SECONDS = 15  # nekodrop: wait for a receiver that announces itself again' + NL,
+    ),
+]
+engine = pathlib.Path(sys.argv[1]) / 'engine.py'
+text = engine.read_text(encoding='utf-8')
+changed = False
+for old, new in FOLLOW:
+    if new in text:
+        continue
+    if text.count(old) != 1:
+        sys.exit('engine.py: a line the receiver-follow patch needs moved; update patch-engine.py')
+    text = text.replace(old, new, 1)
+    changed = True
+if changed:
+    engine.write_text(text, encoding='utf-8')
+    print('engine: follows receivers that come back')
