@@ -30,37 +30,59 @@ public static class Shell
     public static void Register(bool startWithWindows)
     {
         var exe = Exe;
-        var classes = Registry.CurrentUser.CreateSubKey(@"Software\Classes");
-        foreach (var target in new[] { @"*\shell\nekodrop", @"Directory\shell\nekodrop" })
+        // Each step on its own: one refused write (security software guarding
+        // the context menu) must not leave notifications without their
+        // protocol (#17). The protocol goes first.
+        Try(RegisterProtocol);
+        Try(() =>
         {
-            using var key = classes.CreateSubKey(target);
-            key.SetValue("", L.T("verb"));
-            key.SetValue("Icon", $"\"{exe}\",0");
-            key.SetValue("MultiSelectModel", "Player");
-            using var cmd = key.CreateSubKey("command");
-            cmd.SetValue("", $"\"{exe}\" --send \"%1\"");
-        }
-        using (var app = Registry.CurrentUser.CreateSubKey(@"Software\nekodrop"))
+            using var classes = Registry.CurrentUser.CreateSubKey(@"Software\Classes");
+            foreach (var target in new[] { @"*\shell\nekodrop", @"Directory\shell\nekodrop" })
+            {
+                using var key = classes.CreateSubKey(target);
+                key.SetValue("", L.T("verb"));
+                key.SetValue("Icon", $"\"{exe}\",0");
+                key.SetValue("MultiSelectModel", "Player");
+                using var cmd = key.CreateSubKey("command");
+                cmd.SetValue("", $"\"{exe}\" --send \"%1\"");
+            }
+        });
+        Try(() =>
+        {
+            using var app = Registry.CurrentUser.CreateSubKey(@"Software\nekodrop");
             app.SetValue("Language", L.Zh ? "zh" : "en");
-        using (var proto = classes.CreateSubKey("nekodrop"))
+        });
+        Try(() =>
         {
-            proto.SetValue("", "URL:nekodrop");
-            proto.SetValue("URL Protocol", "");
-            using var cmd = proto.CreateSubKey(@"shell\open\command");
-            cmd.SetValue("", $"\"{exe}\" \"%1\"");
-        }
-        using (var run = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
-        {
+            using var run = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
             if (startWithWindows) run.SetValue("nekodrop", $"\"{exe}\" --background");
             else run.DeleteValue("nekodrop", false);
-        }
-        try
+        });
+        Try(() =>
         {
             var sendTo = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SendTo), "nekodrop.lnk");
             if (!File.Exists(sendTo)) CreateShortcut(sendTo, exe, "--send");
-        }
-        catch (Exception) { }
+        });
         _ = RegisterMenuPackage();
+    }
+
+    static void Try(Action step)
+    {
+        try { step(); } catch (Exception) { }
+    }
+
+    /// <summary>The nekodrop: protocol that notification clicks and buttons open; checked again before each notification.</summary>
+    static void RegisterProtocol()
+    {
+        var command = $"\"{Exe}\" \"%1\"";
+        using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Classes\nekodrop"))
+        using (var existing = key?.OpenSubKey(@"shell\open\command"))
+            if (key?.GetValue("URL Protocol") is not null && existing?.GetValue("") as string == command) return;
+        using var proto = Registry.CurrentUser.CreateSubKey(@"Software\Classes\nekodrop");
+        proto.SetValue("", "URL:nekodrop");
+        proto.SetValue("URL Protocol", "");
+        using var cmd = proto.CreateSubKey(@"shell\open\command");
+        cmd.SetValue("", command);
     }
 
     const string MenuPackage = "nekodrop.shell";
@@ -129,6 +151,7 @@ public static class Shell
 
     static void Show(string xml, string? tag = null)
     {
+        Try(RegisterProtocol);
         try
         {
             var doc = new XmlDocument();

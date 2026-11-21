@@ -508,6 +508,14 @@ int main(int argc, char **argv) {
       }
       if (awdl::is_awdl_action(f.data, f.len)) {
         rx_awdl++;
+        /* Peer hint: an Apple device sending AWDL on our channel has the channel
+         * open in its own country. Needed where the firmware refuses the
+         * country (MCC status 4, "00" world domain: all of 5 GHz passive) and
+         * no access point beacons near the AWDL channel (#11, AX210, TW). */
+        if (!beacon_heard && f.channel == dev.channel() && dev.channel() > 14) {
+          beacon_heard = true;
+          log_line("AWDL peer heard on channel " + std::to_string(f.channel) + ": transmitting allowed here");
+        }
         if (f.len > 30) {
           if (f.data[30] == 0) rx_psf++;      /* periodic synchronization */
           else if (f.data[30] == 3) rx_mif++; /* master indication */
