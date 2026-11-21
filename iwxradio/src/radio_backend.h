@@ -297,8 +297,10 @@ RADIO_DETECT(has_promiscuous_toggle, (void)RADIO_CDEV.promiscuous(), (void)RADIO
 RADIO_DETECT(has_aggregate,
              (void)RADIO_CDEV.agg_available(), (void)RADIO_CDEV.agg_ready(),
              (void)RADIO_DEV.agg_setup(RADIO_P6, false, false), (void)RADIO_DEV.agg_enable(false),
-             (void)RADIO_DEV.agg_pause(false), (void)RADIO_DEV.transmit_agg(RADIO_P6, size_t{}),
-             (void)RADIO_CDEV.agg_queued(), (void)RADIO_CDEV.agg_seq(), (void)RADIO_CDEV.ba_epoch(),
+             (void)RADIO_DEV.agg_pause(false), (void)RADIO_DEV.agg_flush(),
+             (void)RADIO_DEV.transmit_agg(RADIO_P6, size_t{}, false), (void)RADIO_DEV.kick_agg(),
+             (void)RADIO_CDEV.agg_queued(), (void)RADIO_CDEV.agg_queue_cap(),
+             (void)RADIO_CDEV.agg_seq(), (void)RADIO_CDEV.ba_epoch(),
              (void)RADIO_CDEV.agg_stats().frames);
 RADIO_DETECT(has_batched_kick, (void)RADIO_DEV.kick_data());
 RADIO_DETECT(has_country_notice, (void)RADIO_DEV.answer_country_notice(std::declval<std::string *>()));

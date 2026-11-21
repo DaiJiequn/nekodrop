@@ -74,6 +74,10 @@ public:
   /* Frees the single pipe instance for the next client. */
   void drop_client() {
     _connected = false;
+    {
+      std::lock_guard<std::mutex> lock(_write_mutex);
+      _rx_batch.clear();
+    }
     _taken = _filled = 0;
     DisconnectNamedPipe(_handle);
   }
@@ -98,6 +102,11 @@ public:
   bool send(radio_link_type type, std::span<const uint8_t> payload) {
     if (!_connected) return false;
     std::lock_guard<std::mutex> lock(_write_mutex);
+    if (!_rx_batch.empty()) {
+      const bool ok = write_all(_rx_batch.data(), static_cast<DWORD>(_rx_batch.size()));
+      _rx_batch.clear();
+      if (!ok) return false;
+    }
     const radio_link_header header{static_cast<uint16_t>(type), 0,
                                    static_cast<uint32_t>(payload.size())};
     /* One write for the two: a frame is then one system call, not two. */
@@ -108,8 +117,38 @@ public:
     return write_all(_out.data(), static_cast<DWORD>(_out.size()));
   }
 
+  /* Appends a framed packet into the RX batch buffer; flushes automatically
+   * once >= 32 KiB accumulate so one dev.poll() burst becomes one WriteFile. */
+  bool queue_send(radio_link_type type, std::span<const uint8_t> payload) {
+    if (!_connected) return false;
+    std::lock_guard<std::mutex> lock(_write_mutex);
+    const radio_link_header header{static_cast<uint16_t>(type), 0,
+                                   static_cast<uint32_t>(payload.size())};
+    const size_t at = _rx_batch.size();
+    _rx_batch.resize(at + sizeof(header) + payload.size());
+    std::memcpy(_rx_batch.data() + at, &header, sizeof(header));
+    if (!payload.empty())
+      std::memcpy(_rx_batch.data() + at + sizeof(header), payload.data(), payload.size());
+    if (_rx_batch.size() >= kBatchFlushBytes) {
+      const bool ok = write_all(_rx_batch.data(), static_cast<DWORD>(_rx_batch.size()));
+      _rx_batch.clear();
+      return ok;
+    }
+    return true;
+  }
+
+  bool flush_send() {
+    if (!_connected) return false;
+    std::lock_guard<std::mutex> lock(_write_mutex);
+    if (_rx_batch.empty()) return true;
+    const bool ok = write_all(_rx_batch.data(), static_cast<DWORD>(_rx_batch.size()));
+    _rx_batch.clear();
+    return ok;
+  }
+
 private:
-  static constexpr DWORD kBufferBytes = 1 << 16;
+  static constexpr DWORD kBufferBytes = 1 << 18; /* 256 KiB pipe buffer */
+  static constexpr size_t kBatchFlushBytes = 32768;
   static constexpr DWORD kStopPollMs = 100;
 
   bool disconnect() {
@@ -163,7 +202,8 @@ private:
   HANDLE _write_event = nullptr;
   std::atomic<bool> _connected{false};
   std::mutex _write_mutex;
-  std::vector<uint8_t> _out; /* under _write_mutex */
+  std::vector<uint8_t> _out;      /* under _write_mutex */
+  std::vector<uint8_t> _rx_batch; /* under _write_mutex */
   std::vector<uint8_t> _in = std::vector<uint8_t>(kBufferBytes);
   DWORD _taken = 0, _filled = 0;
 };

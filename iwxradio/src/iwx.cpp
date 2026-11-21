@@ -1321,8 +1321,11 @@ bool IwxDevice::agg_setup(const uint8_t peer[6], bool vht80, bool mimo) {
     c.ht_rates[IWX_TLC_NSS_1][IWX_TLC_MCS_PER_BW_80] = htole16(mcs);
     if (two) c.ht_rates[IWX_TLC_NSS_2][IWX_TLC_MCS_PER_BW_80] = htole16(mcs);
     c.max_ch_width = static_cast<uint8_t>(vht && _width >= 80 ? IWX_TLC_MNG_CH_WIDTH_80MHZ : IWX_TLC_MNG_CH_WIDTH_20MHZ);
-    c.sgi_ch_width_supp = static_cast<uint8_t>((1u << IWX_TLC_MNG_CH_WIDTH_20MHZ) |
-                                               (vht ? (1u << IWX_TLC_MNG_CH_WIDTH_80MHZ) : 0u));
+    /* Enable LDPC (required for VHT80 MCS 9) and STBC when two TX chains are
+     * active, with 20 MHz SGI, matching ForbiddenItlwm's iwx_rs_init. */
+    c.flags = htole16(static_cast<uint16_t>(IWX_TLC_MNG_CFG_FLAGS_LDPC_MSK |
+                                            (two ? IWX_TLC_MNG_CFG_FLAGS_STBC_MSK : 0u)));
+    c.sgi_ch_width_supp = static_cast<uint8_t>(1u << IWX_TLC_MNG_CH_WIDTH_20MHZ);
     const uint32_t id = iwx_cmd_id(IWX_TLC_MNG_CONFIG_CMD, IWX_DATA_PATH_GROUP, 0);
     const uint8_t ver = cmd_version(IWX_DATA_PATH_GROUP, IWX_TLC_MNG_CONFIG_CMD);
     int err;
@@ -1381,16 +1384,38 @@ bool IwxDevice::agg_pause(bool on) {
   return !err && (status & IWX_ADD_STA_STATUS_MASK) == IWX_ADD_STA_SUCCESS;
 }
 
-int IwxDevice::transmit_agg(const uint8_t *frame, size_t len) {
+bool IwxDevice::agg_flush() {
+  if (!_ba_station || !_agg_queue_enabled) return false;
+  iwx_tx_path_flush_cmd cmd{};
+  cmd.sta_id = htole32(3u);
+  cmd.tid_mask = htole16(1u);
+  if (!nic_lock()) return false;
+  const int err = send_cmd(IWX_TXPATH_FLUSH, &cmd, sizeof(cmd), false, nullptr);
+  nic_unlock();
+  if (!err) {
+    _aggq.tail = _aggq.cur & (_aggq.count - 1);
+    _aggq.queued = 0;
+    _agg_seq = static_cast<uint16_t>(_aggq.cur & 0xfff);
+  }
+  return err == 0;
+}
+
+int IwxDevice::transmit_agg(const uint8_t *frame, size_t len, bool kick) {
   if (!_agg_queue_enabled || _fw_error) return -1;
   TxRate rate;
   rate.kind = TxRate::Auto; /* the firmware's rate control picks */
-  const int slot = transmit_on(_aggq, frame, len, rate, false);
+  const int slot = transmit_on(_aggq, frame, len, rate, false, kick);
   if (slot >= 0) {
     _agg_seq = static_cast<uint16_t>((_agg_seq + 1) & 0xfff);
     _agg_stats.frames++;
   }
   return slot;
+}
+
+void IwxDevice::kick_agg() {
+  if (!_agg_queue_enabled || _fw_error) return;
+  plat_fence();
+  wr(IWX_HBUS_TARG_WRPTR, (_aggq.qid << 16) | _aggq.cur);
 }
 
 /* Compressed Block Ack notification (new TX API): the aggregation queue's
@@ -1552,10 +1577,17 @@ int IwxDevice::mac_ctxt_cmd(uint32_t action) {
     cmd.ofdm_rates = htole32(0x15); /* 6, 12, 24 */
     if (_opt.mac_type != MacType::Listener) cmd.qos_flags = htole32(IWX_MAC_QOS_FLG_TGN);
   }
-  cmd.filter_flags = htole32((_promisc ? IWX_MAC_FILTER_IN_PROMISC : 0u) |
-                             IWX_MAC_FILTER_IN_CONTROL_AND_MGMT | IWX_MAC_FILTER_ACCEPT_GRP |
-                             IWX_MAC_FILTER_IN_BEACON | IWX_MAC_FILTER_IN_PROBE_REQUEST |
-                             IWX_MAC_FILTER_IN_CRC32);
+  /* When experimental A-MPDU sending drops promiscuous receive, narrow the
+   * listener filter to ACCEPT_GRP only (matching ForbiddenItlwm's coex
+   * listener) so firmware Block Ack tracking is not disrupted (#4). */
+  if (_opt.aggregate && !_promisc && _opt.mac_type == MacType::Listener) {
+    cmd.filter_flags = htole32(IWX_MAC_FILTER_ACCEPT_GRP);
+  } else {
+    cmd.filter_flags = htole32((_promisc ? IWX_MAC_FILTER_IN_PROMISC : 0u) |
+                               IWX_MAC_FILTER_IN_CONTROL_AND_MGMT | IWX_MAC_FILTER_ACCEPT_GRP |
+                               IWX_MAC_FILTER_IN_BEACON | IWX_MAC_FILTER_IN_PROBE_REQUEST |
+                               IWX_MAC_FILTER_IN_CRC32);
+  }
   if (_opt.mac_type == MacType::Ibss) {
     cmd.ibss.bi = htole32(100);
     cmd.ibss.bi_reciprocal = htole32(iwx_reciprocal(100));

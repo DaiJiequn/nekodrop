@@ -671,7 +671,7 @@ int main(int argc, char **argv) {
       message[8] = 0;
       message[9] = static_cast<uint8_t>(f.dbm);
       message.insert(message.end(), f.data, f.data + f.len);
-      if (message.size() <= RADIO_LINK_MAX_PAYLOAD) pipe.send(RADIO_LINK_RX, message);
+      if (message.size() <= RADIO_LINK_MAX_PAYLOAD) pipe.queue_send(RADIO_LINK_RX, message);
     });
     if (!dev.start_monitor(opt.channel, opt.width, dev.hw_address().data())) {
       log_line("could not start listening");
@@ -879,6 +879,7 @@ int main(int argc, char **argv) {
     Request req;
     while (!stopping() && dev.healthy()) {
       bool busy = dev.poll() > 0;
+      pipe.flush_send();
       for (int n = 0; n < 64 && inbox.pop(req); n++) {
         busy = true;
         if (req.type == RADIO_LINK_TX) {
@@ -1062,6 +1063,7 @@ int main(int argc, char **argv) {
           agg.delbas++;
           dev.agg_enable(false);
           if (agg.pause.paused) dev.agg_pause(false);
+          dev.agg_flush();
           agg.pause = awdl_sched::PeerPauseState{};
           back_to_uq();
           agg.step = Agg::Asking;
@@ -1088,17 +1090,21 @@ int main(int argc, char **argv) {
           } else if (change < 0) {
             agg.resume_failures = 0;
           }
-          while (agg.step == Agg::Agreed && !agg.wait.empty() && !agg.pause.paused && dev.agg_queued() < 64) {
+          const unsigned agg_cap = dev.agg_queue_cap();
+          bool agg_sent = false;
+          while (agg.step == Agg::Agreed && !agg.wait.empty() && !agg.pause.paused && dev.agg_queued() < agg_cap) {
             std::vector<uint8_t> qos;
             if (!awdl::build_qos_data(agg.wait.front().data(), agg.wait.front().size(), 0, dev.agg_seq(), qos)) {
               uq.push_back({std::move(agg.wait.front()), TxRate{}, true});
               agg.wait.pop_front();
               continue;
             }
-            if (dev.transmit_agg(qos.data(), qos.size()) < 0) break;
+            if (dev.transmit_agg(qos.data(), qos.size(), false) < 0) break;
             agg.wait.pop_front();
             agg.last_agg_us = t;
+            agg_sent = true;
           }
+          if (agg_sent) dev.kick_agg(); /* one doorbell for the whole A-MPDU batch */
           const auto &a = dev.agg_stats();
           if (agg.step == Agg::Agreed &&
               awdl::ba_tx_stalled_as_singles(a.frames - agg.agree_frames, a.notifs - agg.agree_notifs,

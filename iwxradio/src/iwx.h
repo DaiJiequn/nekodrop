@@ -81,8 +81,13 @@ public:
   bool agg_enable(bool on);
   /* Holds the peer's frames in the firmware while it is away from our channel. */
   bool agg_pause(bool on);
-  int transmit_agg(const uint8_t *frame, size_t len);
+  /* Flushes TID 0 of the peer station (after DELBA so SSN restarts cleanly). */
+  bool agg_flush();
+  int transmit_agg(const uint8_t *frame, size_t len, bool kick = true);
+  void kick_agg();
   unsigned agg_queued() const { return _aggq.queued; }
+  /* Up to 128 in flight (two BA windows), leaving 16 slots of headroom on AX210's 128-entry ring. */
+  unsigned agg_queue_cap() const { return _aggq.count > 16u ? ((_aggq.count - 16u) < 128u ? (_aggq.count - 16u) : 128u) : 0u; }
   uint16_t agg_seq() const { return _agg_seq; }
   /* Goes up whenever the peer station is replaced: everything set up for the old one is gone. */
   uint32_t ba_epoch() const { return _ba_epoch; }
