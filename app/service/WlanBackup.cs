@@ -168,17 +168,43 @@ public static class WlanBackup
         }
         catch (Exception) { /* the store is SYSTEM's; nothing to recover from it then */ }
 
-        int added = 0;
-        foreach (var (name, xml, from) in candidates)
+        int added = 0, failed = 0;
+        var pending = candidates.Where(c => !have.Contains(c.Name)).ToList();
+        // Right after the card goes back to Intel's driver its interface exists
+        // but is not ready: every profile fails with ERROR_INVALID_STATE (#18).
+        // Those are tried again for a while instead of being given up.
+        var until = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (true)
         {
-            if (have.Contains(name)) continue;
-            var g = guid;
-            var rc = WlanSetProfile(h, ref g, 0, xml, null, false, IntPtr.Zero, out var reason);
-            if (rc == 0) { have.Add(name); added++; }
-            else if (rc != ERROR_ALREADY_EXISTS)
-                say($"Wi-Fi: could not restore a saved network from the {from} (error {rc}, reason {reason})");
+            var notReady = new List<(string Name, string Xml, string From)>();
+            failed = 0;
+            foreach (var c in pending)
+            {
+                if (have.Contains(c.Name)) continue;
+                var g = guid;
+                var rc = WlanSetProfile(h, ref g, 0, c.Xml, null, false, IntPtr.Zero, out var reason);
+                if (rc == 0) { have.Add(c.Name); added++; }
+                else if (rc == ERROR_INVALID_STATE) notReady.Add(c);
+                else if (rc != ERROR_ALREADY_EXISTS)
+                {
+                    failed++;
+                    say($"Wi-Fi: could not restore a saved network from the {c.From} (error {rc}, reason {reason})");
+                }
+            }
+            if (notReady.Count == 0 || DateTime.UtcNow >= until)
+            {
+                failed += notReady.Count;
+                if (notReady.Count > 0)
+                    say($"Wi-Fi: {notReady.Count} saved network(s) not restored yet: the Wi-Fi interface is not ready (kept for the next try)");
+                break;
+            }
+            pending = notReady;
+            Thread.Sleep(2000);
         }
         if (added > 0) say($"Wi-Fi: restored {added} saved network(s) to Windows");
+        // Nothing is marked as done while a profile is still missing: the
+        // next start tries the backup and the old folders again.
+        if (failed > 0) return added;
 
         ServiceConfig.EnsureSecureDirectory();
         ServiceConfig.EnsureSecureDirectory(Dir);
@@ -271,6 +297,7 @@ public static class WlanBackup
 
     const uint WLAN_PROFILE_GROUP_POLICY = 1, WLAN_PROFILE_USER = 2;
     const int ERROR_ALREADY_EXISTS = 183;
+    const int ERROR_INVALID_STATE = 5023;
 
     [DllImport("wlanapi.dll")] static extern int WlanOpenHandle(uint version, IntPtr reserved, out uint negotiated, out IntPtr handle);
     [DllImport("wlanapi.dll")] static extern int WlanCloseHandle(IntPtr handle, IntPtr reserved);

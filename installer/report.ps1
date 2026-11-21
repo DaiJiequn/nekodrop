@@ -257,6 +257,9 @@ if ($card) {
   W "- Driver: service $(Card-Prop 'DEVPKEY_Device_Service'), INF $(Card-Prop 'DEVPKEY_Device_DriverInfPath'), version $(Card-Prop 'DEVPKEY_Device_DriverVersion'), provider $(Card-Prop 'DEVPKEY_Device_DriverProvider')"
   $problem = Card-Prop 'DEVPKEY_Device_ProblemCode'
   W "- Device Manager problem code: $(if ($problem) { $problem } else { '0' }) (0 = none; 10 = cannot start; 28 = no driver; 31/37/39 = driver did not load; 52 = signature)"
+  # The NTSTATUS behind a problem code (#18: code 31 with 0xC0000494 on Windows 10).
+  $problemStatus = Card-Prop 'DEVPKEY_Device_ProblemStatus'
+  if ($problemStatus) { W ("- Problem status: 0x{0:X8}" -f ([int64]$problemStatus -band 0xFFFFFFFF)) }
   W "- Intel driver to give it back to: $(if ($config -and $config.VendorInf) { Split-Path $config.VendorInf -Leaf } else { 'not recorded' })"
   # Windows' own record of the card's driver installs and start failures.
   $devId = ($card.InstanceId -split '\\')[1] -replace '&SUBSYS.*$', ''
@@ -278,6 +281,28 @@ if ($card) {
     $umdf | ForEach-Object { W (Redact ("$($_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')) [$($_.Id)] " + (($_.Message -split "`r?`n" | Where-Object { $_.Trim() }) -join ' | '))) }
     W '```'
     W ''
+  }
+  # Windows' device-install log for the register proxy's last install: why a
+  # driver bound but did not start shows up here (#18, Windows 10).
+  $setupLog = Join-Path $env:windir 'INF\setupapi.dev.log'
+  $setupLines = @(Try-Get { Get-Content $setupLog -Tail 6000 -ErrorAction Stop })
+  if ($setupLines.Count) {
+    $starts = @(for ($i = 0; $i -lt $setupLines.Count; $i++) { if ($setupLines[$i] -match '^>>>  \[' -and ($setupLines[$i..([Math]::Min($i + 6, $setupLines.Count - 1))] -join ' ') -match 'winawdl_regproxy|VEN_8086&DEV_') { $i } })
+    if ($starts.Count) {
+      $from = $starts[-1]
+      $section = @($setupLines[$from..($setupLines.Count - 1)])
+      $end = [Array]::FindIndex([string[]]$section, [Predicate[string]] { param($l) $l -match '^<<<  \[Exit status' })
+      if ($end -ge 0) { $section = $section[0..$end] }
+      $keep = @($section | Where-Object { $_ -match '^(>>>|<<<)|!!!|^\s+!|Exit status|[Ss]ervice|WUDF|Install|Driver Node|Selected|Status|error|failed' } | Select-Object -First 45)
+      if ($keep.Count) {
+        W '- Last device install (setupapi.dev.log):'
+        W ''
+        W '```'
+        $keep | ForEach-Object { W (Redact $_.TrimEnd()) }
+        W '```'
+        W ''
+      }
+    }
   }
   $radioCard = $serviceLog | Where-Object { $_ -match 'radio: card 0x|\((AX210|22000) family' } | Select-Object -Last 2
   $radioCard | ForEach-Object { W "- Radio: ``$(Redact ($_ -replace '^\S+ \S+ radio: \S+ radio: ', ''))``" }
