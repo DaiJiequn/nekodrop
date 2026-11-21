@@ -629,6 +629,24 @@ void WifiStation::handle_mgmt(const RxFrame &in) {
   } else if (sub == 0xc0 || sub == 0xa0) { /* deauthentication, disassociation */
     const uint16_t reason = f.len >= 26 ? le16(f.data + 24) : 0;
     if (_state != State::Failed) fail("the access point disconnected us, reason " + std::to_string(reason));
+  } else if (sub == 0xd0 && f.len >= 28 && f.data[24] == 8 && f.data[25] == 0) {
+    /* SA Query request (PMF, 9.6.9): answered, protected, with its
+     * transaction identifier, so the access point keeps our association. */
+    if (!_pmf || !_keys_installed || !(in.data[1] & 0x40)) return;
+    std::vector<uint8_t> a(28, 0);
+    a[0] = 0xd0;
+    a[1] = 0x40;
+    std::memcpy(&a[4], _cfg.bssid, 6);
+    std::memcpy(&a[10], _addr.data(), 6);
+    std::memcpy(&a[16], _cfg.bssid, 6);
+    ++_mgmt_seq;
+    a[22] = static_cast<uint8_t>(_mgmt_seq << 4);
+    a[23] = static_cast<uint8_t>(_mgmt_seq >> 4);
+    a[24] = 8; /* SA Query */
+    a[25] = 1; /* response */
+    a[26] = f.data[26];
+    a[27] = f.data[27];
+    if (_addba_answers.size() < 8) _addba_answers.push_back(std::move(a));
   } else if (sub == 0xd0 && f.len >= 30 && f.data[24] == 3 && f.data[25] == 2) {
     /* DELBA (Block Ack category, action 2): the parameter set's bit 11 says
      * whether the sender started the session, bits 12-15 the TID. The AP
@@ -1124,7 +1142,7 @@ void WifiStation::tick(uint64_t now_us) {
       const std::string why = choose_akm();
       if (!why.empty()) return fail(why);
       if (_akm == Akm::Owe && !_owe.generate()) return fail("Enhanced Open: could not make a key pair");
-      if (_akm != Akm::Psk || _pmf) _log(std::string("station: joining with ") + akm_name());
+      if ((_akm != Akm::Psk && _akm != Akm::None) || _pmf) _log(std::string("station: joining with ") + akm_name());
       _state = State::Authenticating;
       _state_since = now_us;
       _tries = 0;
