@@ -64,7 +64,7 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 | **Intel Wi-Fi 6 AX201** 160 MHz（CNVi） | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | ✅ **已实测**（`43F0` 上的 QuZ） |
 | Qu/QuZ 上的 Intel Wireless-AC 9560 / 9462 / 9461（CNVi） | 与 AX201 相同 | `Qu/QuZ-jf-b0-68` | ⚠️ 未测试 |
 | Intel Wi-Fi 6 AX200（独立网卡） | `2723` | `cc-a0-68` | ✅ 用户反馈双向 AirDrop 可用（[#1](../../issues/1)、[#4](../../issues/4)） |
-| Intel Wi-Fi 6E AX210（独立网卡） | `2725` | `ty-a0-gf-a0-68` + PNVM | ✅ 用户反馈双向 AirDrop 可用（[#14](../../issues/14)）；部分机器仍在修（[#11](../../issues/11)） |
+| Intel Wi-Fi 6E AX210（独立网卡） | `2725` | `ty-a0-gf-a0-68` + PNVM | ✅ 用户反馈双向 AirDrop 可用（[#14](../../issues/14)、[#18](../../issues/18)）；部分机器仍在修（[#11](../../issues/11)） |
 | Intel Wi-Fi 6E AX211（CNVi，第 12 代及以后） | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM | ✅ 用户反馈双向 AirDrop 可用（[#9](../../issues/9)）；部分机器发现设备还不稳定（[#16](../../issues/16)） |
 | Intel Wi-Fi 6E AX411 / Killer AX1690（CNVi） | 与 AX211 相同 | `so-a0-gf4-a0-68` + PNVM | ⚠️ 未测试（[#7](../../issues/7)） |
 | So 平台上的 Intel Wi-Fi 6 AX203 / 9560 | 与 AX211 相同 | `so-a0-hr/jf-b0-68` | ⚠️ 未测试 |
@@ -99,7 +99,7 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 
 ## 系统要求
 
-- Windows 10 2004（版本 19041）或更新的 64 位系统，推荐 Windows 11：Windows 10 上部分机器的注册表代理驱动目前起不来（[#18](../../issues/18)、[#12](../../issues/12)），排查中。
+- Windows 10 2004（版本 19041）或更新的 64 位系统（Windows 10 22H2 在 0.1.16 及以上已确认双向可用，[#18](../../issues/18)）。
 - 受支持的 Intel 网卡（见上表）。
 - 安装需要管理员权限。
 - 发送文件需要蓝牙：AirDrop 用蓝牙低功耗信标唤醒附近的苹果设备。
@@ -199,7 +199,7 @@ DMA 内存不够分配额外的发送环，或者走的是内核驱动路径时�
 | 802.1X（企业版） | ⏳ 计划中 |
 | AX200、AX210、AX211 | ✅ 用户反馈双向 AirDrop 可用 |
 | AX411、Qu/So 上的 9560、AX203 | 🧪 已照上游移植，未实机测试 |
-| Windows 10 | ⚠️ 部分机器上注册表代理驱动起不来（[#18](../../issues/18)），排查中 |
+| Windows 10 | ✅ 用户反馈 0.1.16 及以上双向 AirDrop 可用（[#18](../../issues/18)） |
 | 内核 WiFiCx 驱动（`kdriver/`） | 🧊 已搁置：实验性，安装包**不会安装**它，见 [docs/KERNEL.md](docs/KERNEL.md) |
 
 ## 工作原理

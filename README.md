@@ -64,7 +64,7 @@ nekodrop talks to the Wi-Fi chip directly, so it only works on chips it has a dr
 | **Intel Wi-Fi 6 AX201** 160 MHz (CNVi) | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | ✅ **tested** (QuZ on `43F0`) |
 | Intel Wireless-AC 9560 / 9462 / 9461 on Qu/QuZ (CNVi) | same IDs as AX201 | `Qu/QuZ-jf-b0-68` | ⚠️ untested |
 | Intel Wi-Fi 6 AX200 (discrete) | `2723` | `cc-a0-68` | ✅ two-way AirDrop in user reports ([#1](../../issues/1), [#4](../../issues/4)) |
-| Intel Wi-Fi 6E AX210 (discrete) | `2725` | `ty-a0-gf-a0-68` + PNVM | ✅ two-way AirDrop in user reports ([#14](../../issues/14)); some machines still being fixed ([#11](../../issues/11)) |
+| Intel Wi-Fi 6E AX210 (discrete) | `2725` | `ty-a0-gf-a0-68` + PNVM | ✅ two-way AirDrop in user reports ([#14](../../issues/14), [#18](../../issues/18)); some machines still being fixed ([#11](../../issues/11)) |
 | Intel Wi-Fi 6E AX211 (CNVi, 12th gen+) | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM | ✅ two-way AirDrop in a user report ([#9](../../issues/9)); discovery not yet reliable on every machine ([#16](../../issues/16)) |
 | Intel Wi-Fi 6E AX411 / Killer AX1690 (CNVi) | same IDs as AX211 | `so-a0-gf4-a0-68` + PNVM | ⚠️ untested ([#7](../../issues/7)) |
 | Intel Wi-Fi 6 AX203 / 9560 on So | same IDs as AX211 | `so-a0-hr/jf-b0-68` | ⚠️ untested |
@@ -99,7 +99,7 @@ Logs are what let us fix things, especially on cards we don't have. Please attac
 
 ## Requirements
 
-- Windows 10 2004 (build 19041) or later, x64. Windows 11 recommended: on Windows 10 the register-proxy driver currently fails to start on some machines ([#18](../../issues/18), [#12](../../issues/12)), being investigated.
+- Windows 10 2004 (build 19041) or later, x64 (Windows 10 22H2 confirmed working in 0.1.16+, [#18](../../issues/18)).
 - A supported Intel Wi-Fi card (see above).
 - Administrator rights to install.
 - Bluetooth, for sending: AirDrop wakes nearby Apple devices with a Bluetooth LE beacon.
@@ -199,7 +199,7 @@ Without enough memory for the extra ring, or on the kernel-driver path, the swit
 | 802.1X (Enterprise) | ⏳ planned |
 | AX200, AX210, AX211 | ✅ two-way AirDrop in user reports |
 | AX411, 9560 on Qu/So, AX203 | 🧪 ported from upstream, untested on hardware |
-| Windows 10 | ⚠️ the register proxy fails to start on some machines ([#18](../../issues/18)) |
+| Windows 10 | ✅ two-way AirDrop confirmed in user reports on 0.1.16+ ([#18](../../issues/18)) |
 | Kernel WiFiCx driver (`kdriver/`) | 🧊 shelved: experimental and **not installed** by the setup. See [docs/KERNEL.md](docs/KERNEL.md) |
 
 ## How it works
