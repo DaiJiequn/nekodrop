@@ -625,6 +625,9 @@ int main(int argc, char **argv) {
     unsigned inflight = 0;
     uint64_t resent = 0, gave_up = 0, uq_dropped = 0;
     awdl::RateLadder ladder;
+    /* Faster sending (experimental) also starts one step up, at HT MCS 4:
+     * a short send spent most of itself climbing from legacy 24 (#4). */
+    if (opt.tx_window > 8) ladder.step = 1;
     const bool wide80 = opt.channel > 14 && opt.width >= 80;
     const auto data_rate = [&]() -> TxRate {
       if (opt.fixed_rate) return opt.data_rate;

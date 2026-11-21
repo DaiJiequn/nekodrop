@@ -322,7 +322,6 @@ private:
   bool _sta_phy_added = false, _sta_mac_added = false, _sta_binding_added = false,
        _sta_sta_added = false, _sta_queue_enabled = false, _sta_shared_binding = false,
        _sta_assoc = false, _sta_tlc = false;
-  bool _sta_prot = false; /* a session protection is scheduled for the station MAC */
   uint16_t _sta_aid = 0;
   uint8_t _sta_dtim = 1, _sta_ba_tids = 0;
   unsigned _sta_tx_acked = 0, _sta_tx_failed = 0, _sta_tx_fail_logged = 0;
