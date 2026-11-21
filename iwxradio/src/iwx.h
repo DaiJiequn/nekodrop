@@ -100,6 +100,13 @@ public:
   bool promiscuous() const { return _promisc; }
   /* Asks the firmware for a regulatory domain ("CN", "US"...). True if taken. */
   bool set_country(const std::string &alpha2);
+  /* The firmware's own country notice (MCC_CHUB_UPDATE, e.g. learned from
+   * access points' Country elements), answered with the same country and
+   * source, as Linux and ForbiddenItlwm do: the firmware takes back what it
+   * reported where it refuses a country from any other source (#11). Called
+   * from the main loop; true when a notice was answered, with what the
+   * firmware then says in *got. */
+  bool answer_country_notice(std::string *got);
   /* IWX_NVM_CHANNEL_* flags the firmware last reported for a channel (6, 36, 44, 149). */
   uint32_t channel_flags(uint8_t channel) const { return _chan_flags[channel]; }
   /* Queues one frame (802.11 header first, no FCS). False if the ring is full
@@ -329,6 +336,9 @@ private:
   bool _ba_station = false;
   uint8_t _ba_peer[6] = {}, _ba_tids = 0, _ba_token[8] = {};
   uint32_t _chan_flags[256] = {};
+  bool _notice_pending = false;
+  uint16_t _notice_mcc = 0, _answered_mcc = 0;
+  uint8_t _notice_source = 0, _answered_source = 0;
   struct TxHist { uint16_t len; uint8_t hdrlen, fc0, fc1, a1; uint32_t rnf; uint8_t slot; };
   TxHist _tx_hist[8] = {};
   unsigned _tx_hist_at = 0;

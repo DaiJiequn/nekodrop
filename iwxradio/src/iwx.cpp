@@ -1147,6 +1147,31 @@ int IwxDevice::update_mcc(const std::string &alpha2, int source, std::string *go
   return 0;
 }
 
+bool IwxDevice::answer_country_notice(std::string *got) {
+  if (!_notice_pending) return false;
+  _notice_pending = false;
+  const uint16_t mcc = _notice_mcc;
+  const uint8_t source = _notice_source;
+  const std::string alpha2{char(mcc >> 8), char(mcc & 0xff)};
+  const bool letters = alpha2[0] >= 'A' && alpha2[0] <= 'Z' && alpha2[1] >= 'A' && alpha2[1] <= 'Z';
+  const bool world = alpha2 == "00" || alpha2 == "ZZ";
+  _log("regulatory: firmware notice " + (letters || world ? alpha2 : hex(uint32_t(mcc))) + " (source " +
+       std::to_string(source) + ")");
+  /* The firmware repeats its notice; each country and source is answered once.
+   * A withdrawal ("00") is answered too, so the channel map never stays more
+   * permissive than the firmware. */
+  if (!_lar_enabled || (!letters && !world) || (mcc == _answered_mcc && source == _answered_source)) return false;
+  if (!nic_lock()) return false;
+  std::string now;
+  const int err = update_mcc(alpha2, source, &now);
+  nic_unlock();
+  if (err) return false;
+  _answered_mcc = mcc;
+  _answered_source = source;
+  if (got) *got = now;
+  return true;
+}
+
 bool IwxDevice::set_promiscuous(bool on) {
   if (on == _promisc) return true;
   _promisc = on;
@@ -1847,6 +1872,15 @@ void IwxDevice::handle_packet(const uint8_t *raw, size_t len) {
       _scan_succeeded = status == IWX_SCAN_OFFLOAD_COMPLETED;
       _scan_running = false;
       _log("scan: firmware scan done, status " + std::to_string(status));
+    }
+    break;
+  case IWX_MCC_CHUB_UPDATE_CMD:
+  case IWX_WIDE_ID(IWX_LONG_GROUP, IWX_MCC_CHUB_UPDATE_CMD):
+    if (plen >= sizeof(iwx_mcc_chub_notif)) {
+      const auto *n = reinterpret_cast<const iwx_mcc_chub_notif *>(payload);
+      _notice_mcc = le16toh(n->mcc);
+      _notice_source = n->source_id;
+      _notice_pending = true; /* answered from the main loop: no commands from here */
     }
     break;
   case IWX_REPLY_ERROR: {

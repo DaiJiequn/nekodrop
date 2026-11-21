@@ -725,6 +725,12 @@ int main(int argc, char **argv) {
       const uint32_t cf = dev.channel_flags(dev.channel());
       return dev.channel() <= 14 || (cf & (1u << 3)) || beacon_heard;
     };
+    bool channel_open = dev.channel() <= 14 || (dev.channel_flags(dev.channel()) & (1u << 3));
+    /* One scan, 10 s after start, while the AWDL channel is passive and no
+     * beacon unlocked it: access points' Country elements let the firmware
+     * learn the country and send its notice (ForbiddenItlwm's discovery scan). */
+    const uint64_t country_scan_at = GetTickCount64() + 10000;
+    bool country_scan_done = false;
     awdl::BaFilter ba_filter;
     uint16_t mgmt_seq = 0;
     uint64_t ba_answers = 0;
@@ -811,6 +817,20 @@ int main(int argc, char **argv) {
         ba_filter = awdl::BaFilter{};
         dev.set_promiscuous(true);
       }
+      {
+        std::string learned;
+        if (dev.answer_country_notice(&learned) && learned.size() == 2 && learned != "00" && learned != have_country) {
+          have_country = learned;
+          log_line("event: country " + have_country); /* the service keeps two letters only */
+        }
+        /* The channel's state as the firmware now gives it: a country taken
+         * (or withdrawn) shows up here, and may_send() follows. */
+        const bool open = dev.channel() <= 14 || (dev.channel_flags(dev.channel()) & (1u << 3));
+        if (open != channel_open) {
+          channel_open = open;
+          log_line(std::string("event: channel ") + std::to_string(dev.channel()) + (open ? " active" : " passive"));
+        }
+      }
       if (!want_country.empty() && want_country != have_country) {
         if (dev.set_country(want_country)) {
           have_country = want_country;
@@ -844,6 +864,14 @@ int main(int argc, char **argv) {
         SwitchToThread();
       }
       const uint64_t now = GetTickCount64();
+      if (!country_scan_done && now >= country_scan_at) {
+        country_scan_done = true;
+        if (kOwnCard && !may_send() && !scan_started && !scan_wanted) {
+          log_line("channel " + std::to_string(dev.channel()) + " is passive: scanning once so the firmware can learn the country");
+          scan_wanted = true;
+          scan_ssid.clear();
+        }
+      }
       if (scan_wanted && !scan_started) {
         scan_wanted = false;
         bool started = false;

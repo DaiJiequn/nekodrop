@@ -36,6 +36,8 @@ public:
   bool promiscuous() const { return _promisc; }
   bool set_country(const std::string &alpha2);
   uint32_t channel_flags(uint8_t channel) const;
+  /* The kernel driver answers the firmware's country notice itself. */
+  bool answer_country_notice(std::string *) { return false; }
   bool transmit(const uint8_t *frame, size_t len, const TxRate &rate) { return transmit_slot(frame, len, rate) >= 0; }
   /* The driver rings the doorbell itself: `kick` and kick_data() are for the user-mode path. */
   int transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate, bool kick = true);
