@@ -74,6 +74,8 @@ nekodrop talks to the Wi-Fi chip directly, so it only works on chips it has a dr
 
 To check your card: *Device Manager → Network adapters*. The installer refuses to run on cards not in this table. On an untested card nekodrop may fail to start the firmware; if it does, the card stays usable: run **restore** (below) and please report the log in an [issue](../../issues).
 
+Not sure which card you have, or want another card supported? The [diagnostic report](#reporting-a-problem-the-diagnostic-report) works without nekodrop installed: download [`installer/report.ps1`](installer/report.ps1) and run `powershell -ExecutionPolicy Bypass -File report.ps1`. It lists every wireless card with its PCI ID, chip, driver and why nekodrop does or does not run on it; please post it in an [issue](../../issues). With a **Realtek RTL8852CE** (`10EC:C852`) you can use upstream [winawdl](https://github.com/raph559/winawdl) today (AirDrop only, no Wi-Fi at the same time). What other cards would take: [docs/HARDWARE.md](docs/HARDWARE.md).
+
 ### Something went wrong? One-click restore
 
 Start menu → **nekodrop - restore Windows Wi-Fi** (or double-click `restore.cmd` in `C:\Program Files\nekodrop`). It stops nekodrop, gives the card back to Intel's driver, removes nekodrop's driver packages and brings Windows Wi-Fi back, whatever state nekodrop left the card in. nekodrop stays installed; run the installer again to use it. Log: `C:\ProgramData\nekodrop\restore.log`.

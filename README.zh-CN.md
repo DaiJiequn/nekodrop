@@ -74,6 +74,8 @@ nekodrop 直接驱动网卡芯片，只有写了驱动的芯片才能用。上�
 
 怎么看自己的网卡：打开 *设备管理器 → 网络适配器*。不在上表里的网卡，安装程序会直接拒绝安装。在未测试的网卡上，nekodrop 可能启动不了固件；这时网卡不会坏，运行下面的**一键回退**即可，也欢迎在 [Issues](../../issues) 附上日志反馈。
 
+不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。**Realtek RTL8852CE**（`10EC:C852`）现在就可以用上游的 [winawdl](https://github.com/raph559/winawdl)（只有 AirDrop，不能同时连 Wi-Fi）。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
+
 ### 出问题了？一键回退
 
 开始菜单 → **nekodrop - restore Windows Wi-Fi**（或双击 `C:\Program Files\nekodrop` 里的 `restore.cmd`）。它会停掉 nekodrop，把网卡还给 Intel 驱动，删除 nekodrop 的驱动包，恢复 Windows 自带的 Wi-Fi，不管 nekodrop 把网卡留在什么状态。nekodrop 本身不会被卸载，想再用时重新运行安装程序即可。日志：`C:\ProgramData\nekodrop\restore.log`。
