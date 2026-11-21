@@ -501,7 +501,8 @@ int main(int argc, char **argv) {
       awdl::BaTxBulk bulk;
       uint8_t token = 0x5a;
       unsigned asks = 0, resume_failures = 0;
-      uint64_t last_ask_us = 0, rest_until_us = 0, last_peer_us = 0, last_agg_us = 0, retry_us = 0;
+      uint16_t peer_window = awdl::kBaWindowMax;
+      uint64_t ask_started_us = 0, last_ask_us = 0, rest_until_us = 0, last_peer_us = 0, last_agg_us = 0, retry_us = 0;
       bool answered = false, refused = false, delba = false;
       std::deque<std::vector<uint8_t>> wait; /* frames for the peer, in order, for the aggregate queue */
       awdl_sched::PeerSchedule sched{};
@@ -674,8 +675,12 @@ int main(int argc, char **argv) {
           else if (agg.on && tid == 0 && std::memcmp(f.data + 10, agg.peer, 6) == 0) agg.delba = true;
         } else if (agg.on && agg.step == Agg::Asking && awdl::parse_addba_answer(f.data, f.len, dev_address, &ans) &&
                    std::memcmp(f.data + 10, agg.peer, 6) == 0 && ans.token == agg.token && ans.tid == 0) {
-          if (ans.status == 0 && ans.immediate) agg.answered = true;
-          else agg.refused = true;
+          if (ans.status == 0 && ans.immediate) {
+            agg.peer_window = (ans.window && ans.window < awdl::kBaWindowMax) ? ans.window : awdl::kBaWindowMax;
+            agg.answered = true;
+          } else {
+            agg.refused = true;
+          }
         }
       }
       if (capture_on) {
@@ -836,12 +841,12 @@ int main(int argc, char **argv) {
         }
       }
       /* Upstream's send gate (A-MPDU sending only, once an aggregation session
-       * is active): frames for the schedule peer wait while its schedule has it
-       * away, or dozing past the start of an availability window, for at most
-       * the away run; then they go rather than starve. Never gate while idle
-       * (agg.step == Off), so discovery stays on the exact default path (#4). */
+       * is agreed): data frames for the schedule peer wait while its schedule
+       * has it away or dozing, for at most the away run. Never gate while idle
+       * or while asking for Block Ack (otherwise ADDBA requests and single-frame
+       * traffic stall behind gate holds, #4), and never gate management frames. */
       bool gate_closed = false;
-      if (agg.on && agg.step != Agg::Off && agg.have_sched_peer && agg.sched.known() && agg.sched.fresh(now)) {
+      if (agg.on && agg.step == Agg::Agreed && agg.have_sched_peer && agg.sched.known() && agg.sched.fresh(now)) {
         const bool dozing = agg.sched.presentEntries() <= awdl_sched::kPeerDozeMaxEntries &&
                             (!agg.sched_rx_us || now - agg.sched_rx_us > 100000);
         const auto gate = agg.sched.sendGate(now, dozing, 4000);
@@ -860,6 +865,9 @@ int main(int argc, char **argv) {
           if (now - agg.gate_since_us < agg.gate_limit_us) gate_closed = true;
           else agg.gate_limit_us = 0;
         }
+      } else {
+        agg.gate_since_us = 0;
+        agg.gate_kind = 0;
       }
       /* Fill the window, skipping frames that are still waiting on a status
        * or on their retry backoff. */
@@ -867,7 +875,9 @@ int main(int argc, char **argv) {
       for (auto &f : uq) {
         if (inflight >= kTxWindow) break;
         if (f.slot >= 0 || now < f.next_us) continue;
-        if (gate_closed && f.frame.size() >= 10 && std::memcmp(f.frame.data() + 4, agg.sched_peer, 6) == 0) continue;
+        if (gate_closed && f.data && f.frame.size() >= 10 &&
+            std::memcmp(f.frame.data() + 4, agg.sched_peer, 6) == 0)
+          continue;
         if (!f.attempts) {
           f.first_us = now;
           if (f.data) f.rate = data_rate();
@@ -909,6 +919,41 @@ int main(int argc, char **argv) {
     ready = true;
     log_line("ready on channel " + std::to_string(opt.channel) + ", waiting for a client");
 
+    const auto log_agg_snapshot = [&] {
+      if constexpr (Dev::kCapabilities.supports_aggregate) {
+        if (!agg.on) return;
+        const auto &a = dev.agg_stats();
+        static const char *const kStep[] = {"idle", "asking", "agreed"};
+        char rate[16], sdetail[112] = {}, rdetail[32] = {};
+        std::snprintf(rate, sizeof(rate), "0x%08x", a.last_rate);
+        if (a.agg_resps) {
+          std::snprintf(rdetail, sizeof(rdetail), ", agg-tx %llu", static_cast<unsigned long long>(a.agg_resps));
+        }
+        if (a.singles) {
+          std::snprintf(sdetail, sizeof(sdetail), " (ok %llu, fail %llu, last 0x%04x, rate 0x%08x)",
+                        static_cast<unsigned long long>(a.singles_ok),
+                        static_cast<unsigned long long>(a.singles_fail),
+                        static_cast<unsigned>(a.last_fail_status),
+                        static_cast<unsigned>(a.last_single_rate));
+        }
+        log_line(std::string("aggregate: ") + kStep[agg.step] + (agg.pause.paused ? ", paused" : "") + "; queue " +
+                 std::to_string(dev.agg_queued()) + ", waiting " + std::to_string(agg.wait.size()) + "; " +
+                 std::to_string(a.frames) + " frames, " + std::to_string(a.notifs) + " Block Acks (" +
+                 std::to_string(a.txed) + " sent, " + std::to_string(a.acked) + " acked, largest " +
+                 std::to_string(a.peak_frames) + ", rate " + rate + rdetail + "), " + std::to_string(a.singles) +
+                 " singles" + sdetail + "; asks " + std::to_string(agg.asks_total) + ", agreed " +
+                 std::to_string(agg.agreements) + ", refused " + std::to_string(agg.refusals) + ", DELBA " +
+                 std::to_string(agg.delbas) + "; pauses " + std::to_string(agg.pause.pauses) + " (forced " +
+                 std::to_string(agg.pause.forcedResumes) + ", errors " + std::to_string(agg.pause_errors) +
+                 "), gate holds " + std::to_string(agg.gate_holds) + "; schedule " +
+                 (!agg.sched.valid ? "none"
+                  : agg.sched.calibrated ? "calibrated"
+                  : agg.sched.known() ? "assumed"
+                                      : "uncalibrated") +
+                 ", " + std::to_string(agg.sched.valid ? agg.sched.presentEntries() : 0u) + "/16 entries here, " +
+                 std::to_string(agg.sync_frames) + " sync frames");
+      }
+    };
     uint64_t idle_rounds = 0, last_report = GetTickCount64(), last_health = 0, last_rejoin = 0;
     std::deque<std::pair<uint64_t, uint64_t>> stall_hist; /* station packets in, out at each report */
     WifiStation::State published_wifi = WifiStation::State::Idle;
@@ -916,7 +961,7 @@ int main(int argc, char **argv) {
     while (!stopping() && dev.healthy()) {
       bool busy = dev.poll() > 0;
       pipe.flush_send();
-      for (int n = 0; n < 64 && inbox.pop(req); n++) {
+      for (int n = 0; n < 128 && inbox.pop(req); n++) {
         busy = true;
         if (req.type == RADIO_LINK_TX) {
           RadiotapInfo rt;
@@ -1023,9 +1068,16 @@ int main(int argc, char **argv) {
           }
         };
         const auto stop = [&](const char *why) {
-          if (agg.step == Agg::Agreed) dev.agg_enable(false);
+          /* Snapshot the live asking/agreed state before returning to idle (#4). */
+          if (agg.step != Agg::Off) log_agg_snapshot();
+          if (agg.step == Agg::Agreed) {
+            dev.agg_enable(false);
+            dev.agg_flush();
+          }
           if (agg.pause.paused) dev.agg_pause(false);
           agg.pause = awdl_sched::PeerPauseState{};
+          agg.gate_since_us = 0;
+          agg.gate_kind = 0;
           back_to_uq();
           agg.step = Agg::Off;
           agg.answered = agg.refused = agg.delba = false;
@@ -1033,7 +1085,11 @@ int main(int argc, char **argv) {
         };
         /* The peer's station was replaced (a receive session with another peer). */
         if (agg.step != Agg::Off && dev.ba_epoch() != agg.epoch) stop("peer station replaced");
+        const bool was_bulk = agg.bulk.bulk;
         agg.bulk.note(t, agg.dest_frames, agg.step == Agg::Agreed);
+        /* Record a snapshot when a bulk send ends so reports never show only a
+         * later idle line (#4). */
+        if (was_bulk && !agg.bulk.bulk && agg.step != Agg::Off) log_agg_snapshot();
         if (agg.step == Agg::Off && agg.bulk.bulk && agg.have_dest && t >= agg.retry_us) {
           if (dev.agg_setup(agg.dest, opt.channel > 14 && opt.width >= 80, true)) {
             std::memcpy(agg.peer, agg.dest, 6);
@@ -1041,9 +1097,14 @@ int main(int argc, char **argv) {
             agg.step = Agg::Asking;
             agg.asks = 0;
             agg.token++;
+            agg.peer_window = awdl::kBaWindowMax;
+            agg.ask_started_us = t;
             agg.last_ask_us = agg.rest_until_us = 0;
             agg.last_peer_us = t;
             agg.answered = agg.refused = agg.delba = false;
+            /* Open promiscuous + mgmt receive BEFORE sending the first ADDBA
+             * request so the peer's ADDBA response is never dropped (#4). */
+            if (!dev.promiscuous()) dev.set_promiscuous(true);
             log_line("aggregate: bulk send to a peer; asking it for Block Ack");
           } else {
             agg.setup_failures++;
@@ -1062,7 +1123,7 @@ int main(int argc, char **argv) {
               agg.agree_frames = a.frames;
               agg.agree_notifs = a.notifs;
               agg.agree_singles = a.singles;
-              log_line("aggregate: the peer agreed; sending A-MPDUs");
+              log_line("aggregate: the peer agreed (window " + std::to_string(agg.peer_window) + "); sending A-MPDUs");
             } else {
               agg.setup_failures++;
               agg.retry_us = t + 10000000;
@@ -1071,19 +1132,21 @@ int main(int argc, char **argv) {
           } else if (agg.refused) {
             agg.refused = false;
             agg.refusals++;
-            agg.asks = 0;
-            agg.token++;
-            agg.rest_until_us = t + 20000000;
-          } else if (!agg.bulk.bulk && t - agg.last_peer_us > 30000000) {
-            agg.asks = 0; /* idle peer: hold, the next data asks afresh */
-            agg.rest_until_us = 0;
-          } else if (t >= agg.rest_until_us && (!agg.last_ask_us || t - agg.last_ask_us >= 200000) &&
-                     !(agg.have_sched_peer && agg.sched.shouldPause(t))) {
-            if (agg.asks >= 40) {
-              agg.asks = 0;
-              agg.token++;
-              agg.rest_until_us = t + 20000000;
-            } else if (may_send()) {
+            agg.retry_us = t + awdl::kBaTxFailBackoffUS;
+            stop("the peer refused Block Ack; falling back to single-frame queue");
+          } else if (!agg.bulk.bulk && t - agg.last_peer_us > 15000000) {
+            stop("peer idle during ADDBA negotiation");
+          } else if (agg.asks >= awdl::kBaTxAskMax ||
+                     (agg.ask_started_us && t - agg.ask_started_us >= awdl::kBaTxAskTimeoutUS)) {
+            agg.retry_us = t + awdl::kBaTxFailBackoffUS;
+            char detail[128];
+            std::snprintf(detail, sizeof(detail),
+                          "no ADDBA answer after %u asks; falling back to single-frame queue", agg.asks);
+            stop(detail);
+          } else if (t >= agg.rest_until_us &&
+                     (!agg.last_ask_us || t - agg.last_ask_us >= awdl::kBaTxAskIntervalUS) &&
+                     (agg.asks == 0 || !(agg.have_sched_peer && agg.sched.shouldPause(t)))) {
+            if (may_send()) {
               static const uint8_t kAwdlBssid[6] = {0x00, 0x25, 0x00, 0xff, 0x94, 0x73};
               uint8_t ask[awdl::kAddbaResponseLength];
               awdl::build_addba_request(ask, agg.peer, dev_address, kAwdlBssid, agg.token, 0, 64, dev.agg_seq(),
@@ -1098,6 +1161,7 @@ int main(int argc, char **argv) {
         if (agg.step == Agg::Agreed && agg.delba) {
           agg.delba = false;
           agg.delbas++;
+          log_agg_snapshot();
           dev.agg_enable(false);
           if (agg.pause.paused) dev.agg_pause(false);
           dev.agg_flush();
@@ -1106,7 +1170,9 @@ int main(int argc, char **argv) {
           agg.step = Agg::Asking;
           agg.asks = 0;
           agg.token++;
+          agg.ask_started_us = t;
           agg.last_ask_us = 0;
+          if (!dev.promiscuous()) dev.set_promiscuous(true);
           log_line("aggregate: the peer ended our Block Ack session; asking again");
         }
         if (agg.step == Agg::Agreed) {
@@ -1127,7 +1193,9 @@ int main(int argc, char **argv) {
           } else if (change < 0) {
             agg.resume_failures = 0;
           }
-          const unsigned agg_cap = dev.agg_queue_cap();
+          const unsigned hw_cap = dev.agg_queue_cap();
+          const unsigned agg_cap =
+              (agg.peer_window < awdl::kBaWindowMax && agg.peer_window < hw_cap) ? agg.peer_window : hw_cap;
           bool agg_sent = false;
           while (agg.step == Agg::Agreed && !agg.wait.empty() && !agg.pause.paused && dev.agg_queued() < agg_cap) {
             std::vector<uint8_t> qos;
@@ -1155,20 +1223,24 @@ int main(int argc, char **argv) {
                           static_cast<unsigned long long>(a.singles_fail),
                           static_cast<unsigned>(a.last_fail_status),
                           static_cast<unsigned>(a.last_single_rate));
-            agg.retry_us = t + 300000000ULL; /* back off 5 minutes so the rest of this send stays fast */
+            agg.retry_us = t + awdl::kBaTxFailBackoffUS;
             stop(detail);
           }
         }
       }
-      /* Promiscuous receive off while a session's data is busy; with A-MPDU
-       * sending, for as long as the peer's station exists (upstream #57: with
-       * it on, the firmware does not acknowledge the station's frames). */
+      /* Promiscuous receive:
+       * - while asking for TX Block Ack: keep promiscuous + mgmt RX ON so the
+       *   peer's ADDBA response is never dropped (#4);
+       * - while TX Block Ack is agreed: keep promiscuous OFF (BA listener);
+       * - otherwise follow RX Block Ack busy hysteresis. */
       if constexpr (caps.supports_promiscuous_toggle) {
         bool any_ba = false;
         if constexpr (caps.supports_rx_ba) {
           for (unsigned t = 0; t < 8; t++) any_ba |= dev.rx_ba_open(t);
         }
-        if (agg.on && agg.step != Agg::Off) {
+        if (agg.on && agg.step == Agg::Asking) {
+          if (!dev.promiscuous()) dev.set_promiscuous(true);
+        } else if (agg.on && agg.step == Agg::Agreed) {
           if (dev.promiscuous()) dev.set_promiscuous(false);
         } else if (any_ba && ba_filter.note(now_us(), rx_data_to_us)) {
           dev.set_promiscuous(!ba_filter.off);
@@ -1238,6 +1310,7 @@ int main(int argc, char **argv) {
         sta_joining = st != WifiStation::State::Idle && st != WifiStation::State::Running &&
                       st != WifiStation::State::Failed;
       }
+      if (opt.fast_unlock && may_send()) discovery_scans = radio::kMaxPassiveDiscoveryScans;
       const unsigned discovery_due =
           radio::passive_discovery_scan_delay_ms(opt.fast_unlock, discovery_scans, sta_joining);
       if (discovery_due && now >= discovery_from + discovery_due) {
@@ -1332,35 +1405,7 @@ int main(int argc, char **argv) {
                  std::to_string(ladder.downs) + " down); BA answers " + std::to_string(ba_answers) +
                  (promiscuous ? "" : ", promiscuous off") +
                  (tx_held_passive ? "; " + std::to_string(tx_held_passive) + " held (passive channel)" : ""));
-        if constexpr (caps.supports_aggregate) if (agg.on) {
-          const auto &a = dev.agg_stats();
-          static const char *const kStep[] = {"idle", "asking", "agreed"};
-          char rate[16], sdetail[96] = {};
-          std::snprintf(rate, sizeof(rate), "0x%08x", a.last_rate);
-          if (a.singles) {
-            std::snprintf(sdetail, sizeof(sdetail), " (ok %llu, fail %llu, last 0x%04x, rate 0x%08x)",
-                          static_cast<unsigned long long>(a.singles_ok),
-                          static_cast<unsigned long long>(a.singles_fail),
-                          static_cast<unsigned>(a.last_fail_status),
-                          static_cast<unsigned>(a.last_single_rate));
-          }
-          log_line(std::string("aggregate: ") + kStep[agg.step] + (agg.pause.paused ? ", paused" : "") + "; queue " +
-                   std::to_string(dev.agg_queued()) + ", waiting " + std::to_string(agg.wait.size()) + "; " +
-                   std::to_string(a.frames) + " frames, " + std::to_string(a.notifs) + " Block Acks (" +
-                   std::to_string(a.txed) + " sent, " + std::to_string(a.acked) + " acked, largest " +
-                   std::to_string(a.peak_frames) + ", rate " + rate + "), " + std::to_string(a.singles) +
-                   " singles" + sdetail + "; asks " + std::to_string(agg.asks_total) + ", agreed " + std::to_string(agg.agreements) +
-                   ", refused " + std::to_string(agg.refusals) + ", DELBA " + std::to_string(agg.delbas) +
-                   "; pauses " + std::to_string(agg.pause.pauses) + " (forced " + std::to_string(agg.pause.forcedResumes) +
-                   ", errors " + std::to_string(agg.pause_errors) + "), gate holds " + std::to_string(agg.gate_holds) +
-                   "; schedule " +
-                   (!agg.sched.valid ? "none"
-                    : agg.sched.calibrated ? "calibrated"
-                    : agg.sched.known() ? "assumed"
-                                        : "uncalibrated") +
-                   ", " + std::to_string(agg.sched.valid ? agg.sched.presentEntries() : 0u) + "/16 entries here, " +
-                   std::to_string(agg.sync_frames) + " sync frames");
-        }
+        if constexpr (caps.supports_aggregate) if (agg.on) log_agg_snapshot();
         if (sta) {
           const auto &r = sta->rx_stats();
           unsigned sta_acked = 0, sta_failed = 0, sta_submitted = 0; /* sta is only ever set with supports_station */

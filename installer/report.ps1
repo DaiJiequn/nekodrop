@@ -571,8 +571,10 @@ if ($start -lt 0) {
     elseif ($txUnlock) { '`' + ($txUnlock -replace '^\S+ \S+ ', '') + '`' }
     elseif ($txLast) { '`' + (($txLast -replace '^\S+ \S+ ', '') -replace '; unicast.*', '') + '`' } else { 'no tx statistics yet' }
   W "| Transmitting | $txRow | $txWhy |"
-  # Experimental A-MPDU sending (0.1.15+): its last status line, when it is on.
-  $aggLast = $attempt | Where-Object { $_ -match 'radio: aggregate: (idle|asking|agreed)' } | Select-Object -Last 1
+  # Experimental A-MPDU sending (0.1.15+): prefer the last active (asking/agreed)
+  # snapshot over a trailing idle line so completed/fallback sends are not hidden (#4).
+  $aggActive = $attempt | Where-Object { $_ -match 'radio: aggregate: (asking|agreed)' } | Select-Object -Last 1
+  $aggLast = if ($aggActive) { $aggActive } else { $attempt | Where-Object { $_ -match 'radio: aggregate: (idle|asking|agreed)' } | Select-Object -Last 1 }
   if ($aggLast) {
     $aggRow = if ($aggLast -match 'aggregate: agreed') { 'ok' } elseif ($aggLast -match 'aggregate: asking') { 'asking' } else { '-' }
     W "| A-MPDU sending (experimental) | $aggRow | ``$((($aggLast -replace '^\S+ \S+ radio: \S+ radio: ', '') -replace '\|', '/'))`` |"

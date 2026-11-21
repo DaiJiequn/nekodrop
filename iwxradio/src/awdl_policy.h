@@ -222,17 +222,17 @@ constexpr uint64_t resend_backoff_us(unsigned attempts) {
 }
 
 /* Unicast data rate ladder: legacy 24, HT MCS 4, 5, 7 (20 MHz, 1 stream),
- * then VHT 80 MHz 2 streams MCS 4 and 7 while on 80 MHz. Down after a window
- * of 64 with over 20% failures, up after one with under 5%. */
-constexpr uint8_t kRateMcs[6] = {0, 4, 5, 7, 4, 7};
+ * then VHT 80 MHz 2 streams MCS 4, 7 and 8 (with LDPC + SGI) while on 80 MHz.
+ * Down after a window of 32 with over 20% failures, up after one with under 5%. */
+constexpr uint8_t kRateMcs[7] = {0, 4, 5, 7, 4, 7, 8};
 struct RateLadder {
   unsigned step = 0;
   uint32_t ok = 0, failed = 0, ups = 0, downs = 0;
   void note(bool acked, bool wide80) {
     ++(acked ? ok : failed);
     const uint32_t window = ok + failed;
-    if (window < 64) return;
-    const unsigned top = wide80 ? 6u : 4u;
+    if (window < 32) return;
+    const unsigned top = wide80 ? 7u : 4u;
     if (failed * 5 > window && step > 0) {
       --step;
       ++downs;
@@ -307,9 +307,10 @@ inline size_t build_qos_data(const uint8_t *in, size_t length, uint8_t tid, uint
 /* The A-MPDU path only while a bulk send runs: short exchanges such as a
  * connection's setup stay on the monitor queue, where the host resends a
  * frame lost while the peer is away (the firmware's aggregate queue does
- * not, and those stalled through it upstream). */
-constexpr uint64_t kBaTxCheckUS = 1000000;
-constexpr uint32_t kBaTxBulkFrames = 200, kBaTxQuietFrames = 40, kBaTxQuietChecks = 2;
+ * not, and those stalled through it upstream). Trigger aggressively (24
+ * payload frames in 250 ms, ~35 KB) so even medium files enter A-MPDU fast. */
+constexpr uint64_t kBaTxCheckUS = 250000;
+constexpr uint32_t kBaTxBulkFrames = 24, kBaTxQuietFrames = 8, kBaTxQuietChecks = 4;
 struct BaTxBulk {
   uint64_t last_us = 0;
   uint32_t last_frames = 0, quiet_checks = 0;
@@ -317,8 +318,8 @@ struct BaTxBulk {
   /* `frames` counts payload-sized unicast data frames to the peer. True on a change. */
   bool note(uint64_t now_us, uint32_t frames, bool fast_entry) {
     const bool short_sample = fast_entry && !bulk;
-    const uint64_t sample = short_sample ? kBaTxCheckUS / 4 : kBaTxCheckUS;
-    const uint32_t entry = short_sample ? kBaTxBulkFrames / 4 : kBaTxBulkFrames;
+    const uint64_t sample = short_sample ? 100000ULL : kBaTxCheckUS;
+    const uint32_t entry = short_sample ? 8u : kBaTxBulkFrames;
     if (!last_us) {
       last_us = now_us;
       last_frames = frames;
@@ -344,6 +345,14 @@ struct BaTxBulk {
     return true;
   }
 };
+
+/* Experimental A-MPDU negotiation bounds (#4): ask every 100 ms up to 20 asks
+ * (or 5 s wall clock), then fall back cleanly to the single-frame queue and
+ * retry after 60 s instead of looping in `asking` indefinitely. */
+constexpr uint64_t kBaTxAskIntervalUS = 100000;
+constexpr unsigned kBaTxAskMax = 20;
+constexpr uint64_t kBaTxAskTimeoutUS = 5000000;
+constexpr uint64_t kBaTxFailBackoffUS = 60000000;
 
 /* Experimental A-MPDU send fallback (#4): if the peer agreed and we have fed at
  * least two full 64-frame Block Ack windows with zero Block Ack notifications

@@ -968,6 +968,7 @@ void IwxDevice::stop() {
   _proxy.set_close_ops({});
   _open = false;
   _phy_added = _mac_added = _binding_added = _sta_added = _queue_enabled = false;
+  _ba_station = _agg_queue_enabled = _agg_active = false;
 }
 
 /* ---------------------------------------------------------------- commands */
@@ -1258,6 +1259,7 @@ bool IwxDevice::ensure_ba_station(const uint8_t peer[6]) {
     _ba_station = false;
     _ba_tids = 0;
     _agg_queue_enabled = false;
+    _agg_active = false;
     _aggq.queued = 0;
     _ba_epoch++;
   }
@@ -1324,11 +1326,13 @@ bool IwxDevice::agg_setup(const uint8_t peer[6], bool vht80, bool mimo) {
     c.ht_rates[IWX_TLC_NSS_1][IWX_TLC_MCS_PER_BW_80] = htole16(mcs);
     if (two) c.ht_rates[IWX_TLC_NSS_2][IWX_TLC_MCS_PER_BW_80] = htole16(mcs);
     c.max_ch_width = static_cast<uint8_t>(vht && _width >= 80 ? IWX_TLC_MNG_CH_WIDTH_80MHZ : IWX_TLC_MNG_CH_WIDTH_20MHZ);
-    /* Enable LDPC (required for VHT80 MCS 9) and STBC when two TX chains are
-     * active, with 20 MHz SGI, matching ForbiddenItlwm's iwx_rs_init. */
+    /* Enable LDPC (required for VHT80 MCS 9), STBC when two TX chains are
+     * active, and SGI across 20/40/80 MHz (unlocks 866.7 Mbps VHT80 2SS). */
     c.flags = htole16(static_cast<uint16_t>(IWX_TLC_MNG_CFG_FLAGS_LDPC_MSK |
                                             (two ? IWX_TLC_MNG_CFG_FLAGS_STBC_MSK : 0u)));
-    c.sgi_ch_width_supp = static_cast<uint8_t>(1u << IWX_TLC_MNG_CH_WIDTH_20MHZ);
+    c.sgi_ch_width_supp = static_cast<uint8_t>((1u << IWX_TLC_MNG_CH_WIDTH_20MHZ) |
+                                               (1u << IWX_TLC_MNG_CH_WIDTH_40MHZ) |
+                                               (1u << IWX_TLC_MNG_CH_WIDTH_80MHZ));
     const uint32_t id = iwx_cmd_id(IWX_TLC_MNG_CONFIG_CMD, IWX_DATA_PATH_GROUP, 0);
     const uint8_t ver = cmd_version(IWX_DATA_PATH_GROUP, IWX_TLC_MNG_CONFIG_CMD);
     int err;
@@ -1368,8 +1372,23 @@ bool IwxDevice::agg_enable(bool on) {
   uint32_t status = IWX_ADD_STA_SUCCESS;
   if (!nic_lock()) return false;
   const int err = send_cmd_status(IWX_ADD_STA, &cmd, sizeof(cmd), &status);
+  const bool ok = !err && (status & IWX_ADD_STA_STATUS_MASK) == IWX_ADD_STA_SUCCESS;
+  /* Switch the listener MAC context atomically with the aggregation state:
+   * - on: enter ForbiddenItlwm's BA listener state (AWDL BSSID, ACK rates,
+   *   group-only filter, promiscuous off) BEFORE the first A-MPDU is queued.
+   * - off: leave BA listener state and restore full receive filters at once
+   *   so ADDBA/discovery/management frames arrive again (#4). */
+  if (on && ok) {
+    _agg_active = true;
+    _promisc = false;
+    if (_mac_added) mac_ctxt_cmd(IWX_FW_CTXT_ACTION_MODIFY);
+  } else if (!on && _agg_active) {
+    _agg_active = false;
+    _promisc = true;
+    if (_mac_added) mac_ctxt_cmd(IWX_FW_CTXT_ACTION_MODIFY);
+  }
   nic_unlock();
-  return !err && (status & IWX_ADD_STA_STATUS_MASK) == IWX_ADD_STA_SUCCESS;
+  return ok;
 }
 
 bool IwxDevice::agg_pause(bool on) {
@@ -1572,14 +1591,14 @@ int IwxDevice::mac_ctxt_cmd(uint32_t action) {
    * sending: 0.1.22 gave it AWDL's BSSID and ACK rates there, and on an AX200
    * discovery stopped (PSF count frozen, 0 frames addressed to us, no peer for
    * minutes) while 0.1.20 with the broadcast BSSID still found the iPhone (#4). */
-  /* Experimental A-MPDU only, while promiscuous receive is off for the
-   * peer's station (asking/agreed): ForbiddenItlwm's listener in exactly that
-   * state (awdlCoexBaFilterOff, filter 3): AWDL's BSSID, ACK rates, group
-   * frames only. With the broadcast BSSID the firmware took the agreement
-   * but sent every frame singly with no Block Ack (#4 AX200, #9 AX211).
-   * Discovery runs promiscuous with the broadcast BSSID as before: 0.1.22
-   * set AWDL's BSSID there too and found nothing (#4). */
-  const bool ba_listener = _opt.mac_type == MacType::Listener && _opt.aggregate && !_promisc && _ba_station;
+  /* Experimental A-MPDU only, ONLY once the peer has agreed (_agg_active, set
+   * in agg_enable): ForbiddenItlwm's listener in its active BA state
+   * (awdlCoexBaFilterOff, filter 3): AWDL's BSSID, ACK rates, group frames
+   * only. Never apply this during discovery or while asking for Block Ack:
+   * 0.1.28 stripped IN_CONTROL_AND_MGMT / IN_PROMISC during asking and the
+   * firmware dropped every ADDBA Response (asks 80, agreed 0, #4). */
+  const bool ba_listener =
+      _opt.mac_type == MacType::Listener && _opt.aggregate && _agg_active && !_promisc && _ba_station;
   std::memcpy(cmd.bssid_addr, (_opt.mac_type == MacType::Listener && !ba_listener) ? kBroadcast : kAwdlBssid, 6);
   if (_opt.mac_type != MacType::Listener || ba_listener) {
     /* ACK rates: the OFDM basics on 5 GHz, CCK and OFDM on 2.4 GHz. */
@@ -1843,6 +1862,7 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
   if (rate.kind == TxRate::Vht && new_format) {
     const unsigned mcs = std::min(rate.mcs, 9u);
     rnf = (rate.nss > 1 ? IWX_RATE_MCS_ANT_AB_MSK : rnf) | IWX_RATE_MCS_VHT_MSK |
+          IWX_RATE_MCS_LDPC_MSK | IWX_RATE_MCS_SGI_MSK |
           (rate.wide80 && _width >= 80 ? IWX_RATE_MCS_CHAN_WIDTH_80 : 0u) |
           (rate.nss > 1 ? IWX_RATE_MCS_NSS_MSK : 0u) | mcs;
   } else if (rate.kind == TxRate::Ht || rate.kind == TxRate::Vht) {
@@ -1888,6 +1908,8 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
     tx->rate_n_flags = htole32(fixed ? rnf : 0u);
   }
   std::memcpy(reinterpret_cast<uint8_t *>(cmd->data) + tx_size, frame, hdrlen);
+  if (hdrlen % 4)
+    std::memset(reinterpret_cast<uint8_t *>(cmd->data) + tx_size + hdrlen, 0, 4 - (hdrlen % 4));
 
   const size_t payload_len = len - hdrlen;
   uint8_t *payload = ring.payload[idx].va;
@@ -2164,19 +2186,21 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot
     return;
   const unsigned queue = le16toh(r->tx_queue);
   if (_agg_queue_enabled && queue == _aggq.qid) {
-    /* A frame of the aggregation queue the firmware sent on its own; the
-     * Block Ack notification reclaims the rest. Record status and rate as
-     * ForbiddenItlwm's iwx_rx_tx_cmd does so single-frame stalls are visible. */
-    if (r->frame_count == 1) {
-      _agg_stats.singles++;
-      const uint16_t st = static_cast<uint16_t>(le16toh(r->status.status) & IWX_TX_STATUS_MSK);
-      _agg_stats.last_single_rate = le32toh(r->initial_rate);
-      if (st == IWX_TX_STATUS_SUCCESS || st == IWX_TX_STATUS_DIRECT_DONE) {
-        _agg_stats.singles_ok++;
-      } else {
-        _agg_stats.singles_fail++;
-        _agg_stats.last_fail_status = st;
-      }
+    /* A-MPDU TX responses (frame_count > 1) are reclaimed by handle_ba_notif
+     * (IWX_BA_NOTIF), never here, matching Linux iwlwifi and ForbiddenItlwm.
+     * Single-frame completions (frame_count == 1) reclaim the ring directly. */
+    if (r->frame_count > 1) {
+      _agg_stats.agg_resps++;
+      return;
+    }
+    _agg_stats.singles++;
+    const uint16_t st = static_cast<uint16_t>(le16toh(r->status.status) & IWX_TX_STATUS_MSK);
+    _agg_stats.last_single_rate = le32toh(r->initial_rate);
+    if (st == IWX_TX_STATUS_SUCCESS || st == IWX_TX_STATUS_DIRECT_DONE) {
+      _agg_stats.singles_ok++;
+    } else {
+      _agg_stats.singles_fail++;
+      _agg_stats.last_fail_status = st;
     }
     uint32_t ssn;
     std::memcpy(&ssn, reinterpret_cast<const uint8_t *>(&r->status) + r->frame_count * sizeof(r->status),

@@ -277,11 +277,11 @@ public static class CardCatalog
         var iwx = ActiveProfiles[0];
         Check(iwx.Backend == RadioBackendKind.Iwx, $"ActiveProfiles[0] backend {iwx.Backend}, expected Iwx");
         Check(SameLaunch(BuildRadioLaunch(iwx, 6, false, "", null, false, false),
-                         "nekodrop-radio.exe", "6", "--width", "20", "--tx-window", "48"),
+                         "nekodrop-radio.exe", "6", "--width", "20", "--tx-window", "64"),
               "Iwx ch 6 default launch args");
         Check(SameLaunch(BuildRadioLaunch(iwx, 149, false, "JP", @"C:\run\sta.conf", true, true),
                          "nekodrop-radio.exe", "149", "--width", "80", "--country", "JP",
-                         "--sta-config", @"C:\run\sta.conf", "--tx-window", "48", "--aggregate", "--fast-unlock"),
+                         "--sta-config", @"C:\run\sta.conf", "--tx-window", "64", "--aggregate", "--fast-unlock"),
               "Iwx full flags launch args");
         Check(SameLaunch(BuildRadioLaunch(iwx, 44, true, "US", null, true, true),
                          "nekodrop-radio.exe", "44", "--width", "80", "--kernel", "--country", "US"),
@@ -310,7 +310,7 @@ public static class CardCatalog
             Check(mq.HardwareId == "PCI\\VEN_8086&DEV_9999" && mq.Backend == RadioBackendKind.Iwx && mq.RadioFamily == "qu",
                   $"manual qu profile {mq.HardwareId} {mq.Backend} {mq.RadioFamily}");
             Check(SameLaunch(BuildRadioLaunch(mq, 6, false, "", null, false, false),
-                             "nekodrop-radio.exe", "6", "--width", "20", "--tx-window", "48", "--family", "qu"),
+                             "nekodrop-radio.exe", "6", "--width", "20", "--tx-window", "64", "--family", "qu"),
                   "manual qu launch args");
         }
         var mr = ManualProfile("PCI\\VEN_10EC&DEV_C852", "rtl8852ce");

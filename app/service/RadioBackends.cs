@@ -49,7 +49,7 @@ public static class RadioBackends
 
 /// <summary>
 /// Intel 22000 / AX210 families: nekodrop-radio.exe (iwxradio, ported from
-/// ForbiddenItlwm). Station, A-MPDU, kernel driver; faster sending (48 frames
+/// ForbiddenItlwm). Station, A-MPDU, kernel driver; faster sending (64 frames
 /// in flight) always on since 0.1.25; --family when the model was chosen by hand.
 /// </summary>
 public sealed class IwxRadioBackend : IRadioBackend
@@ -64,7 +64,7 @@ public sealed class IwxRadioBackend : IRadioBackend
         if (!string.IsNullOrEmpty(s.Country)) args.AddRange(["--country", s.Country]);
         if (s.StaConf is not null) args.AddRange(["--sta-config", s.StaConf]);
         var caps = s.Profile.Capabilities;
-        if (!s.Kernel && caps.SupportsFastSend) args.AddRange(["--tx-window", "48"]);
+        if (!s.Kernel && caps.SupportsFastSend) args.AddRange(["--tx-window", "64"]);
         if (s.Aggregate && !s.Kernel && caps.SupportsAggregate) args.Add("--aggregate");
         // The firmware scan and country notice it needs are the user-mode Intel radio's,
         // the radio that also runs the Wi-Fi station; not with nekodrop-wlan.sys.

@@ -313,6 +313,7 @@ private:
   std::vector<unsigned> _rx_inflight; /* buffers being handled, oldest first (re-entrant poll) */
   TxRing _cmdq, _dataq, _staq, _aggq;
   bool _agg_queue_enabled = false;
+  bool _agg_active = false;
   uint16_t _agg_seq = 0;
   uint32_t _ba_epoch = 0;
   AggStats _agg_stats;
