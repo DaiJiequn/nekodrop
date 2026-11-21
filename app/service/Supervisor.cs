@@ -673,6 +673,7 @@ public sealed class Supervisor : IDisposable
         Say("the register proxy did not start: " + state);
         EnsureVendorDriver();
         throw new CardBindException($"the register proxy was bound but did not start ({state})", new TimeoutException());
+    }
 
     /* ------------------------------------------------------- Wi-Fi management */
 
