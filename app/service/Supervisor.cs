@@ -56,6 +56,7 @@ public sealed class Supervisor : IDisposable
                 ["mode"] = _cfg.Mode.ToString().ToLowerInvariant(),
                 ["channel"] = _channel,
                 ["country"] = _cfg.Country,
+                ["fastSend"] = _cfg.FastSend,
                 ["wifi"] = _wifi,
                 ["detail"] = _detail,
                 ["ssid"] = _staSsid,
@@ -168,6 +169,21 @@ public sealed class Supervisor : IDisposable
         Publish();
     }
 
+    /// <summary>Experimental faster sending; a running radio restarts to take it.</summary>
+    public void SetFastSend(bool on)
+    {
+        lock (_lock)
+        {
+            if (_cfg.FastSend == on) return;
+            _cfg.FastSend = on;
+            _cfg.Save();
+        }
+        Say($"experimental faster sending: {(on ? "on" : "off")}");
+        if (State is RadioState.On or RadioState.Starting)
+            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        Publish();
+    }
+
     /// <summary>The client wants AirDrop now (opened the window, a phone nearby is sharing).</summary>
     public void Wake()
     {
@@ -186,7 +202,11 @@ public sealed class Supervisor : IDisposable
             _restarts = 0;
         }
         Say($"starting: {why}");
-        _ = Task.Run(() => Launch(_cfg.PeerChannel != 0 && _cfg.Country != "" ? _cfg.PeerChannel : _cfg.StartChannel));
+        // The peer's last channel even without a country (#4: the country only
+        // arrives after the move, so every start sat on channel 6 first). On a
+        // passive channel the radio waits for a beacon before transmitting, and
+        // the 30 s check below falls back to the start channel.
+        _ = Task.Run(() => Launch(_cfg.PeerChannel != 0 ? _cfg.PeerChannel : _cfg.StartChannel));
     }
 
     public void Stop(string why, bool giveBack)
@@ -289,6 +309,7 @@ public sealed class Supervisor : IDisposable
             if (kernel) args.Add("--kernel");
             if (_cfg.Country != "") args.AddRange(["--country", _cfg.Country]);
             if (staConf is not null) args.AddRange(["--sta-config", staConf]);
+            if (_cfg.FastSend && !kernel) args.AddRange(["--tx-window", "48"]);
             _radio = Spawn(Path.Combine(_root, "radio", "nekodrop-radio.exe"), args, OnRadioLine);
             _startedAt = DateTime.UtcNow;
             // awdld connects to the radio's pipe; give the firmware time to boot.

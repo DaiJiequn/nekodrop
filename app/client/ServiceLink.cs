@@ -65,6 +65,7 @@ public sealed class ServiceLink : IDisposable
     public void Wake() => Send(new JsonObject { ["do"] = "wake" });
     public void Touch() => Send(new JsonObject { ["do"] = "touch" });
     public void SetMode(string mode) => Send(new JsonObject { ["do"] = "mode", ["mode"] = mode });
+    public void SetFastSend(bool on) => Send(new JsonObject { ["do"] = "fast-send", ["on"] = on });
 
     public void Dispose() => _cts.Cancel();
 }

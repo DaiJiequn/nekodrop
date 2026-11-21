@@ -28,6 +28,8 @@ public sealed class ServiceConfig
     public string Country { get; set; } = "";
     /// <summary>Last 5 GHz channel a peer used (44 or 149), 0 if none.</summary>
     public int PeerChannel { get; set; }
+    /// <summary>Experimental: keep up to 48 AWDL frames in flight (radio --tx-window 48).</summary>
+    public bool FastSend { get; set; }
     /// <summary>Seconds without AirDrop use before on-demand mode gives the card back.</summary>
     public int IdleSeconds { get; set; } = 90;
     /// <summary>Intel's own INF (oemNN.inf), remembered when the card is first taken.</summary>

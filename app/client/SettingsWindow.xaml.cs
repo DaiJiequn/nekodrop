@@ -23,6 +23,7 @@ public partial class SettingsWindow : Window
         ModeConcurrent.IsChecked = mode == "concurrent";
         ModeOnDemand.IsChecked = mode == "ondemand";
         ModeOff.IsChecked = mode == "off";
+        FastSendBox.IsChecked = (bool?)A.Service.Last?["fastSend"] ?? false;
     }
 
     void Browse_Click(object sender, RoutedEventArgs e)
@@ -53,6 +54,8 @@ public partial class SettingsWindow : Window
         A.Engine.Apply(s);
         var mode = ModeConcurrent.IsChecked == true ? "concurrent" : ModeOnDemand.IsChecked == true ? "ondemand" : "off";
         if (mode != (string?)A.Service.Last?["mode"]) A.Service.SetMode(mode);
+        var fast = FastSendBox.IsChecked == true;
+        if (fast != ((bool?)A.Service.Last?["fastSend"] ?? false)) A.Service.SetFastSend(fast);
         A.Window?.FolderChanged();
         if (languageChanged) A.ApplyLanguage();
         Close();
