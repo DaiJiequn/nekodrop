@@ -76,13 +76,13 @@ nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`�
 | Intel BE200 / BE201（Wi-Fi 7） | | 上游没有驱动 | ❌ |
 | Realtek、MediaTek、高通、博通 | | | ❌ |
 
-怎么看自己的网卡：打开 *设备管理器 → 网络适配器*。不在上表里的网卡，安装程序会直接拒绝安装。在未测试的网卡上，nekodrop 可能启动不了固件；这时网卡不会坏，运行下面的**一键回退**即可，也欢迎在 [Issues](../../issues) 附上日志反馈。
+怎么看自己的网卡：打开 *设备管理器 → 网络适配器*。没有受支持的 Intel 网卡时，安装程序会拒绝安装，并列出本机检测到的无线网卡、PCI/USB ID 和不支持原因（若为 **Realtek RTL8852CE** `10EC:C852` 会指引上游 [winawdl](https://github.com/raph559/winawdl)），以及运行 `installer/report.ps1` 的指引。在未测试的 Intel 网卡上，nekodrop 可能启动不了固件；这时网卡不会坏，运行下面的**一键回退**即可，也欢迎在 [Issues](../../issues) 附上日志反馈。
 
-不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。**Realtek RTL8852CE**（`10EC:C852`）现在就可以用上游的 [winawdl](https://github.com/raph559/winawdl)（只有 AirDrop，不能同时连 Wi-Fi）。已安装 nekodrop 时，运行 `NekoDropService.exe --status` 可查看匹配到的网卡档案、能力与当前驱动提供者，`NekoDropService.exe --selftest` 可在无网卡、无管理员权限下运行网卡目录离线自检（目录中的 RTL8852CE 目前仅为未启用占位条目，暂不代表新增 Realtek 硬件支持）。radio 启动时会记一行 `backend …` 日志，写明当前驱动后端具备哪些能力（Wi-Fi 站点、固件扫描、A-MPDU 发送等）；离线自检 `iwx_selftest` 在每次构建时校验这套能力契约，其中包括一个模拟的、无 Wi-Fi 站点的未来 Realtek 后端。这对 Intel 网卡没有任何行为变化，也不代表新增 Realtek 支持。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
+不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。**Realtek RTL8852CE**（`10EC:C852`）现在就可以用上游的 [winawdl](https://github.com/raph559/winawdl)（只有 AirDrop，不能同时连 Wi-Fi）。已安装 nekodrop 时，运行 `NekoDropService.exe --status` 可查看匹配到的网卡档案、能力与当前驱动提供者，`NekoDropService.exe --selftest` 可在无网卡、无管理员权限下运行网卡目录离线自检（目录中的 RTL8852CE 目前仅为未启用占位条目，暂不代表新增 Realtek 硬件支持）。radio 启动时会记一行 `backend …` 日志，写明当前驱动后端具备哪些能力（Wi-Fi 站点、固件扫描、A-MPDU 发送等）；离线自检 `iwx_selftest` 在每次构建时校验这套能力契约，其中包括一个模拟的、无 Wi-Fi 站点的未来 Realtek 后端；`install.ps1 -SelfTest`、`restore.ps1 -SelfTest` 和 `report.ps1 -SelfTest` 也会在每次构建时于 Windows PowerShell 5.1 下运行离线自检。这些改动不改变 Intel 网卡的默认行为，也尚未启用 Realtek 硬件支持。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
 
 ### 出问题了？一键回退
 
-开始菜单 → **nekodrop - restore Windows Wi-Fi**（或双击 `C:\Program Files\nekodrop` 里的 `restore.cmd`）。它会停掉 nekodrop，把网卡还给 Intel 驱动，删除 nekodrop 的驱动包，恢复 Windows 自带的 Wi-Fi，不管 nekodrop 把网卡留在什么状态。nekodrop 本身不会被卸载，想再用时重新运行安装程序即可。日志：`C:\ProgramData\nekodrop\restore.log`。
+开始菜单 → **nekodrop - restore Windows Wi-Fi**（或双击 `C:\Program Files\nekodrop` 里的 `restore.cmd`）。它是独立脚本（即使安装目录损坏也能运行），会停掉 nekodrop，解除 Intel 硬编码、按网卡厂商归还原厂驱动（Intel 网卡行为保持不变），删除 nekodrop 的驱动包并恢复 Windows 自带的 Wi-Fi，不管 nekodrop 把网卡留在什么状态。nekodrop 本身不会被卸载，想再用时重新运行安装程序即可。日志：`C:\ProgramData\nekodrop\restore.log`。
 
 ### 反馈问题：诊断报告
 

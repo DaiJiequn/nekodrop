@@ -65,9 +65,16 @@ Bringing it into nekodrop is several high-risk changes at once:
    work, so an RTL8852CE would have to be locked to *on demand*. The service
    already does this from the card's profile (see below); the user's saved
    mode stays as chosen.
-4. **Taking and giving back the card.** The service no longer assumes Intel
-   (see below), but `installer/install.ps1` and `installer/restore.ps1` still
-   do (`VEN_8086`, an Intel driver package to give the card back to).
+4. **Taking and giving back the card.** The service (`CardCatalog.cs`) and
+   standalone rollback (`installer/restore.ps1`) no longer assume Intel:
+   `restore.ps1` matches either a device currently bound to nekodrop's proxy or
+   a known catalog ID, validates recorded `VendorInf` paths against poisoned
+   proxy INFs (#12), and picks driver-store fallbacks by PCI vendor.
+   `installer/install.ps1` still allows only the 15 active Intel IDs, and
+   refuses unsupported wireless cards with the same classification as
+   `report.ps1` (including an upstream `winawdl` pointer for `10EC:C852`).
+   `install.ps1 -SelfTest`, `restore.ps1 -SelfTest`, and `report.ps1 -SelfTest`
+   run offline under Windows PowerShell 5.1 in `scripts/build-installer.ps1`.
 
 ### The service's card catalog
 
@@ -141,17 +148,21 @@ the RX and TX-status handlers, `poll`, `check_health`, `healthy`,
    instead of `IwxDevice` checks in `radio_main.cpp`, no Intel-only stubs in
    `KernelDevice`, with offline checks in `iwx_selftest`. No change for Intel
    cards or the kernel driver.
-4. **Installer message.** Once the Windows 10 INF is confirmed (#18, #12),
-   `install.ps1` refuses with the same classification: which card it found,
-   its PCI ID, and an alternative (winawdl for an RTL8852CE).
-5. **Experimental RTL8852CE.** After the register proxy picks its BAR by device
-   and `restore.ps1` no longer assumes Intel: winawdl's RTL8852CE support
-   behind an experimental switch, off by default (its profile becomes active
-   only with the switch on), forced to *on demand* by its profile, as a radio
-   backend declaring the capabilities in the table above.
+4. **Installer message (done).** `install.ps1` refuses unsupported cards with
+   the same classification as `report.ps1`: every detected wireless card, its
+   PCI/USB ID, why nekodrop does not run on it, an upstream `winawdl` pointer
+   for an RTL8852CE (`10EC:C852`), and `installer/report.ps1` guidance, in pure
+   ASCII for Inno Setup's error box, checked offline by `install.ps1 -SelfTest`.
+5. **Experimental RTL8852CE.** `restore.ps1` is already standalone and
+   vendor-agnostic (checked offline by `restore.ps1 -SelfTest`). What remains
+   is register proxy BAR selection by device, devourer build integration, and
+   winawdl's RTL8852CE support behind an experimental switch, off by default
+   (its profile becomes active only with the switch on), forced to *on demand*
+   by its profile, as a radio backend declaring the capabilities in the table
+   above.
 
 When adding IDs, keep `AllProfiles` in `app/service/CardCatalog.cs`,
-`$SupportedIntelIds` in `installer/report.ps1`, `kDeviceIds` in
-`iwxradio/src/cards.h`, the register proxy's INF and the check in
-`installer/install.ps1` in step. The service self-test expects exactly the 15
-Intel IDs: update its list too.
+`$SupportedIntelIds` in `installer/report.ps1`, `installer/install.ps1` and
+`installer/restore.ps1`, `kDeviceIds` in `iwxradio/src/cards.h`, and the
+register proxy's INF in step. The service and installer self-tests expect
+exactly the 15 Intel IDs: update their lists too.

@@ -92,6 +92,11 @@ if ($LASTEXITCODE -ne 0) { throw 'client publish failed' }
 Copy-Item "$repo\installer\install.ps1", "$repo\installer\uninstall.ps1", "$repo\installer\setup-tap.ps1",
           "$repo\installer\restore.ps1", "$repo\installer\restore.cmd",
           "$repo\installer\report.ps1", "$repo\installer\report.cmd" $stage
+# Offline installer/rollback/report self-tests under Windows PowerShell 5.1 (no card or admin rights needed).
+foreach ($script in 'install.ps1', 'restore.ps1', 'report.ps1') {
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$stage\$script" -SelfTest
+  if ($LASTEXITCODE -ne 0) { throw "$script self-test failed ($LASTEXITCODE)" }
+}
 
 'downloads'
 $py = "$downloads\python-$PythonVersion-embed-amd64.zip"
