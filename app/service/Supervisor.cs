@@ -27,7 +27,7 @@ public sealed class Supervisor : IDisposable
     /* Wi-Fi management (the list, connect, forget, auto-connect) */
     readonly KnownNetworks _known = KnownNetworks.Load();
     List<JsonObject> _scan = [], _scanPending = [];
-    bool _scanBusy;
+    bool _scanBusy, _wantBootScan;
     DateTime _scanAt = DateTime.MinValue, _wifiDownSince = DateTime.UtcNow;
     bool _userChose, _userOff;
     string _staSsid = "", _wifiError = "";
@@ -261,6 +261,7 @@ public sealed class Supervisor : IDisposable
             State = RadioState.Starting; _channel = channel; _detail = "";
             // A scan the old radio never finished must not block auto-connect forever (Codex review #29).
             _scanBusy = false;
+            _wantBootScan = false;
             _scanPending = [];
         }
         Publish();
@@ -284,17 +285,21 @@ public sealed class Supervisor : IDisposable
                 }
                 // The user's choice wins over what Windows was connected to.
                 var fresh = cardFree && !_userChose && !_userOff ? Wlan.Current(out why) : null;
-                // Not connected (USB tethering, or Intel's driver just got the card back):
-                // let Windows join a saved network once, to read what the station needs.
                 // Not beside a wired connection: that left two default routes (issue #1).
                 var wired = fresh is null && _net is null && !_userChose && Wlan.WiredUp();
                 if (wired) Say("Wi-Fi: a wired connection is up; not joining a saved network on its own");
-                for (int i = 0; cardFree && !wired && !_userChose && !_userOff && fresh is null && _net is null && i < 4; i++)
+                // If Windows is already in the middle of connecting at boot, wait briefly
+                // instead of cutting it off; never call WlanConnect across saved profiles
+                // (blocked cold start for 6 minutes with 23 profiles, #4).
+                if (cardFree && !wired && !_userChose && !_userOff && fresh is null && _net is null && Wlan.IsConnecting())
                 {
-                    if (i == 0) Say("Wi-Fi: Windows is not connected; joining a saved network to read it");
-                    fresh = Wlan.ConnectSaved(out why, TimeSpan.FromSeconds(15));
-                    if (fresh is null && why == "no WLAN interface") Thread.Sleep(5000);
-                    else break;
+                    var end = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+                    while (DateTime.UtcNow < end && _wanted && fresh is null)
+                    {
+                        Thread.Sleep(250);
+                        fresh = Wlan.Current(out why);
+                        if (fresh is null && !Wlan.IsConnecting()) break;
+                    }
                 }
                 if (fresh is not null)
                 {
@@ -308,10 +313,20 @@ public sealed class Supervisor : IDisposable
                     staConf = Wlan.WriteStaConfig(net);
                     Say($"Wi-Fi: joining \"{net.Ssid}\" ({net.Security}, channel {net.Channel}) beside AirDrop");
                 }
+                else if (net is null && !wired && !_userOff && !_userChose &&
+                         why is "Wi-Fi is not connected" or "no WLAN interface" or "" &&
+                         _known.All().Any(k => k.HasKey && k.AutoConnect))
+                {
+                    // Saved networks were imported into _known: start AirDrop at once and
+                    // let the radio scan and join the strongest one in range (#4).
+                    Say("Wi-Fi: Windows is not connected; AirDrop starts now and nekodrop will scan for a saved network");
+                    lock (_lock) { _wifi = ""; _wantBootScan = true; }
+                }
                 else if (!string.IsNullOrEmpty(why))
                 {
                     Say($"Wi-Fi: {why}; AirDrop runs without it");
-                    lock (_lock) _wifi = "unsupported: " + why;
+                    var notConnected = why is "Wi-Fi is not connected" or "no WLAN interface" or "WLAN service unavailable";
+                    lock (_lock) _wifi = notConnected ? "" : "unsupported: " + why;
                 }
             }
             // With nekodrop-wlan.sys the card stays where it is: Windows runs
@@ -390,8 +405,16 @@ public sealed class Supervisor : IDisposable
         var text = at >= 0 ? line[(at + 7)..] : line;
         if (text.StartsWith("ready on channel", StringComparison.Ordinal))
         {
-            lock (_lock) State = RadioState.On;
+            bool bootScan;
+            lock (_lock)
+            {
+                State = RadioState.On;
+                bootScan = _wantBootScan;
+                _wantBootScan = false;
+                if (bootScan) _wifiDownSince = DateTime.MinValue;
+            }
             Publish();
+            if (bootScan) WifiScan();
         }
         else if (text.StartsWith("bring-up failed: ", StringComparison.Ordinal))
         {
