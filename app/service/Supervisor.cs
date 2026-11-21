@@ -27,7 +27,8 @@ public sealed class Supervisor : IDisposable
     /* Wi-Fi management (the list, connect, forget, auto-connect) */
     readonly KnownNetworks _known = KnownNetworks.Load();
     List<JsonObject> _scan = [], _scanPending = [];
-    bool _scanBusy, _wantBootScan;
+    bool _scanBusy, _wantBootScan, _channelOpen;
+    int _launchGen;
     DateTime _scanAt = DateTime.MinValue, _wifiDownSince = DateTime.UtcNow;
     bool _userChose, _userOff;
     string _staSsid = "", _wifiError = "";
@@ -262,6 +263,8 @@ public sealed class Supervisor : IDisposable
             // A scan the old radio never finished must not block auto-connect forever (Codex review #29).
             _scanBusy = false;
             _wantBootScan = false;
+            _channelOpen = false;
+            _launchGen++;
             _scanPending = [];
         }
         Publish();
@@ -431,6 +434,12 @@ public sealed class Supervisor : IDisposable
                 _rxToUs = n;
             }
         }
+        else if (text.Contains("transmitting allowed here", StringComparison.Ordinal))
+        {
+            // A beacon or AWDL peer unlocked a passive 5 GHz channel (#11):
+            // do not bounce back to channel 6 after 30 s.
+            lock (_lock) _channelOpen = true;
+        }
         else if (text.StartsWith("event: ", StringComparison.Ordinal))
         {
             OnEvent(text[7..].Split(' ', 2));
@@ -459,19 +468,31 @@ public sealed class Supervisor : IDisposable
                 }
                 break;
             case "channel":
-                // "44 passive": no transmitting until a beacon is heard; if none comes, go back to 6.
-                if (value.EndsWith("passive", StringComparison.Ordinal))
+                // "44 passive": no transmitting until a beacon or AWDL peer is heard, or
+                // the firmware unlocks the channel; if it stays passive, go back to 6 (#11).
+                if (value.EndsWith("active", StringComparison.Ordinal))
+                {
+                    lock (_lock) _channelOpen = true;
+                }
+                else if (value.EndsWith("passive", StringComparison.Ordinal))
+                {
+                    int gen, passiveCh;
+                    lock (_lock) { gen = _launchGen; passiveCh = _channel; }
                     _ = Task.Run(async () =>
                     {
                         await Task.Delay(TimeSpan.FromSeconds(30));
-                        // A connected station proves the channel is usable: no bouncing back to 6.
-                        if (State == RadioState.On && _channel > 14 && _rxToUs == 0 && _wifi != "connected")
+                        bool bounce;
+                        lock (_lock)
+                            bounce = State == RadioState.On && _launchGen == gen && _channel == passiveCh &&
+                                     _channel > 14 && !_channelOpen && _rxToUs == 0 && _wifi != "connected";
+                        if (bounce)
                         {
-                            Say($"channel {_channel} stayed passive: back to {_cfg.StartChannel}");
+                            Say($"channel {passiveCh} stayed passive: back to {_cfg.StartChannel}");
                             lock (_lock) _cfg.PeerChannel = 0;
                             Relaunch(_cfg.StartChannel);
                         }
                     });
+                }
                 break;
             case "wifi":
                 lock (_lock)
@@ -932,7 +953,12 @@ public sealed class Supervisor : IDisposable
         }
     }
 
-    const int TapMetric = 75;
+    /// <summary>
+    /// High enough that wired Ethernet always wins the default route: Windows
+    /// often assigns RouteMetric 256 + InterfaceMetric 25 = 281 to Ethernet,
+    /// which lost to nekodrop's earlier 75 + 75 = 150 (issue #11).
+    /// </summary>
+    const int TapMetric = 500;
 
     /// <summary>The card runs nekodrop's kernel Wi-Fi driver (nekodrop-wlan.sys).</summary>
     static bool KernelDriver => Card.Find() is { } k && Card.ByKernelDriver(k);

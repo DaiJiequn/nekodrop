@@ -66,6 +66,7 @@ Get-NetIPAddress -InterfaceAlias $name -AddressFamily IPv4 -PrefixOrigin Manual 
 Get-NetRoute -InterfaceAlias $name -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue |
   Where-Object Protocol -eq 'NetMgmt' | Remove-NetRoute -Confirm:$false -ErrorAction SilentlyContinue
 Set-DnsClientServerAddress -InterfaceAlias $name -ResetServerAddresses
-# After any wired adapter: with the automatic metric both got 25 (issue #1).
-Set-NetIPInterface -InterfaceAlias $name -InterfaceMetric 75 -ErrorAction SilentlyContinue
+# After any wired adapter: Windows often gives Ethernet a default route metric
+# of 256 + 25 = 281, which lost to 75 + 75 = 150 (issues #1, #11).
+Set-NetIPInterface -InterfaceAlias $name -InterfaceMetric 500 -ErrorAction SilentlyContinue
 Get-NetIPInterface -InterfaceAlias $name -AddressFamily IPv4 | Select-Object InterfaceAlias, Dhcp, ConnectionState
