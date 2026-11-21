@@ -345,4 +345,14 @@ struct BaTxBulk {
   }
 };
 
+/* Experimental A-MPDU send fallback (#4): if the peer agreed and we have fed at
+ * least two full 64-frame Block Ack windows with zero Block Ack notifications
+ * and >= 64 single-frame completions, the firmware is not aggregating on this
+ * queue; fall back to the single-frame queue instead of crawling at ~40 KB/s. */
+constexpr uint64_t kBaTxNoBaFallbackFrames = 128;
+constexpr uint64_t kBaTxNoBaFallbackSingles = 64;
+inline bool ba_tx_stalled_as_singles(uint64_t frames, uint64_t notifs, uint64_t singles) {
+  return notifs == 0 && frames >= kBaTxNoBaFallbackFrames && singles >= kBaTxNoBaFallbackSingles;
+}
+
 } // namespace awdl

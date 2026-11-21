@@ -1314,7 +1314,10 @@ bool IwxDevice::agg_setup(const uint8_t peer[6], bool vht80, bool mimo) {
     const bool two = mimo && (ant & 3) == 3;
     const bool vht = vht80 && _channel > 14;
     c.mode = vht ? IWX_TLC_MNG_MODE_VHT : IWX_TLC_MNG_MODE_HT;
-    const uint16_t mcs = vht ? 0x03ff : 0x00ff;
+    /* High rates only, as ForbiddenItlwm's iwx_rs_init (MCS 4..9 VHT / 4..7 HT):
+     * the peer leaves the channel often and rate control would otherwise drop
+     * all the way down to MCS 0 (#4). */
+    const uint16_t mcs = vht ? 0x03f0 : 0x00f0;
     c.ht_rates[IWX_TLC_NSS_1][IWX_TLC_MCS_PER_BW_80] = htole16(mcs);
     if (two) c.ht_rates[IWX_TLC_NSS_2][IWX_TLC_MCS_PER_BW_80] = htole16(mcs);
     c.max_ch_width = static_cast<uint8_t>(vht && _width >= 80 ? IWX_TLC_MNG_CH_WIDTH_80MHZ : IWX_TLC_MNG_CH_WIDTH_20MHZ);
@@ -1336,7 +1339,9 @@ bool IwxDevice::agg_setup(const uint8_t peer[6], bool vht80, bool mimo) {
       v3.ht_rates[0][0] = c.ht_rates[0][0];
       v3.ht_rates[1][0] = c.ht_rates[1][0];
       v3.sgi_ch_width_supp = c.sgi_ch_width_supp;
-      err = send_cmd(id, &v3, sizeof(v3), false, nullptr);
+      size_t sz = sizeof(v3);
+      if (ver == IWX_FW_CMD_VER_UNKNOWN || ver < 3) sz -= 4;
+      err = send_cmd(id, &v3, sz, false, nullptr);
     }
     if (err) _log("aggregate: rate control refused (" + std::to_string(err) + ")");
     ok = err == 0;
@@ -1535,12 +1540,17 @@ int IwxDevice::mac_ctxt_cmd(uint32_t action) {
   cmd.mac_type = htole32(type);
   cmd.tsf_id = htole32(IWX_TSF_ID_A);
   std::memcpy(cmd.node_addr, _address.data(), 6);
-  std::memcpy(cmd.bssid_addr, _opt.mac_type == MacType::Listener ? kBroadcast : kAwdlBssid, 6);
-  if (_opt.mac_type != MacType::Listener) {
-    /* ACK rates: the OFDM basics on 5 GHz, CCK and OFDM on 2.4 GHz. */
+  std::memcpy(cmd.bssid_addr,
+              (_opt.mac_type == MacType::Listener && !_opt.aggregate) ? kBroadcast : kAwdlBssid, 6);
+  if (_opt.mac_type != MacType::Listener || _opt.aggregate) {
+    /* ACK rates: the OFDM basics on 5 GHz, CCK and OFDM on 2.4 GHz.
+     * ForbiddenItlwm's coex listener sets AWDL's BSSID and these rates so
+     * dropping promiscuous receive for A-MPDU keeps AWDL PSF/sync frames and
+     * gives the firmware valid ACK rates; the default non-aggregate listener
+     * stays unchanged (#4). */
     cmd.cck_rates = htole32(_channel <= 14 ? 0x0f : 0);
     cmd.ofdm_rates = htole32(0x15); /* 6, 12, 24 */
-    cmd.qos_flags = htole32(IWX_MAC_QOS_FLG_TGN);
+    if (_opt.mac_type != MacType::Listener) cmd.qos_flags = htole32(IWX_MAC_QOS_FLG_TGN);
   }
   cmd.filter_flags = htole32((_promisc ? IWX_MAC_FILTER_IN_PROMISC : 0u) |
                              IWX_MAC_FILTER_IN_CONTROL_AND_MGMT | IWX_MAC_FILTER_ACCEPT_GRP |
@@ -2113,8 +2123,19 @@ void IwxDevice::handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot
   const unsigned queue = le16toh(r->tx_queue);
   if (_agg_queue_enabled && queue == _aggq.qid) {
     /* A frame of the aggregation queue the firmware sent on its own; the
-     * Block Ack notification reclaims the rest. */
-    _agg_stats.singles += r->frame_count == 1;
+     * Block Ack notification reclaims the rest. Record status and rate as
+     * ForbiddenItlwm's iwx_rx_tx_cmd does so single-frame stalls are visible. */
+    if (r->frame_count == 1) {
+      _agg_stats.singles++;
+      const uint16_t st = static_cast<uint16_t>(le16toh(r->status.status) & IWX_TX_STATUS_MSK);
+      _agg_stats.last_single_rate = le32toh(r->initial_rate);
+      if (st == IWX_TX_STATUS_SUCCESS || st == IWX_TX_STATUS_DIRECT_DONE) {
+        _agg_stats.singles_ok++;
+      } else {
+        _agg_stats.singles_fail++;
+        _agg_stats.last_fail_status = st;
+      }
+    }
     uint32_t ssn;
     std::memcpy(&ssn, reinterpret_cast<const uint8_t *>(&r->status) + r->frame_count * sizeof(r->status),
                 sizeof(ssn));

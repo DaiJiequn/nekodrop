@@ -57,7 +57,9 @@ struct TxStats {
 /* A-MPDU sending counters, for backends with supports_aggregate. */
 struct RadioAggStats {
   uint64_t frames = 0, notifs = 0, txed = 0, acked = 0, singles = 0;
-  uint32_t last_rate = 0, peak_frames = 0;
+  uint64_t singles_ok = 0, singles_fail = 0;
+  uint32_t last_rate = 0, peak_frames = 0, last_single_rate = 0;
+  uint16_t last_fail_status = 0;
 };
 
 enum class RadioMacType { Listener, Ibss, Sta };

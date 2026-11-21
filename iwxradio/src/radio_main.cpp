@@ -485,6 +485,7 @@ int main(int argc, char **argv) {
       uint8_t gate_kind = 0;
       uint64_t asks_total = 0, agreements = 0, refusals = 0, delbas = 0, setup_failures = 0, pause_errors = 0,
                gate_holds = 0, sync_frames = 0, dropped = 0;
+      uint64_t agree_frames = 0, agree_notifs = 0, agree_singles = 0;
     } agg;
     agg.sched.reset();
     agg.sched.assumeZero = true; /* upstream's default (iface161) */
@@ -1016,9 +1017,13 @@ int main(int argc, char **argv) {
           if (agg.answered) {
             agg.answered = false;
             if (dev.agg_enable(true)) {
+              const auto &a = dev.agg_stats();
               agg.step = Agg::Agreed;
               agg.agreements++;
               agg.resume_failures = 0;
+              agg.agree_frames = a.frames;
+              agg.agree_notifs = a.notifs;
+              agg.agree_singles = a.singles;
               log_line("aggregate: the peer agreed; sending A-MPDUs");
             } else {
               agg.setup_failures++;
@@ -1093,6 +1098,22 @@ int main(int argc, char **argv) {
             if (dev.transmit_agg(qos.data(), qos.size()) < 0) break;
             agg.wait.pop_front();
             agg.last_agg_us = t;
+          }
+          const auto &a = dev.agg_stats();
+          if (agg.step == Agg::Agreed &&
+              awdl::ba_tx_stalled_as_singles(a.frames - agg.agree_frames, a.notifs - agg.agree_notifs,
+                                             a.singles - agg.agree_singles)) {
+            char detail[160];
+            std::snprintf(detail, sizeof(detail),
+                          "no Block Acks after %llu frames (%llu singles: %llu ok, %llu failed, last fail 0x%04x, rate 0x%08x); falling back to single-frame queue",
+                          static_cast<unsigned long long>(a.frames - agg.agree_frames),
+                          static_cast<unsigned long long>(a.singles - agg.agree_singles),
+                          static_cast<unsigned long long>(a.singles_ok),
+                          static_cast<unsigned long long>(a.singles_fail),
+                          static_cast<unsigned>(a.last_fail_status),
+                          static_cast<unsigned>(a.last_single_rate));
+            agg.retry_us = t + 300000000ULL; /* back off 5 minutes so the rest of this send stays fast */
+            stop(detail);
           }
         }
       }
@@ -1230,14 +1251,21 @@ int main(int argc, char **argv) {
         if constexpr (caps.supports_aggregate) if (agg.on) {
           const auto &a = dev.agg_stats();
           static const char *const kStep[] = {"idle", "asking", "agreed"};
-          char rate[16];
+          char rate[16], sdetail[96] = {};
           std::snprintf(rate, sizeof(rate), "0x%08x", a.last_rate);
+          if (a.singles) {
+            std::snprintf(sdetail, sizeof(sdetail), " (ok %llu, fail %llu, last 0x%04x, rate 0x%08x)",
+                          static_cast<unsigned long long>(a.singles_ok),
+                          static_cast<unsigned long long>(a.singles_fail),
+                          static_cast<unsigned>(a.last_fail_status),
+                          static_cast<unsigned>(a.last_single_rate));
+          }
           log_line(std::string("aggregate: ") + kStep[agg.step] + (agg.pause.paused ? ", paused" : "") + "; queue " +
                    std::to_string(dev.agg_queued()) + ", waiting " + std::to_string(agg.wait.size()) + "; " +
                    std::to_string(a.frames) + " frames, " + std::to_string(a.notifs) + " Block Acks (" +
                    std::to_string(a.txed) + " sent, " + std::to_string(a.acked) + " acked, largest " +
                    std::to_string(a.peak_frames) + ", rate " + rate + "), " + std::to_string(a.singles) +
-                   " singles; asks " + std::to_string(agg.asks_total) + ", agreed " + std::to_string(agg.agreements) +
+                   " singles" + sdetail + "; asks " + std::to_string(agg.asks_total) + ", agreed " + std::to_string(agg.agreements) +
                    ", refused " + std::to_string(agg.refusals) + ", DELBA " + std::to_string(agg.delbas) +
                    "; pauses " + std::to_string(agg.pause.pauses) + " (forced " + std::to_string(agg.pause.forcedResumes) +
                    ", errors " + std::to_string(agg.pause_errors) + "), gate holds " + std::to_string(agg.gate_holds) +

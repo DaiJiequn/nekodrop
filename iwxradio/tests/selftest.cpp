@@ -323,6 +323,13 @@ int main(int argc, char **argv) {
    * station-less backend meeting the contract without stubs. */
   failures += radio_backend_test::run();
 
+  /* Experimental A-MPDU send fallback (#4): trip only after two full windows
+   * with zero Block Acks and >= 64 single-frame completions. */
+  CHECK(!awdl::ba_tx_stalled_as_singles(127, 0, 127), "no-BA fallback waits for 128 frames");
+  CHECK(!awdl::ba_tx_stalled_as_singles(128, 0, 63), "no-BA fallback waits for 64 single completions");
+  CHECK(!awdl::ba_tx_stalled_as_singles(256, 1, 200), "no-BA fallback stays quiet once any Block Ack arrives");
+  CHECK(awdl::ba_tx_stalled_as_singles(128, 0, 64), "no-BA fallback triggers on 128 frames / 0 BA / 64 singles");
+
   std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
   return failures ? 1 : 0;
 }
