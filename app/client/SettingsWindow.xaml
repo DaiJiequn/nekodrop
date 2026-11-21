@@ -91,6 +91,19 @@
 
       <Border Style="{StaticResource CardBox}">
         <StackPanel>
+          <TextBlock Text="{local:T set.updates}" FontWeight="SemiBold"/>
+          <CheckBox x:Name="CheckUpdatesBox" Content="{local:T set.checkUpdates}"/>
+          <CheckBox x:Name="PreviewUpdatesBox" Content="{local:T set.previewUpdates}"/>
+          <TextBlock Style="{StaticResource Caption}" Text="{local:T set.updates.hint}"/>
+          <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+            <Button x:Name="CheckNowButton" Content="{local:T set.checkNow}" Click="CheckNow_Click" Padding="12,4"/>
+            <TextBlock x:Name="UpdateStatus" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource CardBox}">
+        <StackPanel>
           <TextBlock Text="{local:T set.experimental}" FontWeight="SemiBold"/>
           <CheckBox x:Name="FastSendBox" Content="{local:T set.fastSend}"/>
           <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.fastSend.hint}"/>

@@ -2,7 +2,7 @@
 ; One exe installs everything: the client and service (self-contained, no .NET
 ; needed), the user-mode radio, awdld + Wintun, the AirDrop engine with its own
 ; Python, the register-proxy driver, TAP-Windows, firewall rules and the service.
-#define AppVersion "0.1.16"
+#define AppVersion "0.1.17"
 
 [Setup]
 AppId={{6C1F2E7A-4B8E-4E57-9C61-5E2B1D0A9F31}
@@ -57,6 +57,8 @@ Name: "{autoprograms}\nekodrop - diagnostic report"; Filename: "{app}\report.cmd
 ; Started as the signed-in user: the first start registers the Explorer
 ; "用 nekodrop 发送" menu, Send To and the notification protocol for that user.
 Filename: "{app}\nekodrop.exe"; Description: "{cm:StartNow}"; Flags: postinstall nowait skipifsilent runasoriginaluser
+; An update started from nekodrop runs silently: start the new version again.
+Filename: "{app}\nekodrop.exe"; Parameters: "--background"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallRun]
 Filename: "{app}\nekodrop.exe"; Parameters: "--unregister"; Flags: waituntilterminated skipifdoesntexist runhidden; RunOnceId: "nekodrop-unregister"

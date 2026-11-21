@@ -25,6 +25,25 @@ public partial class SettingsWindow : Window
         ModeOff.IsChecked = mode == "off";
         FastSendBox.IsChecked = (bool?)A.Service.Last?["fastSend"] ?? false;
         AggregateBox.IsChecked = (bool?)A.Service.Last?["aggregate"] ?? false;
+        CheckUpdatesBox.IsChecked = s.CheckUpdates;
+        PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
+        UpdateStatus.Text = "nekodrop " + Updater.Current;
+    }
+
+    async void CheckNow_Click(object sender, RoutedEventArgs e)
+    {
+        CheckNowButton.IsEnabled = false;
+        try
+        {
+            A.Settings.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
+            var found = await A.CheckForUpdate(true);
+            if (found is null) { UpdateStatus.Text = L.T("update.none"); return; }
+            UpdateStatus.Text = L.F("update.found", found.Version.ToString());
+            var progress = new Progress<int>(p => UpdateStatus.Text = L.F("update.found", found.Version.ToString()) + $" {p}%");
+            var why = await A.InstallUpdate(progress);
+            if (why != "") UpdateStatus.Text = L.T("update.failed") + ": " + why;
+        }
+        finally { CheckNowButton.IsEnabled = true; }
     }
 
     void Browse_Click(object sender, RoutedEventArgs e)
@@ -46,6 +65,8 @@ public partial class SettingsWindow : Window
         s.SaveFolder = FolderBox.Text;
         s.Ask = AskBox.IsChecked == true;
         s.StartWithWindows = StartupBox.IsChecked == true;
+        s.CheckUpdates = CheckUpdatesBox.IsChecked == true;
+        s.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
         var language = (LanguageBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string ?? "auto";
         var languageChanged = language != s.Language;
         s.Language = language;

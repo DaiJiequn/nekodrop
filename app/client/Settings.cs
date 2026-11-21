@@ -21,6 +21,12 @@ public sealed class Settings
     public string Language { get; set; } = "auto";
     /// <summary>The AirDrop receiver's mDNS instance name, kept so engine restarts stay one device.</summary>
     public string ServiceId { get; set; } = "";
+    /// <summary>Look for a newer release now and then (never installs on its own).</summary>
+    public bool CheckUpdates { get; set; } = true;
+    /// <summary>Count pre-releases as updates (every nekodrop release is one for now).</summary>
+    public bool PreviewUpdates { get; set; } = true;
+    /// <summary>A version the user chose to skip.</summary>
+    public string SkipVersion { get; set; } = "";
 
     static string Folder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "nekodrop");
     static string FilePath => Path.Combine(Folder, "settings.json");

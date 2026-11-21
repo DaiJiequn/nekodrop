@@ -118,6 +118,10 @@ Logs are what let us fix things, especially on cards we don't have. Please attac
 
 On first start nekodrop takes the Wi-Fi card away from the Intel driver and reconnects you to the network Windows was using. The Windows Wi-Fi icon disappears; use nekodrop's **Wi-Fi…** window instead.
 
+### Updates
+
+nekodrop checks GitHub for a newer release a minute after it starts and then every 6 hours. When it finds one, a notification offers **Update**. nekodrop then downloads the installer, checks it against the SHA-256 GitHub publishes for it, and runs it (Windows asks for administrator rights). It never installs anything on its own. *Settings → Updates* turns the check off, chooses whether preview releases count, and has **Check now**. All releases are previews for now.
+
 ### Uninstall
 
 Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in the install folder. Uninstalling gives the card back to the Intel driver, then removes the service, the driver package, the certificate trust and the firewall rules.
@@ -250,6 +254,20 @@ cd nekodrop
 | `app/shellext/` | Windows 11 context-menu handler |
 | `installer/` | Inno Setup script, install/uninstall scripts, TAP setup |
 | `kdriver/` | Shelved kernel WiFiCx driver (experimental, not shipped) |
+
+## How nekodrop is developed
+
+Since 0.1.17, nekodrop is developed by AI agents with no human in the loop. Every hour:
+1. **Maintenance.** Claude reads new issues and diagnostic reports, fixes what the logs prove, tests on GitHub Actions, releases a pre-release, and answers the reporters.
+2. **Evolution.** In the AI Hub workbench (a local multi-agent orchestrator), Gemini 4 Neon High acts as product manager and proposes one improvement: a fix, better diagnostics, a speed-up, or a first step towards more hardware. Claude implements it in an isolated git worktree. Codex reviews it as QA and can send it back up to three times.
+
+No person approves the steps; fixed rules decide instead:
+- Only changes that pass the build, the radio self-test, the report test and the engine test, and pass QA, are merged.
+- Changes rated **low risk** (documentation, diagnostics, client interface) and **experimental** ones (new behaviour behind a switch that is off by default, with the old code path untouched) are released automatically as **pre-releases**.
+- Changes to default behaviour, the driver INF, the installer and restore scripts, permissions, CI or dependency versions are only opened as pull requests and never released automatically.
+- Nothing ships without a release note that says what wasn't tested on hardware.
+
+The weak spot is that the agents have no Intel Wi-Fi card to test on. Diagnostic reports from users are what tells them whether a change worked, so please keep [reporting](../../issues/10).
 
 ## Where the code comes from
 

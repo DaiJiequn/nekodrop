@@ -79,6 +79,10 @@ public sealed class App : Application
         var watchdog = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         watchdog.Tick += (_, _) => EngineWatchdog();
         watchdog.Start();
+        // Updates: a look a minute after start, then every 6 hours.
+        var updates = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        updates.Tick += (_, _) => { updates.Interval = TimeSpan.FromHours(6); _ = CheckForUpdate(false); };
+        updates.Start();
         _ = Task.Run(ListenForArgs);
         HandleArgs(_startArgs, fromStart: true);
     }
@@ -401,6 +405,9 @@ public sealed class App : Application
                 var id = q["id"] ?? "";
                 Answer(id, q["accept"] == "1");
                 break;
+            case "update":
+                _ = InstallUpdate();
+                break;
             case "folder":
                 var path = q["path"];
                 if (path is not null && Directory.Exists(path)) Process.Start("explorer.exe", $"\"{path}\"");
@@ -408,6 +415,43 @@ public sealed class App : Application
             default:
                 ShowWindow();
                 break;
+        }
+    }
+
+    Updater.Release? _update;
+
+    /// <summary>Looks for a newer release; tells the user once per version. Returns what it found.</summary>
+    public async Task<Updater.Release?> CheckForUpdate(bool asked)
+    {
+        if (!asked && !Settings.CheckUpdates) return null;
+        try
+        {
+            var found = await Updater.FindNewer(Settings.PreviewUpdates);
+            if (found is null) return null;
+            var announce = !asked && (_update is null || _update.Version != found.Version) &&
+                           Settings.SkipVersion != found.Version.ToString();
+            _update = found;
+            if (announce) Shell.UpdateToast(found.Version.ToString(), found.Preview);
+            return found;
+        }
+        catch (Exception) { return null; } /* offline, or GitHub's rate limit: next time */
+    }
+
+    /// <summary>Downloads, verifies and runs the installer of the release found. Returns "" or why not.</summary>
+    public async Task<string> InstallUpdate(IProgress<int>? progress = null)
+    {
+        var r = _update ?? await CheckForUpdate(true);
+        if (r is null) return L.T("update.none");
+        try
+        {
+            var why = await Updater.Install(r, progress);
+            if (why != "") Shell.DoneToast("update", L.T("update.failed"), why, null);
+            return why;
+        }
+        catch (Exception e)
+        {
+            Shell.DoneToast("update", L.T("update.failed"), e.Message, null);
+            return e.Message;
         }
     }
 
