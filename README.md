@@ -148,11 +148,13 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 | Open | ✅ |
 | WPA/WPA2-Personal | ✅ |
 | WPA2/WPA3 transition | ✅ (joins with WPA2) |
+| WPA2 with protected management frames required, WPA2-PSK-SHA256 | 🧪 0.1.12, untested on hardware |
 | Captive portal | ✅ detected, sign-in page opened |
 | Hidden SSID | ✅ |
-| WPA3-Personal only (SAE) | ❌ not yet. nekodrop switches to *on demand* |
+| WPA3-Personal only (SAE) | 🧪 0.1.12, untested on hardware (hash-to-element-only networks, mostly 6 GHz, not yet) |
+| Enhanced Open (OWE) | 🧪 0.1.12, untested on hardware |
 | WPA2/WPA3-Enterprise (802.1X, PEAP…) | ❌ not yet. nekodrop switches to *on demand* |
-| WEP | ❌ |
+| WEP, WPA/TKIP | ❌ (insecure; not planned) |
 
 ## Status
 
@@ -164,7 +166,8 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 | Wi-Fi and AirDrop at the same time | ✅ works (WPA2, DHCP, DNS through the "nekodrop" adapter) |
 | Wi-Fi manager, saved networks, captive portal | ✅ |
 | Service, tray app, notifications, context menu, installer | ✅ |
-| WPA3-only, 802.1X, WEP | ⏳ planned |
+| WPA3-only, OWE | 🧪 0.1.12, untested on hardware |
+| 802.1X (Enterprise) | ⏳ planned |
 | Other Intel cards (AX200/AX210/AX211/AX411, 9560 on Qu) | 🧪 ported from upstream, untested on hardware |
 | Kernel WiFiCx driver (`kdriver/`) | 🧊 shelved: experimental and **not installed** by the setup. See [docs/KERNEL.md](docs/KERNEL.md) |
 
