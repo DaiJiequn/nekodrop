@@ -24,7 +24,13 @@ public static class Card
                                                  "2723", "2725", "7A70", "7AF0", "51F0", "51F1", "54F0", "7F70"];
     const string ProxyService = "WUDFRd";
 
-    public sealed record Info(string InstanceId, string HardwareId, string Service, string InfPath);
+    /// <param name="Provider">the bound driver's provider (class key ProviderName)</param>
+    /// <param name="Problem">Device Manager's problem code (0: none, or the device is not started yet)</param>
+    public sealed record Info(string InstanceId, string HardwareId, string Service, string InfPath,
+                              string Provider = "", uint Problem = 0);
+
+    /// <summary>The Provider in winawdl_regproxy.inf: how the proxy is told apart once Windows renamed its INF to oemNN.inf.</summary>
+    const string ProxyProvider = "winairdrop project";
 
     public static Info? Find()
     {
@@ -40,8 +46,10 @@ public static class Card
                 {
                     if (!id.StartsWith($"PCI\\VEN_8086&DEV_{dev}", StringComparison.OrdinalIgnoreCase)) continue;
                     var service = RegistryProperty(set, ref data, SPDRP_SERVICE);
-                    var inf = DriverInf(id);
-                    return new Info(id, $"PCI\\VEN_8086&DEV_{dev}", service, inf);
+                    var (inf, provider) = DriverInf(id);
+                    uint problem = 0;
+                    if (CM_Get_DevNode_Status(out _, out var p, data.DevInst, 0) == 0) problem = p;
+                    return new Info(id, $"PCI\\VEN_8086&DEV_{dev}", service, inf, provider, problem);
                 }
             }
         }
@@ -51,6 +59,14 @@ public static class Card
 
     public static bool TakenByProxy(Info card) =>
         string.Equals(card.Service, ProxyService, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Bound to nekodrop's proxy, running or not. The INF name says nothing
+    /// (Windows renames it oemNN.inf): a proxy that failed to start was taken
+    /// for Intel's driver and recorded as the one to give the card back to (issue #12).
+    /// </summary>
+    public static bool BoundToProxy(Info card) =>
+        TakenByProxy(card) || string.Equals(card.Provider, ProxyProvider, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The card is bound to nekodrop-wlan.sys: Windows' Wi-Fi and AWDL on one driver.</summary>
     public static bool ByKernelDriver(Info card) =>
@@ -92,17 +108,18 @@ public static class Card
             : "";
     }
 
-    /// <summary>The INF the card is bound to, as a full path (C:\Windows\INF\oemNN.inf).</summary>
-    static string DriverInf(string instanceId)
+    /// <summary>The INF the card is bound to, as a full path (C:\Windows\INF\oemNN.inf), and its provider.</summary>
+    static (string Inf, string Provider) DriverInf(string instanceId)
     {
         using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
             $@"SYSTEM\CurrentControlSet\Enum\{instanceId}");
         var driver = key?.GetValue("Driver") as string;
-        if (driver is null) return "";
+        if (driver is null) return ("", "");
         using var cls = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
             $@"SYSTEM\CurrentControlSet\Control\Class\{driver}");
         var inf = cls?.GetValue("InfPath") as string;
-        return inf is null ? "" : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "INF", inf);
+        var provider = cls?.GetValue("ProviderName") as string ?? "";
+        return (inf is null ? "" : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "INF", inf), provider);
     }
 
     const uint DIGCF_PRESENT = 0x2, DIGCF_ALLCLASSES = 0x4, SPDRP_SERVICE = 0x4, INSTALLFLAG_FORCE = 0x1;
@@ -121,6 +138,8 @@ public static class Card
         out uint type, byte[] buffer, uint size, out uint required);
     [DllImport("setupapi.dll", SetLastError = true)]
     static extern bool SetupDiDestroyDeviceInfoList(IntPtr set);
+    [DllImport("cfgmgr32.dll")]
+    static extern uint CM_Get_DevNode_Status(out uint status, out uint problem, uint devInst, uint flags);
     [DllImport("newdev.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern bool UpdateDriverForPlugAndPlayDevicesW(IntPtr hwnd, string hardwareId, string infPath,
         uint flags, out bool reboot);

@@ -22,11 +22,17 @@ namespace {
 /* struct ieee80211_frame is only used as a flexible array in the header. */
 /* The 22000 firmware walks every TFD queue as 256 entries whatever size it is
  * told: a 64-entry ring made it transmit the 192 "frames" of memory behind
- * the ring at every wrap, and assert on one of them (0x4216). */
-constexpr unsigned kTxQueueSize = IWX_TFD_QUEUE_SIZE_MAX;
-constexpr unsigned kCmdPayloadInline =
-    sizeof(((iwx_device_cmd *)nullptr)->data_wide);
+ * the ring at every wrap, and assert on one of them (0x4216). The AX210
+ * family's pointers run to 65536 and its rings may be smaller: 128, Linux's
+ * min_txq_size there, halves the adjacent pages its rings need (issue #11). */
+constexpr unsigned kTxQueueSize22000 = IWX_TFD_QUEUE_SIZE_MAX;
+constexpr unsigned kTxQueueSizeAx210 = 128;
 constexpr unsigned kTxPayloadSlot = 4096;
+/* Every PNVM section shipped is at most 14 KiB (4 pages). */
+constexpr size_t kPnvmPagesMax = 4;
+/* More pages are locked, a batch at a time, until the buffers fit; never
+ * more than half the memory Windows has free. */
+constexpr int kDmaGrowRounds = 7;
 /* Pages locked while carving: enough that runs of 8 adjacent frames turn up
  * for the firmware's 32 KiB sections; the rest are returned once carved. */
 constexpr size_t kDmaScanPages = 262144; /* 1 GiB, locked for well under a second */
@@ -204,9 +210,45 @@ bool IwxDevice::identify(std::string &error) {
 
 bool IwxDevice::alloc_rings(std::string &error) {
   if (!_dma.init(kDmaScanPages, kDmaMinPages, error)) return false;
-  _log("DMA: " + std::to_string(_dma.pages_locked()) + " pages locked, longest physical run " +
-       std::to_string(_dma.longest_run()) + " pages, " + std::to_string(_dma.runs_of(8)) +
-       " runs of 8+ (the firmware needs about 20)");
+  /* What needs physically adjacent frames, in pages: each multi-page
+   * firmware section, the descriptor rings, the receive lists and the PNVM. */
+  const auto pages_of = [](size_t bytes) { return (bytes + DmaPool::kPageBytes - 1) / DmaPool::kPageBytes; };
+  const unsigned tx_count = gen3() ? kTxQueueSizeAx210 : kTxQueueSize22000;
+  const unsigned cmd_count = gen3() ? IWX_CMD_QUEUE_SIZE_GEN3 : IWX_CMD_QUEUE_SIZE;
+  std::vector<size_t> need;
+  for (const auto &sec : _fw.regular) need.push_back(pages_of(sec.len));
+  need.push_back(pages_of(_fw.iml_len));
+  need.push_back(pages_of(cmd_count * sizeof(iwx_tfh_tfd)));
+  need.push_back(pages_of(tx_count * sizeof(iwx_tfh_tfd)));
+  need.push_back(pages_of(tx_count * sizeof(iwx_tfh_tfd)));
+  need.push_back(pages_of(IWX_RX_MQ_RING_COUNT * (gen3() ? sizeof(iwx_rx_completion_desc) : sizeof(uint32_t))));
+  need.push_back(pages_of(IWX_RX_MQ_RING_COUNT * (gen3() ? sizeof(iwx_rx_transfer_desc) : sizeof(uint64_t))));
+  if (gen3()) need.push_back(kPnvmPagesMax);
+  for (int i = 0; i < 4; i++) need.push_back(8); /* margin: first fit is not best fit */
+  const auto report = [&](const char *what) {
+    _log(std::string("DMA: ") + what + " " + std::to_string(_dma.pages_locked()) + " pages, longest physical run " +
+         std::to_string(_dma.longest_run()) + " pages, " + std::to_string(_dma.runs_of(8)) + " runs of 8+; " +
+         (_dma.fits(need) ? "enough" : "not enough") + " for this card's " +
+         std::to_string(std::count_if(need.begin(), need.end(), [](size_t n) { return n > 1; })) +
+         " multi-page buffers");
+  };
+  report("locked");
+  /* A long-running PC's free memory can be so scattered that 1 GiB holds few
+   * runs of adjacent frames (issue #11: at most 15 pages). Lock more. */
+  for (int round = 0; round < kDmaGrowRounds && !_dma.fits(need); round++) {
+    const uint64_t locked = uint64_t(_dma.pages_locked()) * DmaPool::kPageBytes;
+    const uint64_t batch = uint64_t(kDmaScanPages) * DmaPool::kPageBytes;
+    if (locked + batch > DmaPool::available_bytes() / 2) {
+      _log("DMA: not locking more; Windows has " + std::to_string(DmaPool::available_bytes() >> 20) + " MiB free");
+      break;
+    }
+    std::string why;
+    if (!_dma.grow(kDmaScanPages, why)) {
+      _log("DMA: " + why);
+      break;
+    }
+    report("grew to");
+  }
 
   _ctxt_info = _dma.alloc(std::max(sizeof(iwx_context_info), sizeof(iwx_context_info_gen3)), 4096);
   /* Receive: free list, used list, status word, 512 buffers of 4 KiB. The
@@ -238,26 +280,25 @@ bool IwxDevice::alloc_rings(std::string &error) {
     bool ok = ring.desc && ring.bc_tbl;
     if (payload) {
       /* Data ring: a page per slot for the TX command and one for the
-       * payload, so only the 64 KiB of descriptors need adjacent frames. */
+       * payload, so only the descriptors need adjacent frames. */
       ring.payload.resize(count);
       ring.cmd_slot.resize(count);
       for (auto &slot : ring.payload) ok = ok && (slot = _dma.alloc_page());
       for (auto &slot : ring.cmd_slot) ok = ok && (slot = _dma.alloc_page());
-    } else {
-      ring.cmd = _dma.alloc(count * sizeof(iwx_device_cmd), IWX_FIRST_TB_SIZE_ALIGN);
-      ok = ok && ring.cmd;
     }
+    /* The command ring's commands each take a page of _cmd_big: 128 commands
+     * side by side needed 11 adjacent pages (issue #11). */
     return ok;
   };
   /* The AX210 family's command ring is 128 entries (IWX_CMD_QUEUE_SIZE_GEN3,
-   * the size the gen3 context info announces). Data rings stay 256 entries:
-   * Linux runs AX210 management queues at 128, and upstream's 1024 would need
-   * 64 physically adjacent pages for the descriptors alone. */
-  const unsigned cmd_count = gen3() ? IWX_CMD_QUEUE_SIZE_GEN3 : IWX_CMD_QUEUE_SIZE;
+   * the size the gen3 context info announces); upstream's 1024-entry data
+   * rings would need 64 physically adjacent pages for the descriptors alone. */
   if (!make_ring(_cmdq, cmd_count, IWX_DQA_CMD_QUEUE, 0) ||
-      !make_ring(_dataq, kTxQueueSize, 0, kTxPayloadSlot) ||
-      !make_ring(_staq, kTxQueueSize, 0, kTxPayloadSlot)) {
-    error = "out of DMA memory for the transmit rings";
+      !make_ring(_dataq, tx_count, 0, kTxPayloadSlot) ||
+      !make_ring(_staq, tx_count, 0, kTxPayloadSlot)) {
+    error = "out of DMA memory for the transmit rings (longest run of adjacent pages: " +
+            std::to_string(_dma.longest_run()) + "; " + std::to_string(pages_of(tx_count * sizeof(iwx_tfh_tfd))) +
+            " needed)";
     return false;
   }
   _cmd_slots.resize(cmd_count);
@@ -432,6 +473,41 @@ void IwxDevice::set_ltr() {
 
 /* iwx_start_fw + iwx_ctxt_info_init + iwx_load_firmware, waiting for ALIVE
  * by polling instead of sleeping on the interrupt. */
+namespace {
+/* The largest PNVM section (SEC_RT data of one PNVM_SKU block) for this MAC
+ * and radio type, to reserve its buffer before the SKU is known. */
+size_t pnvm_max_section(const std::vector<uint8_t> &raw, uint32_t mac, uint32_t rf) {
+  const auto u32 = [](const uint8_t *p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; };
+  const auto u16 = [](const uint8_t *p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8; };
+  size_t best = 0, cur = 0;
+  bool in_block = false, hw = false;
+  const uint8_t *d = raw.data();
+  size_t len = raw.size();
+  while (len >= 8) {
+    const uint32_t type = u32(d), tl = u32(d + 4);
+    d += 8;
+    len -= 8;
+    if (len < tl) break;
+    if (type == IWX_UCODE_TLV_PNVM_SKU) {
+      if (in_block && hw) best = std::max(best, cur);
+      in_block = true;
+      hw = false;
+      cur = 0;
+    } else if (in_block && type == IWX_UCODE_TLV_HW_TYPE && tl >= 4) {
+      hw = hw || (u16(d) == mac && u16(d + 2) == rf);
+    } else if (in_block && type == IWX_UCODE_TLV_SEC_RT && tl >= 4 && u32(d) != 0xddddeeee) {
+      cur += tl - 4;
+    }
+    const size_t step = roundup(tl, 4);
+    if (step > len) break;
+    d += step;
+    len -= step;
+  }
+  if (in_block && hw) best = std::max(best, cur);
+  return best;
+}
+} // namespace
+
 bool IwxDevice::load_firmware(std::string &error) {
   if (!prepare_card_hw()) {
     error = "card not ready before firmware load";
@@ -525,16 +601,17 @@ bool IwxDevice::load_firmware(std::string &error) {
   /* The PNVM section is chosen after ALIVE (by the SKU the firmware reports),
    * but its buffer has to come from the pool before trim() hands the rest
    * back: allocated afterwards it never fit ("PNVM: out of DMA memory"), and
-   * the firmware asserted at NVM_ACCESS_COMPLETE (issues #2, #7, #8). The
-   * whole file is an upper bound for one SKU's section (at most ~41 KiB). */
+   * the firmware asserted at NVM_ACCESS_COMPLETE (issues #2, #7, #8). */
   if (gen3() && !_card.pnvm.empty()) {
     std::string path = _opt.firmware_dir, err;
     if (!path.empty() && path.back() != '\\' && path.back() != '/') path += '\\';
     if (!plat_read_file(path + _card.pnvm, _pnvm_raw, err)) {
       _log("PNVM: " + err);
       _pnvm_raw.clear();
-    } else if (!_pnvm_raw.empty()) {
-      _pnvm_buf = _dma.alloc(_pnvm_raw.size(), 4096);
+    } else if (const size_t max_section = pnvm_max_section(_pnvm_raw, cards::mac_type(_hw_rev),
+                                                           cards::rf_type(_hw_rf_id))) {
+      /* Only this card's largest section (at most 4 pages), not the file. */
+      _pnvm_buf = _dma.alloc(max_section, 4096);
       if (!_pnvm_buf) {
         error = "out of DMA memory for the platform NVM (PNVM)";
         return false;
@@ -907,15 +984,9 @@ int IwxDevice::send_cmd(uint32_t id, const void *data, size_t len, bool want_res
   slot.narrow = iwx_cmd_groupid(code) == 0;
   if (slot.narrow) code = IWX_WIDE_ID(IWX_LONG_GROUP, code);
 
-  iwx_device_cmd *cmd;
-  uint64_t paddr;
-  if (len > kCmdPayloadInline) {
-    cmd = reinterpret_cast<iwx_device_cmd *>(_cmd_big[idx].va);
-    paddr = _cmd_big[idx].pa;
-  } else {
-    cmd = reinterpret_cast<iwx_device_cmd *>(ring.cmd.va) + idx;
-    paddr = ring.cmd.pa + uint64_t(idx) * sizeof(iwx_device_cmd);
-  }
+  /* Every command in its own page (no adjacent pages needed for the ring). */
+  auto *cmd = reinterpret_cast<iwx_device_cmd *>(_cmd_big[idx].va);
+  const uint64_t paddr = _cmd_big[idx].pa;
   const size_t hdrlen = sizeof(cmd->hdr_wide);
   cmd->hdr_wide.cmd = iwx_cmd_opcode(code);
   cmd->hdr_wide.group_id = iwx_cmd_groupid(code);

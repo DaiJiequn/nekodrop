@@ -134,7 +134,7 @@ public sealed class Supervisor : IDisposable
         {
             var card = Card.Find();
             Say(card is null ? "card: no supported Intel Wi-Fi card present"
-                : $"card: {card.InstanceId}; driver service {card.Service}, INF {Path.GetFileName(card.InfPath)}" +
+                : $"card: {card.InstanceId}; driver service {card.Service}, INF {Path.GetFileName(card.InfPath)} ({card.Provider}), problem {card.Problem}" +
                   $"; Intel INF on record {Path.GetFileName(_cfg.VendorInf)}");
         }
         catch (Exception e) { Say("card: " + e.Message); }
@@ -641,7 +641,8 @@ public sealed class Supervisor : IDisposable
     {
         var card = Card.Find() ?? throw new InvalidOperationException("no supported Intel Wi-Fi card found");
         if (Card.TakenByProxy(card)) return;
-        if (card.InfPath != "" && !card.InfPath.Contains("regproxy", StringComparison.OrdinalIgnoreCase))
+        // Only Intel's INF is the one to give the card back to, never the proxy's (issue #12).
+        if (card.InfPath != "" && !Card.BoundToProxy(card))
         {
             lock (_lock) { _cfg.VendorInf = card.InfPath; _cfg.Save(); }
         }
@@ -663,7 +664,15 @@ public sealed class Supervisor : IDisposable
             if (now is not null && Card.TakenByProxy(now)) return;
             Thread.Sleep(100);
         }
-    }
+        // Bound but never started (issue #12: Windows 10, then "register proxy not
+        // openable (error 259)" in a loop with the card held): say why, give it back.
+        var after = Card.Find();
+        var state = after is null ? "the card disappeared"
+            : $"driver service '{after.Service}', provider '{after.Provider}', INF {Path.GetFileName(after.InfPath)}, " +
+              $"Device Manager problem code {after.Problem}";
+        Say("the register proxy did not start: " + state);
+        EnsureVendorDriver();
+        throw new CardBindException($"the register proxy was bound but did not start ({state})", new TimeoutException());
 
     /* ------------------------------------------------------- Wi-Fi management */
 
@@ -854,8 +863,8 @@ public sealed class Supervisor : IDisposable
     void EnsureVendorDriver()
     {
         var card = Card.Find();
-        // Ours, or left with no driver by a failed bind: Intel's driver goes back on.
-        if (card is null || (!Card.TakenByProxy(card) && card.InfPath != "")) return;
+        // Ours (running or not), or left with no driver by a failed bind: Intel's driver goes back on.
+        if (card is null || (!Card.BoundToProxy(card) && card.InfPath != "")) return;
         if (_cfg.VendorInf == "" || !File.Exists(_cfg.VendorInf))
         {
             Say("cannot give the card back: Intel's INF is not known; run give-card.ps1");
@@ -872,6 +881,19 @@ public sealed class Supervisor : IDisposable
             Say($"refusing untrusted VendorInf path: {_cfg.VendorInf}");
             return;
         }
+        // An earlier build recorded the proxy's own INF as Intel's (issue #12):
+        // binding it again would keep Windows without Wi-Fi.
+        try
+        {
+            if (File.ReadAllText(fullInf).Contains("winawdl_regproxy", StringComparison.OrdinalIgnoreCase))
+            {
+                Say($"{Path.GetFileName(fullInf)} on record is nekodrop's own driver, not Intel's; " +
+                    "run Start menu > nekodrop - restore Windows Wi-Fi to get Intel's driver back");
+                lock (_lock) { _cfg.VendorInf = ""; _cfg.Save(); }
+                return;
+            }
+        }
+        catch (IOException) { }
         try
         {
             Say($"giving the card back to {Path.GetFileName(fullInf)}");

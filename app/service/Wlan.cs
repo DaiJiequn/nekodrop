@@ -244,12 +244,17 @@ public static class Wlan
             WlanFreeMemory(c);
         }
 
-        // DOT11_AUTH_ALGORITHM: 1 open, 6 RSNA (802.1X), 7 RSNA-PSK, 8/9 WPA3 (SAE).
+        // DOT11_AUTH_ALGORITHM: 1 open, 6 RSNA (802.1X), 7 RSNA-PSK, 8 WPA3, 9 WPA3-SAE, 10 OWE.
         // DOT11_CIPHER_ALGORITHM: 0 none, 4 CCMP.
-        string security = auth switch { 1 => "open", 7 => "WPA2-Personal", 6 => "WPA2-Enterprise", 8 or 9 or 10 => "WPA3", _ => $"auth {auth}" };
+        string security = auth switch { 1 => "open", 7 => "WPA2-Personal", 6 => "WPA2-Enterprise", 8 or 9 => "WPA3", 10 => "OWE", _ => $"auth {auth}" };
         if (auth == 1 && cipher == 0)
             return new Network(ssid, bssid, channel, security, null, null, true);
-        if (auth != 7 || cipher != 4)
+        // Windows picks WPA3 on a WPA2/WPA3 mixed network (issue #12). The station
+        // joins those with WPA2-PSK and the same passphrase; a WPA3-only network
+        // then fails at the handshake, which the radio logs.
+        var sae = (auth == 8 || auth == 9) && cipher == 4;
+        if (sae) security = "WPA3 (joined with WPA2-PSK: needs a WPA2/WPA3 mixed network)";
+        if ((auth != 7 && !sae) || cipher != 4)
         {
             why = $"{security} is not supported beside AirDrop (WPA2-Personal with AES only)";
             return new Network(ssid, bssid, channel, security, null, null, false);

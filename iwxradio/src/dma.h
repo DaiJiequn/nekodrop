@@ -46,6 +46,14 @@ public:
   DmaBuf alloc_page();
   /* Returns every page not handed out to Windows. */
   void trim();
+  /* Locks `pages` more pages and merges them in, for more runs of adjacent
+   * frames. Only before the first allocation. */
+  bool grow(size_t pages, std::string &error);
+  /* Whether buffers of these sizes (in pages) can all be carved from runs of
+   * adjacent frames (first fit, largest first). */
+  bool fits(std::vector<size_t> runs) const;
+  /* Physical memory Windows has free, in bytes (0 if unknown). */
+  static uint64_t available_bytes();
   /* Longest run of adjacent frames, in pages (a diagnostic). */
   size_t longest_run() const;
   /* How many disjoint runs of `n` adjacent frames there are. */

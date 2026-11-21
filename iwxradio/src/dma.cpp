@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <functional>
+#include <set>
 
 #include "dma.h"
 
@@ -71,6 +73,75 @@ bool DmaPool::init(size_t pages, size_t min_pages, std::string &error) {
     return false;
   }
   return true;
+}
+
+bool DmaPool::grow(size_t pages, std::string &error) {
+  if (_used_pages || _part != SIZE_MAX || !_view) {
+    error = "the DMA pool can only grow before it is used";
+    return false;
+  }
+  std::vector<ULONG_PTR> more(pages);
+  ULONG_PTR got = pages;
+  if (!AllocateUserPhysicalPages(GetCurrentProcess(), &got, more.data()) || !got) {
+    error = "no more lockable pages (" + std::to_string(GetLastError()) + ")";
+    return false;
+  }
+  more.resize(got);
+  // Unmap the old view; the frames stay locked and join the new, larger one.
+  MapUserPhysicalPages(_view, _frames.size(), nullptr);
+  VirtualFree(_view, 0, MEM_RELEASE);
+  _view = nullptr;
+  std::vector<ULONG_PTR> all(_frames.begin(), _frames.end());
+  all.insert(all.end(), more.begin(), more.end());
+  std::sort(all.begin(), all.end());
+  _frames.assign(all.begin(), all.end());
+  _taken.assign(_frames.size(), false);
+  _cursor = 0;
+  _back = _frames.size();
+  _spare.clear();
+  _view = static_cast<uint8_t *>(
+      VirtualAlloc(nullptr, all.size() * kPageBytes, MEM_RESERVE | MEM_PHYSICAL, PAGE_READWRITE));
+  if (!_view || !MapUserPhysicalPages(_view, all.size(), all.data())) {
+    error = "mapping the grown DMA pool failed (" + std::to_string(GetLastError()) + ")";
+    return false;
+  }
+  return true;
+}
+
+bool DmaPool::fits(std::vector<size_t> runs) const {
+  // Maximal runs of adjacent frames, then each buffer (largest first) into
+  // the smallest run that still holds it.
+  std::vector<size_t> free_runs;
+  size_t run = 0;
+  for (size_t i = 0; i < _frames.size(); i++) {
+    if (_taken[i] || !_frames[i]) {
+      if (run) free_runs.push_back(run);
+      run = 0;
+      continue;
+    }
+    run = (run && _frames[i] == _frames[i - 1] + 1) ? run + 1 : 1;
+    if (i + 1 == _frames.size() || _taken[i + 1] || _frames[i + 1] != _frames[i] + 1) {
+      free_runs.push_back(run);
+      run = 0;
+    }
+  }
+  std::sort(runs.begin(), runs.end(), std::greater<size_t>());
+  std::multiset<size_t> pool(free_runs.begin(), free_runs.end());
+  for (size_t need : runs) {
+    if (need <= 1) continue; /* single pages come from anywhere */
+    auto it = pool.lower_bound(need);
+    if (it == pool.end()) return false;
+    const size_t left = *it - need;
+    pool.erase(it);
+    if (left) pool.insert(left);
+  }
+  return true;
+}
+
+uint64_t DmaPool::available_bytes() {
+  MEMORYSTATUSEX m{};
+  m.dwLength = sizeof(m);
+  return GlobalMemoryStatusEx(&m) ? m.ullAvailPhys : 0;
 }
 
 DmaBuf DmaPool::page_at(size_t index) {

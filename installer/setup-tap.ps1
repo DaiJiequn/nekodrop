@@ -32,6 +32,16 @@ if (-not (Get-NetAdapter -Name $name -IncludeHidden -ErrorAction SilentlyContinu
   Rename-NetAdapter -Name $new.Name -NewName $name
   "created TAP adapter '$name' ($($new.InterfaceDescription))"
 }
+# A new adapter's IP interface turns up a few seconds after it does: setting
+# it at once failed with "no MSFT_NetIPInterface object" (issue #12).
+$deadline = (Get-Date).AddSeconds(30)
+while (-not (Get-NetIPInterface -InterfaceAlias $name -AddressFamily IPv4 -ErrorAction SilentlyContinue)) {
+  if ((Get-Date) -gt $deadline) {
+    $a = Get-NetAdapter -Name $name -IncludeHidden -ErrorAction SilentlyContinue
+    throw "the '$name' adapter has no IPv4 interface after 30 s (status: $(if ($a) { $a.Status } else { 'missing' }))"
+  }
+  Start-Sleep -Milliseconds 500
+}
 # Addresses from the router, whatever was set before.
 Set-NetIPInterface -InterfaceAlias $name -AddressFamily IPv4 -Dhcp Enabled
 Get-NetIPAddress -InterfaceAlias $name -AddressFamily IPv4 -PrefixOrigin Manual -ErrorAction SilentlyContinue |

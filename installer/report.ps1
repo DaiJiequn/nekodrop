@@ -56,6 +56,19 @@ function Read-All([string]$path) {
   try { return @(Get-Content -LiteralPath $path -Encoding UTF8 -ErrorAction Stop) } catch { return @() }
 }
 function Try-Get([scriptblock]$block) { try { & $block } catch { $null } }
+# netsh's output: UTF-8 on some systems, the OEM code page on others (it came
+# out garbled on a Traditional Chinese Windows 11, issue #11). Strict UTF-8
+# first, then the OEM code page.
+function Run-Netsh([string[]]$netshArgs) {
+  $tmp = [IO.Path]::GetTempFileName()
+  try {
+    $p = Start-Process netsh.exe -ArgumentList $netshArgs -NoNewWindow -Wait -PassThru -RedirectStandardOutput $tmp
+    $bytes = [IO.File]::ReadAllBytes($tmp)
+    try { $text = (New-Object System.Text.UTF8Encoding($false, $true)).GetString($bytes) }
+    catch { $text = [Text.Encoding]::GetEncoding([Globalization.CultureInfo]::CurrentCulture.TextInfo.OEMCodePage).GetString($bytes) }
+    return @($text -split "`r?`n")
+  } catch { return @() } finally { Remove-Item $tmp -ErrorAction SilentlyContinue }
+}
 
 # Service log, the rotated copy first (oldest lines first).
 $serviceLog = @(Read-All (Join-Path $state 'service.log.1')) + @(Read-All (Join-Path $state 'service.log'))
@@ -68,10 +81,11 @@ $restoreLog = Read-All (Join-Path $state 'restore.log')
 # SSIDs: Windows' saved profiles, the current connection and the names the
 # service logged; longest first so a name inside another goes second.
 $ssids = New-Object System.Collections.Generic.List[string]
-foreach ($line in @(netsh wlan show profiles 2>$null)) {
+foreach ($line in (Run-Netsh @('wlan', 'show', 'profiles'))) {
   if ($line -match '^\s{4}.+?\s:\s(.+)$') { $ssids.Add($Matches[1].Trim()) }
 }
-foreach ($line in @(netsh wlan show interfaces 2>$null)) {
+$wlanInterfaces = Run-Netsh @('wlan', 'show', 'interfaces')
+foreach ($line in $wlanInterfaces) {
   if ($line -match '^\s*SSID\s*:\s(.+)$') { $ssids.Add($Matches[1].Trim()) }
 }
 foreach ($line in $serviceLog) {
@@ -177,7 +191,7 @@ if ($start -lt 0) {
   W ''
   W '| Step | Result | Line |'
   W '|---|---|---|'
-  W (Stage 'Take the card (driver bind)' 'radio: card 0x' 'taking the card failed|binding .* failed')
+  W (Stage 'Take the card (driver bind)' 'radio: card 0x' 'taking the card failed|binding .* failed|register proxy did not start|register proxy not openable')
   W (Stage 'Identify the card' 'radio: .*\((AX210|22000) family' 'unsupported card|not an Intel device|card does not answer')
   W (Stage 'DMA memory' 'DMA: \d+ pages in use' 'out of DMA memory for (the rings|receive|the transmit|command|the firmware|the peripheral)|could not lock|DMA: .*fail')
   W (Stage 'Load the firmware' 'radio: firmware \S+: \d+ LMAC' 'firmware has more sections|no image loader|cannot read|firmware file')
@@ -217,7 +231,30 @@ if ($card) {
   W "- Device: $($card.FriendlyName), status $($card.Status), class $($card.Class)"
   W "- Hardware ID: ``$(($card.InstanceId -split '\\')[1])``"
   W "- Driver: service $(Card-Prop 'DEVPKEY_Device_Service'), INF $(Card-Prop 'DEVPKEY_Device_DriverInfPath'), version $(Card-Prop 'DEVPKEY_Device_DriverVersion'), provider $(Card-Prop 'DEVPKEY_Device_DriverProvider')"
+  $problem = Card-Prop 'DEVPKEY_Device_ProblemCode'
+  W "- Device Manager problem code: $(if ($problem) { $problem } else { '0' }) (0 = none; 10 = cannot start; 28 = no driver; 31/37/39 = driver did not load; 52 = signature)"
   W "- Intel driver to give it back to: $(if ($config -and $config.VendorInf) { Split-Path $config.VendorInf -Leaf } else { 'not recorded' })"
+  # Windows' own record of the card's driver installs and start failures.
+  $devId = ($card.InstanceId -split '\\')[1] -replace '&SUBSYS.*$', ''
+  $pnp = @(Try-Get { Get-WinEvent -LogName 'Microsoft-Windows-Kernel-PnP/Configuration' -MaxEvents 400 -ErrorAction Stop |
+           Where-Object { $_.Message -like "*$devId*" } | Select-Object -First 8 } | Where-Object { $_ })
+  if ($pnp.Count) {
+    W '- Recent driver events (Kernel-PnP):'
+    W ''
+    W '```'
+    $pnp | ForEach-Object { W (Redact ("$($_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')) [$($_.Id)] " + (($_.Message -split "`r?`n" | Where-Object { $_.Trim() }) -join ' | '))) }
+    W '```'
+    W ''
+  }
+  $umdf = @(Try-Get { Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-DriverFrameworks-UserMode' } -MaxEvents 6 -ErrorAction Stop } | Where-Object { $_ })
+  if ($umdf.Count) {
+    W '- Recent user-mode driver (UMDF) events:'
+    W ''
+    W '```'
+    $umdf | ForEach-Object { W (Redact ("$($_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')) [$($_.Id)] " + (($_.Message -split "`r?`n" | Where-Object { $_.Trim() }) -join ' | '))) }
+    W '```'
+    W ''
+  }
   $radioCard = $serviceLog | Where-Object { $_ -match 'radio: card 0x|\((AX210|22000) family' } | Select-Object -Last 2
   $radioCard | ForEach-Object { W "- Radio: ``$(Redact ($_ -replace '^\S+ \S+ radio: \S+ radio: ', ''))``" }
 } else {
@@ -247,7 +284,7 @@ W ''
 W 'Windows Wi-Fi (netsh wlan show interfaces; names and addresses removed):'
 W ''
 W '```'
-foreach ($line in @(netsh wlan show interfaces 2>$null)) {
+foreach ($line in $wlanInterfaces) {
   if ($line -match '^\s*$' -or $line -match '(?i)SSID|Physical|物理|Profile|配置文件|Hosted|承载') { continue }
   W (Redact $line.TrimEnd())
 }
