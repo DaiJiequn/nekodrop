@@ -6,6 +6,26 @@
 
 ---
 
+## v0.1.30 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **重点修复实验性 A-MPDU 协商与聚合路径（[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#9](https://github.com/zheznanohana/nekodrop/issues/9)）**：
+  - 修复 0.1.28 导致 TX AddBA 一直停在 `asking`（`asks 80, agreed 0`）的回归：此前在 `asking` 阶段就切到组播过滤，把 iPhone 返回的单播 ADDBA Response 丢掉了。现在 `asking` 阶段保持混杂与管理帧接收，仅在 `agg_enable(true)` 拿到对端同意后原子切换到 ForbiddenItlwm 的 BA 监听状态（AWDL BSSID + 基础 ACK 速率 + 组播过滤），退出时立即恢复。
+  - 修复 A-MPDU 响应路径（`handle_tx_resp`）在 `frame_count > 1` 时提前回收队列索引的隐患（改为仅由 `IWX_BA_NOTIF` 回收），并清零 26 字节 QoS 帧头后的 2 字节对齐填充。
+  - 更激进的 A-MPDU 触发与协商：250 ms 内收到 24 帧大包即触发（此前为 1 s / 200 帧），每 100 ms 发一次 ADDBA（最多 20 次 / 5 s 超时即干净回退单帧，60 s 后允许再试），`asking` 期间不再开启发送门控（避免 `gate holds` 堆积与阻塞管理帧），回退时同步 `TXPATH_FLUSH` 清空聚合队列避免与单帧队列乱序竞争，同时开启 20/40/80 MHz SGI 与尊重对端协商窗口大小。
+- **整体发送提速（A-MPDU 关/开均生效）**：Intel 无线发送窗口从 48 提到 64（`--tx-window 64`）；单帧速率阶梯改为 32 帧窗口（爬升快 2 倍）、上限新增 VHT 80 MHz 2SS MCS 8，并启用 VHT LDPC + SGI；主循环每轮读取管道帧数上限从 64 提到 128；`--fast-unlock` 在信道允许发送后立刻停掉剩余扫描。
+- **诊断报告保留每次发送的 A-MPDU 快照（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：在每次批量发送结束、回退或收到 DELBA 时立即写入一条 `aggregate:` 快照，诊断报告的 Bring-up 表优先展示活跃期（`asking`/`agreed`）记录而不再被末尾 `idle` 覆盖。
+
+### English
+- **Major fix and tuning for experimental A-MPDU TX ([#4](https://github.com/zheznanohana/nekodrop/issues/4), [#9](https://github.com/zheznanohana/nekodrop/issues/9))**:
+  - Fixed the 0.1.28 regression where TX AddBA stayed stuck in `asking` (`asks 80, agreed 0`): switching to group-only filtering during `asking` caused the firmware to drop unicast ADDBA Response management frames. Promiscuous/management receive now stays open throughout `asking`, switching atomically to ForbiddenItlwm's BA listener state (AWDL BSSID + basic ACK rates + group-only filter) inside `agg_enable(true)` only after the peer agrees, and restoring immediately on teardown.
+  - Fixed `handle_tx_resp` for the aggregation queue so multi-frame A-MPDU responses (`frame_count > 1`) are reclaimed solely by `IWX_BA_NOTIF` (matching Linux iwlwifi / ForbiddenItlwm), and zeroed the 2-byte alignment padding after 26-byte QoS headers.
+  - More aggressive A-MPDU trigger and bounded fallback: triggers at 24 payload frames in 250 ms (down from 200 in 1 s), asks every 100 ms up to 20 asks / 5 s before cleanly falling back with a 60 s cooldown, stops applying the send gate during `asking` (and never gates management frames), calls `TXPATH_FLUSH` on fallback to avoid reordering against the single-frame queue, enables 20/40/80 MHz SGI in TLC, and honors the peer's negotiated BA window.
+- **Faster sending overall (with or without A-MPDU)**: Intel `--tx-window` raised from 48 to 64; single-frame rate ladder steps up over 32-frame windows (2x faster ramp), adds VHT 80 MHz 2SS MCS 8, and enables VHT LDPC + SGI; radio main loop drains up to 128 pipe frames per tick; `--fast-unlock` cancels remaining scans as soon as transmitting is allowed.
+- **Per-send A-MPDU snapshots in diagnostics ([#4](https://github.com/zheznanohana/nekodrop/issues/4))**: logs an immediate `aggregate:` snapshot at the end of every bulk send, fallback, or DELBA, and `report.ps1` prefers the last active (`asking`/`agreed`) snapshot over a trailing `idle` line.
+
+---
+
 ## v0.1.29 (Hourly / Pre-release) — 2026-11-22
 
 ### 中文
