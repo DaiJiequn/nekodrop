@@ -151,7 +151,7 @@ uint32_t KernelDevice::channel_flags(uint8_t channel) const {
   }
 }
 
-int KernelDevice::transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate) {
+int KernelDevice::transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate, bool /*kick*/) {
   if (len > 4000) return -1;
   std::vector<uint8_t> in(sizeof(NEKO_TX) + len);
   NEKO_TX t{};

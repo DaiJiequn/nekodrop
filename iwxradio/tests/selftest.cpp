@@ -207,10 +207,13 @@ int main(int argc, char **argv) {
     CHECK(bf.note(5000004, 43) && !bf.off, "three quiet seconds turn it back on");
 
     awdl::RateLadder rl;
+    CHECK(rl.step == 1, "the ladder starts at HT MCS 4");
     for (int k = 0; k < 64; k++) rl.note(true, false);
-    CHECK(rl.step == 1, "64 clean frames step the rate up");
+    CHECK(rl.step == 2, "64 clean frames step the rate up");
     for (int k = 0; k < 64; k++) rl.note(k % 3 != 0, false);
-    CHECK(rl.step == 0, "a third lost steps it back down");
+    CHECK(rl.step == 1, "a third lost steps it back down");
+    for (int k = 0; k < 64; k++) rl.note(k % 3 != 0, false);
+    CHECK(rl.step == 0, "and down to legacy 24");
     for (int k = 0; k < 64 * 8; k++) rl.note(true, false);
     CHECK(rl.step == 3, "20 MHz tops out at HT MCS 7");
     for (int k = 0; k < 64 * 8; k++) rl.note(true, true);

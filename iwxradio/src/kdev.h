@@ -37,7 +37,9 @@ public:
   bool set_country(const std::string &alpha2);
   uint32_t channel_flags(uint8_t channel) const;
   bool transmit(const uint8_t *frame, size_t len, const TxRate &rate) { return transmit_slot(frame, len, rate) >= 0; }
-  int transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate);
+  /* The driver rings the doorbell itself: `kick` and kick_data() are for the user-mode path. */
+  int transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate, bool kick = true);
+  void kick_data() {}
   void set_tx_status_handler(TxStatusHandler handler) { _on_tx = std::move(handler); }
   void set_rx_handler(RxHandler handler) { _on_rx = std::move(handler); }
   int poll();

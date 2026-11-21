@@ -108,8 +108,11 @@ public:
     return transmit_slot(frame, len, rate) >= 0;
   }
   /* As transmit, returning the ring slot the frame took (-1 on failure); the
-   * TX-status handler is later called with that slot. */
-  int transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate);
+   * TX-status handler is later called with that slot. With kick false the
+   * frame waits in the ring until kick_data() rings the doorbell once for a
+   * whole batch (each doorbell is a call through the register proxy). */
+  int transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate, bool kick = true);
+  void kick_data();
 
   /* ---- Station beside the listener (ForbiddenItlwm's coex mode) ----
    * MAC 1 is a BSS_STA context for the access point, on PHY 1 and binding 1,
@@ -242,7 +245,8 @@ private:
   void handle_packet(const uint8_t *pkt, size_t len);
   void handle_mpdu(const uint8_t *payload, size_t len, bool rada);
   void handle_tx_resp(const uint8_t *payload, size_t len, unsigned slot);
-  int transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt);
+  int transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt,
+                  bool kick = true);
   int phy_cmd(unsigned id, uint8_t channel, unsigned width, uint32_t action);
   int binding_for(unsigned id, unsigned phy, const uint32_t *macs, unsigned nmacs, uint8_t channel,
                   uint32_t action);
@@ -318,6 +322,7 @@ private:
   bool _sta_phy_added = false, _sta_mac_added = false, _sta_binding_added = false,
        _sta_sta_added = false, _sta_queue_enabled = false, _sta_shared_binding = false,
        _sta_assoc = false, _sta_tlc = false;
+  bool _sta_prot = false; /* a session protection is scheduled for the station MAC */
   uint16_t _sta_aid = 0;
   uint8_t _sta_dtim = 1, _sta_ba_tids = 0;
   unsigned _sta_tx_acked = 0, _sta_tx_failed = 0, _sta_tx_fail_logged = 0;

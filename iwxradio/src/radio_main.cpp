@@ -80,6 +80,9 @@ struct Options {
   bool kernel = false;
   /* --pcap FILE: every received frame, with radiotap, for Wireshark. */
   std::string pcap;
+  /* --tx-window N (experimental "faster sending"): AWDL unicast frames kept in
+   * flight, 8 by default; above 8 the doorbell is also rung once per batch. */
+  unsigned tx_window = 8;
 };
 
 bool parse_rate(const std::string &s, TxRate &rate) {
@@ -125,6 +128,11 @@ bool parse_options(int argc, char **argv, Options &o) {
     else if (a == "--sta-config") o.sta_config = value();
     else if (a == "--retries" || a == "--capture") value();
     else if (a == "--no-block-ack") o.no_block_ack = true;
+    else if (a == "--tx-window") {
+      const int n = std::atoi(value().c_str());
+      if (n < 1 || n > 64) return false;
+      o.tx_window = static_cast<unsigned>(n);
+    }
     else if (a == "--no-aggregate" || a == "--no-quick-submit") {}
     else if (!a.empty() && std::isdigit(static_cast<unsigned char>(a[0])) && !o.channel)
       o.channel = static_cast<uint8_t>(std::atoi(a.c_str()));
@@ -427,6 +435,10 @@ int main(int argc, char **argv) {
     awdl::PeerCountry peer_country;
     std::string want_country, have_country = opt.dev.country;
     uint64_t rx_all = 0, rx_awdl = 0, rx_to_us = 0;
+    /* AWDL action frames by subtype: a peer turns valid in awdld only after a
+     * MIF (master indication), so PSF-only traffic explains "not valid yet"
+     * (#16, AX211). */
+    uint64_t rx_psf = 0, rx_mif = 0;
     uint32_t rx_data_to_us = 0;
     int8_t awdl_dbm = -127;
     std::deque<awdl::AddbaRequest> addba_pending;
@@ -496,6 +508,10 @@ int main(int argc, char **argv) {
       }
       if (awdl::is_awdl_action(f.data, f.len)) {
         rx_awdl++;
+        if (f.len > 30) {
+          if (f.data[30] == 0) rx_psf++;      /* periodic synchronization */
+          else if (f.data[30] == 3) rx_mif++; /* master indication */
+        }
         awdl_dbm = f.dbm;
         uint8_t seq[16];
         if (awdl::peer_sequence(f.data, f.len, seq) && std::memcmp(seq, peer_seq, 16) != 0) {
@@ -603,7 +619,8 @@ int main(int argc, char **argv) {
      * connection dies. Keep a small window of frames in flight instead; the
      * station path already sends that way. Management frames keep their
      * per-frame retry so ADDBA answers stay reliable. */
-    constexpr unsigned kTxWindow = 8;
+    const unsigned kTxWindow = opt.tx_window;
+    const bool batch_kick = opt.tx_window > 8;
     constexpr size_t kQueueLimit = 4096; /* large uploads must not overflow at 1024 */
     unsigned inflight = 0;
     uint64_t resent = 0, gave_up = 0, uq_dropped = 0;
@@ -682,7 +699,7 @@ int main(int argc, char **argv) {
           f.first_us = now;
           if (f.data) f.rate = data_rate();
         }
-        const int slot = dev.transmit_slot(f.frame.data(), f.frame.size(), f.rate);
+        const int slot = dev.transmit_slot(f.frame.data(), f.frame.size(), f.rate, !batch_kick);
         if (slot < 0) break; /* ring full: try again next tick */
         f.slot = slot;
         f.attempts++;
@@ -690,6 +707,7 @@ int main(int argc, char **argv) {
         inflight++;
         sent = true;
       }
+      if (sent && batch_kick) dev.kick_data(); /* one doorbell for the batch */
       return sent || removed;
     };
     const auto may_send = [&] {
@@ -854,7 +872,8 @@ int main(int argc, char **argv) {
         last_report = now;
         const TxStats &s = dev.tx_stats();
         log_line("rx: " + std::to_string(rx_all) + " frames, " + std::to_string(rx_awdl) +
-                 " AWDL action frames (last " + std::to_string(awdl_dbm) + " dBm), " +
+                 " AWDL action frames (" + std::to_string(rx_psf) + " PSF, " + std::to_string(rx_mif) +
+                 " MIF; last " + std::to_string(awdl_dbm) + " dBm), " +
                  std::to_string(rx_to_us) + " addressed to us");
         log_line("tx: " + std::to_string(s.submitted) + " submitted, " + std::to_string(s.acked) +
                  " done, " + std::to_string(s.failed) + " failed; unicast: " + std::to_string(resent) +

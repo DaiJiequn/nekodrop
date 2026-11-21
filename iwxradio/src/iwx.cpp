@@ -971,6 +971,20 @@ bool IwxDevice::wait_for(const std::function<bool()> &done, unsigned timeout_ms)
 }
 
 /* iwx_send_cmd, synchronous only. Returns 0, or an errno-style code. */
+/* A name for the commands a log is most likely to show (#16: which one hung). */
+static std::string cmd_name(uint32_t id) {
+  switch (id & 0xffff) {
+  case IWX_PHY_CONTEXT_CMD: return " (PHY_CONTEXT)";
+  case IWX_ADD_STA: return " (ADD_STA)";
+  case IWX_REMOVE_STA: return " (REMOVE_STA)";
+  case IWX_SCD_QUEUE_CFG: return " (SCD_QUEUE_CFG)";
+  case IWX_MAC_CONTEXT_CMD: return " (MAC_CONTEXT)";
+  case IWX_BINDING_CONTEXT_CMD: return " (BINDING_CONTEXT)";
+  case IWX_TIME_QUOTA_CMD: return " (TIME_QUOTA)";
+  default: return "";
+  }
+}
+
 int IwxDevice::send_cmd(uint32_t id, const void *data, size_t len, bool want_resp,
                         std::vector<uint8_t> *resp, unsigned timeout_ms) {
   if (_fw_error || _proxy.failed()) return ENXIO;
@@ -1023,7 +1037,7 @@ int IwxDevice::send_cmd(uint32_t id, const void *data, size_t len, bool want_res
   const bool answered = wait_for([&] { return !slot.pending; }, timeout_ms);
   _cmd_depth--;
   if (!answered) {
-    _log("firmware command " + hex(id) + " timed out");
+    _log("firmware command " + hex(id) + cmd_name(id) + " timed out");
     slot.pending = false;
     return _fw_error ? EIO : ETIMEDOUT;
   }
@@ -1562,9 +1576,15 @@ bool IwxDevice::set_address(const uint8_t address[6]) {
 
 /* ---------------------------------------------------------------- transmit */
 
-int IwxDevice::transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate) {
+int IwxDevice::transmit_slot(const uint8_t *frame, size_t len, const TxRate &rate, bool kick) {
   if (!_queue_enabled || _fw_error) return -1;
-  return transmit_on(_dataq, frame, len, rate, false);
+  return transmit_on(_dataq, frame, len, rate, false, kick);
+}
+
+void IwxDevice::kick_data() {
+  if (!_queue_enabled || _fw_error) return;
+  plat_fence();
+  wr(IWX_HBUS_TARG_WRPTR, (_dataq.qid << 16) | _dataq.cur);
 }
 
 int IwxDevice::sta_transmit(const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt) {
@@ -1573,7 +1593,7 @@ int IwxDevice::sta_transmit(const uint8_t *frame, size_t len, const TxRate &rate
 }
 
 int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const TxRate &rate,
-                           bool encrypt) {
+                           bool encrypt, bool kick) {
   const size_t hdrlen = hdrlen_80211(frame, len);
   if (!hdrlen || len - hdrlen > kTxPayloadSlot || hdrlen > 64) return -1;
   if (ring.queued >= ring.count - 2) {
@@ -1681,8 +1701,10 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
                                  frame[0], frame[1], frame[4], rnf, static_cast<uint8_t>(idx)};
   ring.cur = (ring.cur + 1) % wrap();
   ring.queued++;
-  plat_fence();
-  wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
+  if (kick) {
+    plat_fence();
+    wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
+  }
   _tx_stats.submitted++;
   return static_cast<int>(idx);
 }

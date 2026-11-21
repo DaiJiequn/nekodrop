@@ -151,6 +151,7 @@ bool IwxDevice::sta_join(const StaParams &p) {
     const int e = send_cmd(iwx_cmd_id(IWX_SESSION_PROTECTION_CMD, IWX_MAC_CONF_GROUP, 0), &sp,
                            sizeof(sp), false, nullptr);
     if (e) _log("station: session protection refused (" + std::to_string(e) + "), joining anyway");
+    else _sta_prot = true;
   }
   nic_unlock();
   if (err) {
@@ -409,6 +410,17 @@ void IwxDevice::sta_leave() {
      * a binding that is gone, asserts the firmware at the next join. */
     /* The TVQM queue needs no command: the firmware frees a removed
      * station's queues (iwl_mvm_disable_txq with the new TX API). */
+    /* Cancel the join's session protection first (iwl_mvm_stop_session_protection):
+     * tearing the binding down under a scheduled one hung the firmware in the
+     * binding command and asserted it (#16, AX211: BINDING_CONTEXT timed out,
+     * then UMAC ADVANCED_SYSASSERT, when a join was redone while associating). */
+    if (_sta_prot && _sta_mac_added) {
+      iwx_session_prot_cmd sp{};
+      sp.id_and_color = htole32(IWX_FW_CMD_ID_AND_COLOR(kStaMac, 0));
+      sp.action = htole32(IWX_FW_CTXT_ACTION_REMOVE);
+      sp.conf_id = htole32(IWX_SESSION_PROTECT_CONF_ASSOC);
+      send_cmd(iwx_cmd_id(IWX_SESSION_PROTECTION_CMD, IWX_MAC_CONF_GROUP, 0), &sp, sizeof(sp), false, nullptr);
+    }
     if (_sta_sta_added) {
       iwx_rm_sta_cmd rm{};
       rm.sta_id = IWX_STATION_ID;
@@ -436,7 +448,7 @@ void IwxDevice::sta_leave() {
     nic_unlock();
   }
   _sta_phy_added = _sta_mac_added = _sta_binding_added = _sta_sta_added = false;
-  _sta_queue_enabled = _sta_assoc = _sta_tlc = false;
+  _sta_queue_enabled = _sta_assoc = _sta_tlc = _sta_prot = false;
   _sta_ba_tids = 0;
   _staq.queued = 0;
 }

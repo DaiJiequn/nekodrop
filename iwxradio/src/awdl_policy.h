@@ -225,7 +225,10 @@ constexpr uint64_t resend_backoff_us(unsigned attempts) {
  * of 64 with over 20% failures, up after one with under 5%. */
 constexpr uint8_t kRateMcs[6] = {0, 4, 5, 7, 4, 7};
 struct RateLadder {
-  unsigned step = 0;
+  /* Starts at HT MCS 4 (39 Mb/s), not legacy 24: a short send used to spend
+   * most of itself climbing (#4: 4.6 MB sent before reaching step 5). Losses
+   * still step it down to legacy 24. */
+  unsigned step = 1;
   uint32_t ok = 0, failed = 0, ups = 0, downs = 0;
   void note(bool acked, bool wide80) {
     ++(acked ? ok : failed);
