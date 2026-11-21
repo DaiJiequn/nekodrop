@@ -24,10 +24,20 @@ public sealed class Device : Observable
     string _name = "", _model = "", _status = "";
     double _progress;
     bool _busy;
-    public string Name { get => _name; set => Set(ref _name, value); }
+    public string Name { get => _name; set { Set(ref _name, value); Raise(nameof(Glyph)); } }
     public string Model { get => _model; set { Set(ref _model, value); Raise(nameof(Glyph)); } }
-    public string Glyph => Model.StartsWith("Mac", StringComparison.OrdinalIgnoreCase) ? ""
-        : Model.StartsWith("iPad", StringComparison.OrdinalIgnoreCase) ? "" : "";
+    public string Glyph
+    {
+        get
+        {
+            if (Model.StartsWith("Mac", StringComparison.OrdinalIgnoreCase)) return "\uE7F8";
+            if (Model.StartsWith("iPad", StringComparison.OrdinalIgnoreCase)) return "\uE70A";
+            if (Model.StartsWith("iPhone", StringComparison.OrdinalIgnoreCase)) return "\uE8EA";
+            if (Name.Contains("iPad", StringComparison.OrdinalIgnoreCase)) return "\uE70A";
+            if (Name.Contains("Mac", StringComparison.OrdinalIgnoreCase)) return "\uE7F8";
+            return "\uE8EA";
+        }
+    }
     public string Status { get => _status; set => Set(ref _status, value); }
     public double Progress { get => _progress; set => Set(ref _progress, value); }
     public bool Busy { get => _busy; set => Set(ref _busy, value); }

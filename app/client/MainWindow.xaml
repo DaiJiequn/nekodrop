@@ -97,7 +97,7 @@
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <Button Click="Device_Click" Tag="{Binding}" Margin="0,0,8,8" Cursor="Hand" ToolTip="{local:T main.deviceTip}">
+              <Button Click="Device_Click" Tag="{Binding}" Margin="0,0,8,8" Cursor="Hand" Foreground="{DynamicResource Text}" ToolTip="{local:T main.deviceTip}">
                 <Button.Template>
                   <ControlTemplate TargetType="Button">
                     <Border x:Name="c" Width="120" Height="128" CornerRadius="8" Background="{DynamicResource Card}"
