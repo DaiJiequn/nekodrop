@@ -95,10 +95,13 @@
           <CheckBox x:Name="CheckUpdatesBox" Content="{local:T set.checkUpdates}"/>
           <CheckBox x:Name="PreviewUpdatesBox" Content="{local:T set.previewUpdates}"/>
           <TextBlock Style="{StaticResource Caption}" Text="{local:T set.updates.hint}"/>
-          <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-            <Button x:Name="CheckNowButton" Content="{local:T set.checkNow}" Click="CheckNow_Click" Padding="12,4"/>
+          <DockPanel Margin="0,6,0,0">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+              <Button x:Name="CheckNowButton" Content="{local:T set.checkNow}" Click="CheckNow_Click" Padding="12,4"/>
+              <Button x:Name="OpenReleasesButton" Content="{local:T update.openReleases}" Click="OpenReleases_Click" Padding="10,4" Margin="6,0,0,0" Visibility="Collapsed"/>
+            </StackPanel>
             <TextBlock x:Name="UpdateStatus" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="10,0,0,0"/>
-          </StackPanel>
+          </DockPanel>
         </StackPanel>
       </Border>
 

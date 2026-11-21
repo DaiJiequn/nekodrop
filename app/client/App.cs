@@ -420,22 +420,23 @@ public sealed class App : Application
 
     Updater.Release? _update;
 
-    /// <summary>Looks for a newer release; tells the user once per version. Returns what it found.</summary>
-    public async Task<Updater.Release?> CheckForUpdate(bool asked)
+    /// <summary>Looks for a newer release; tells the user once per version. Returns the detailed result.</summary>
+    public async Task<Updater.CheckResult> CheckForUpdateDetailed(bool asked)
     {
-        if (!asked && !Settings.CheckUpdates) return null;
-        try
+        if (!asked && !Settings.CheckUpdates) return new Updater.CheckResult(Updater.CheckStatus.UpToDate);
+        var res = await Updater.Check(Settings.PreviewUpdates);
+        if (res.Status == Updater.CheckStatus.Available && res.Release is { } found)
         {
-            var found = await Updater.FindNewer(Settings.PreviewUpdates);
-            if (found is null) return null;
             var announce = !asked && (_update is null || _update.Version != found.Version) &&
                            Settings.SkipVersion != found.Version.ToString();
             _update = found;
             if (announce) Shell.UpdateToast(found.Version.ToString(), found.Preview);
-            return found;
         }
-        catch (Exception) { return null; } /* offline, or GitHub's rate limit: next time */
+        return res;
     }
+
+    /// <summary>Looks for a newer release; tells the user once per version. Returns what it found.</summary>
+    public async Task<Updater.Release?> CheckForUpdate(bool asked) => (await CheckForUpdateDetailed(asked)).Release;
 
     /// <summary>Downloads, verifies and runs the installer of the release found. Returns "" or why not.</summary>
     public async Task<string> InstallUpdate(IProgress<int>? progress = null)

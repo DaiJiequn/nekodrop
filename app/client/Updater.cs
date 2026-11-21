@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.Json.Nodes;
+using System.Xml.Linq;
 
 namespace NekoDrop;
 
@@ -17,8 +19,20 @@ namespace NekoDrop;
 public static class Updater
 {
     const string ReleasesApi = "https://api.github.com/repos/zheznanohana/nekodrop/releases?per_page=15";
+    const string ReleasesAtom = "https://github.com/zheznanohana/nekodrop/releases.atom";
+    const string TagUrlPrefix = "https://github.com/zheznanohana/nekodrop/releases/tag/";
+    public const string ReleasesPage = "https://github.com/zheznanohana/nekodrop/releases";
+
+    public enum CheckStatus { UpToDate, Available, RateLimited, Failed }
 
     public sealed record Release(Version Version, string Tag, string Url, string Sha256, bool Preview, string Page);
+
+    public sealed record CheckResult(
+        CheckStatus Status,
+        Release? Release = null,
+        string? NewerTag = null,
+        string? PageUrl = null,
+        string? Detail = null);
 
     static readonly HttpClient Http = MakeClient();
 
@@ -30,21 +44,34 @@ public static class Updater
         return c;
     }
 
-    /// <summary>This build's version (0.1.16 of "0.1.16+commit").</summary>
-    public static Version Current
+    static string CachePath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "nekodrop", "update-cache.json");
+
+    static (string? Etag, string? Json) ReadCache()
     {
-        get
+        try
         {
-            var info = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-            var text = (info ?? "0.0.0").Split('+')[0];
-            return Version.TryParse(text, out var v) ? v : new Version(0, 0, 0);
+            if (!File.Exists(CachePath)) return (null, null);
+            var node = JsonNode.Parse(File.ReadAllText(CachePath));
+            return ((string?)node?["etag"], (string?)node?["json"]);
         }
+        catch (Exception) { return (null, null); }
     }
 
-    /// <summary>The newest release above this build with an installer and a digest; null if none.</summary>
-    public static async Task<Release?> FindNewer(bool includePreview)
+    static void WriteCache(string? etag, string json)
     {
-        var json = await Http.GetStringAsync(ReleasesApi);
+        try
+        {
+            var dir = Path.GetDirectoryName(CachePath);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            var obj = new JsonObject { ["etag"] = etag ?? "", ["json"] = json };
+            File.WriteAllText(CachePath, obj.ToJsonString());
+        }
+        catch (Exception) { }
+    }
+
+    static Release? ParseReleases(string json, bool includePreview)
+    {
         Release? best = null;
         foreach (var r in JsonNode.Parse(json)?.AsArray() ?? [])
         {
@@ -68,6 +95,111 @@ public static class Updater
         }
         return best;
     }
+
+    /// <summary>
+    /// Fallback when api.github.com is rate-limited (e.g. shared proxy IP, #4):
+    /// reads releases.atom (outside the 60/hr REST API quota) only to detect if a
+    /// newer tag exists. Never auto-installs because Atom carries no SHA-256 digest.
+    /// </summary>
+    static async Task<(string? Tag, string? Url)> FindNewerFromAtom(CancellationToken ct)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, ReleasesAtom);
+            req.Headers.Accept.Clear();
+            req.Headers.Accept.ParseAdd("application/atom+xml");
+            using var resp = await Http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode) return (null, null);
+            var xml = await resp.Content.ReadAsStringAsync(ct);
+            var doc = XDocument.Parse(xml);
+            XNamespace atom = "http://www.w3.org/2005/Atom";
+            Version? bestVer = null;
+            string? bestTag = null, bestUrl = null;
+            foreach (var entry in doc.Descendants(atom + "entry"))
+            {
+                var href = entry.Element(atom + "link")?.Attribute("href")?.Value ?? "";
+                if (!href.StartsWith(TagUrlPrefix, StringComparison.Ordinal)) continue;
+                var tag = href[TagUrlPrefix.Length..].Split('?', '#')[0];
+                if (!Version.TryParse(tag.TrimStart('v'), out var v) || v <= Current) continue;
+                if (bestVer is null || v > bestVer)
+                {
+                    bestVer = v;
+                    bestTag = tag;
+                    bestUrl = href;
+                }
+            }
+            return (bestTag, bestUrl);
+        }
+        catch (Exception) { return (null, null); }
+    }
+
+    /// <summary>This build's version (0.1.16 of "0.1.16+commit").</summary>
+    public static Version Current
+    {
+        get
+        {
+            var info = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            var text = (info ?? "0.0.0").Split('+')[0];
+            return Version.TryParse(text, out var v) ? v : new Version(0, 0, 0);
+        }
+    }
+
+    /// <summary>
+    /// Checks GitHub releases with ETag caching (304 responses do not consume the
+    /// 60/hr unauthenticated quota) and distinguishes HTTP 403 rate limits behind
+    /// shared proxies from "already up to date" (#4).
+    /// </summary>
+    public static async Task<CheckResult> Check(bool includePreview)
+    {
+        var (cachedEtag, cachedJson) = ReadCache();
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var req = new HttpRequestMessage(HttpMethod.Get, ReleasesApi);
+            if (!string.IsNullOrWhiteSpace(cachedEtag)) req.Headers.IfNoneMatch.TryParseAdd(cachedEtag);
+            using var resp = await Http.SendAsync(req, cts.Token);
+
+            if (resp.StatusCode == HttpStatusCode.NotModified && !string.IsNullOrEmpty(cachedJson))
+            {
+                var best = ParseReleases(cachedJson, includePreview);
+                return best is not null ? new CheckResult(CheckStatus.Available, best) : new CheckResult(CheckStatus.UpToDate);
+            }
+
+            if (resp.IsSuccessStatusCode)
+            {
+                var json = await resp.Content.ReadAsStringAsync(cts.Token);
+                WriteCache(resp.Headers.ETag?.ToString(), json);
+                var best = ParseReleases(json, includePreview);
+                return best is not null ? new CheckResult(CheckStatus.Available, best) : new CheckResult(CheckStatus.UpToDate);
+            }
+
+            if (resp.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
+            {
+                var rateLimited = resp.StatusCode == HttpStatusCode.TooManyRequests ||
+                    (resp.Headers.TryGetValues("X-RateLimit-Remaining", out var rem) && rem.FirstOrDefault() == "0");
+                if (rateLimited)
+                {
+                    if (!string.IsNullOrEmpty(cachedJson) && ParseReleases(cachedJson, includePreview) is { } cached)
+                        return new CheckResult(CheckStatus.Available, cached);
+                    var (tag, url) = await FindNewerFromAtom(cts.Token);
+                    return new CheckResult(CheckStatus.RateLimited, NewerTag: tag, PageUrl: url ?? ReleasesPage);
+                }
+            }
+
+            return new CheckResult(CheckStatus.Failed, Detail: $"HTTP {(int)resp.StatusCode} ({resp.ReasonPhrase})");
+        }
+        catch (OperationCanceledException)
+        {
+            return new CheckResult(CheckStatus.Failed, Detail: "timeout");
+        }
+        catch (Exception e)
+        {
+            return new CheckResult(CheckStatus.Failed, Detail: e.Message);
+        }
+    }
+
+    /// <summary>The newest release above this build with an installer and a digest; null if none.</summary>
+    public static async Task<Release?> FindNewer(bool includePreview) => (await Check(includePreview)).Release;
 
     /// <summary>Downloads, verifies and starts the installer. Returns "" or why not.</summary>
     public static async Task<string> Install(Release r, IProgress<int>? progress = null)

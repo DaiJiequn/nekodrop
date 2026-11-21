@@ -30,13 +30,35 @@ public partial class SettingsWindow : Window
         UpdateStatus.Text = "nekodrop " + Updater.Current;
     }
 
+    string _releasesUrl = Updater.ReleasesPage;
+
     async void CheckNow_Click(object sender, RoutedEventArgs e)
     {
         CheckNowButton.IsEnabled = false;
+        OpenReleasesButton.Visibility = Visibility.Collapsed;
+        UpdateStatus.Text = L.T("update.checking");
         try
         {
             A.Settings.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
-            var found = await A.CheckForUpdate(true);
+            var res = await A.CheckForUpdateDetailed(true);
+            switch (res.Status)
+            {
+                case Updater.CheckStatus.UpToDate:
+                    UpdateStatus.Text = L.T("update.none");
+                    return;
+                case Updater.CheckStatus.RateLimited:
+                    _releasesUrl = res.PageUrl ?? Updater.ReleasesPage;
+                    OpenReleasesButton.Visibility = Visibility.Visible;
+                    UpdateStatus.Text = res.NewerTag is not null
+                        ? L.F("update.rateLimitedFound", res.NewerTag)
+                        : L.T("update.rateLimited");
+                    return;
+                case Updater.CheckStatus.Failed:
+                    UpdateStatus.Text = L.T("update.checkFailed") +
+                        (string.IsNullOrEmpty(res.Detail) ? "" : ": " + res.Detail);
+                    return;
+            }
+            var found = res.Release;
             if (found is null) { UpdateStatus.Text = L.T("update.none"); return; }
             UpdateStatus.Text = L.F("update.found", found.Version.ToString());
             var progress = new Progress<int>(p => UpdateStatus.Text = L.F("update.found", found.Version.ToString()) + $" {p}%");
@@ -44,6 +66,12 @@ public partial class SettingsWindow : Window
             if (why != "") UpdateStatus.Text = L.T("update.failed") + ": " + why;
         }
         finally { CheckNowButton.IsEnabled = true; }
+    }
+
+    void OpenReleases_Click(object sender, RoutedEventArgs e)
+    {
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_releasesUrl) { UseShellExecute = true }); }
+        catch (Exception) { }
     }
 
     void Browse_Click(object sender, RoutedEventArgs e)
