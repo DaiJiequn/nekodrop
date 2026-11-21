@@ -208,6 +208,17 @@ if ($start -lt 0) {
   $mif = $attempt | Where-Object { $_ -match 'AWDL action frames \((\d+) PSF, (\d+) MIF' } | ForEach-Object { [int]$Matches[2] } | Measure-Object -Maximum
   $peers = @($attempt | Where-Object { $_ -match 'event: peer-channel|event: peer-country' }).Count
   W "| AWDL frames heard | $(if ($awdl.Maximum -gt 0) { 'ok' } else { '?' }) | $(if ($awdl.Count) { "up to $($awdl.Maximum) AWDL action frames$(if ($mif.Count) { " ($($mif.Maximum) MIF)" }); $peers peer channel/country events" } else { 'no rx statistics yet' }) |"
+  # Transmitting: on a passive 5 GHz channel the radio sends nothing until a
+  # beacon (or, 0.1.10+, an AWDL peer) is heard there (#11).
+  $txLast = $attempt | Where-Object { $_ -match 'radio: tx: \d+ submitted, \d+ done' } | Select-Object -Last 1
+  $txUnlock = $attempt | Where-Object { $_ -match 'transmitting allowed here' } | Select-Object -Last 1
+  $txRow = if (-not $txLast) { '?' }
+    elseif ($txLast -match 'tx: \d+ submitted, 0 done' -and $txLast -match 'held \(passive channel\)' -and -not $txUnlock) { 'FAIL' }
+    else { 'ok' }
+  $txWhy = if ($txRow -eq 'FAIL') { 'nothing sent: the channel is passive (the firmware did not take the country) and no beacon or AWDL peer was heard on it' }
+    elseif ($txUnlock) { '`' + ($txUnlock -replace '^\S+ \S+ ', '') + '`' }
+    elseif ($txLast) { '`' + (($txLast -replace '^\S+ \S+ ', '') -replace '; unicast.*', '') + '`' } else { 'no tx statistics yet' }
+  W "| Transmitting | $txRow | $txWhy |"
   # The latest station event decides: "authenticating" is a step of every join,
   # not a failure (#4, #14, #16 all showed FAIL while connected).
   $wifiLast = $attempt | Where-Object { $_ -match 'event: wifi \S|not supported beside AirDrop|not joining a saved network' } | Select-Object -Last 1
