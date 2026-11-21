@@ -150,7 +150,12 @@ public sealed class Supervisor : IDisposable
         _ = Task.Run(SetTapMetric);
         if (KernelDriver) Start("boot (kernel driver: Windows keeps Wi-Fi)");
         else if (_cfg.Mode == NetMode.Concurrent) Start("boot (concurrent mode)");
-        else EnsureVendorDriver();
+        else
+        {
+            EnsureVendorDriver();
+            // Networks lost by an earlier version or a card re-detected outside nekodrop.
+            _ = Task.Run(() => WlanBackup.Restore(Say, TimeSpan.FromSeconds(30)));
+        }
         _ = Task.Run(() => Watchdog(_cts.Token));
     }
 
@@ -646,6 +651,14 @@ public sealed class Supervisor : IDisposable
         {
             lock (_lock) { _cfg.VendorInf = card.InfPath; _cfg.Save(); }
         }
+        // Windows' saved networks live under its WLAN interface, which goes away
+        // with the card and may come back with a new GUID: put back any that
+        // went missing, then back them all up before taking the card.
+        if (!Card.BoundToProxy(card))
+        {
+            WlanBackup.Restore(Say, TimeSpan.Zero);
+            WlanBackup.Save(Say);
+        }
         var inf = Path.Combine(_root, "driver", "winawdl_regproxy.inf");
         Say($"taking the card from {Path.GetFileName(card.InfPath)}");
         try { Card.Bind(card.HardwareId, inf); }
@@ -899,6 +912,8 @@ public sealed class Supervisor : IDisposable
         {
             Say($"giving the card back to {Path.GetFileName(fullInf)}");
             Card.Bind(card.HardwareId, fullInf);
+            // Once Intel's WLAN interface is up, put back the saved networks it lacks.
+            _ = Task.Run(() => WlanBackup.Restore(Say, TimeSpan.FromSeconds(60)));
         }
         catch (Exception e) { Say("giving the card back failed: " + e.Message); }
     }

@@ -6,7 +6,8 @@
 #   1. stops nekodrop and turns its service off (it would take the card again)
 #   2. binds Intel's driver to the card again (the package Windows used before)
 #   3. removes nekodrop's driver packages from the driver store
-#   4. turns the "nekodrop" TAP adapter off and makes sure WLAN AutoConfig runs
+#   4. adds back saved Wi-Fi networks Windows lost (from nekodrop's backup)
+#   5. turns the "nekodrop" TAP adapter off and makes sure WLAN AutoConfig runs
 # nekodrop stays installed; run the installer again to use it, or
 # -Uninstall to remove it completely afterwards.
 # Log: %ProgramData%\nekodrop\restore.log
@@ -92,7 +93,33 @@ public static extern bool UpdateDriverForPlugAndPlayDevicesW(System.IntPtr hwnd,
   }
 }
 
-'4. Network'
+'4. Saved Wi-Fi networks'
+# The service backs up Windows' saved networks before taking the card; add
+# back any the Wi-Fi interface lacks now (it can come back under a new GUID).
+$backup = Join-Path $state 'wlan-backup'
+if (Test-Path $backup) {
+  Start-Service WlanSvc -ErrorAction SilentlyContinue
+  for ($i = 0; $i -lt 30 -and -not ((netsh wlan show interfaces | Out-String) -match 'GUID'); $i++) { Start-Sleep 1 }
+  # The interface's own profiles, read back through netsh (its text output is localized).
+  $tmp = Join-Path $state 'wlan-current'
+  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force $tmp | Out-Null
+  netsh wlan export profile folder="$tmp" | Out-Null
+  $have = @(Get-ChildItem $tmp -Filter *.xml | ForEach-Object { try { ([xml](Get-Content $_.FullName -Raw)).WLANProfile.name } catch { } })
+  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  $added = 0
+  foreach ($f in Get-ChildItem $backup -Filter *.xml) {
+    try { $name = ([xml](Get-Content $f.FullName -Raw)).WLANProfile.name } catch { continue }
+    if ($have -contains $name) { continue }
+    netsh wlan add profile filename="$($f.FullName)" user=all | Out-Null
+    if ($LASTEXITCODE -eq 0) { $added++ }
+  }
+  "   restored $added saved network(s)"
+} else {
+  '   no backup (nekodrop before 0.1.9 kept none)'
+}
+
+'5. Network'
 Get-NetAdapter -Name nekodrop -ErrorAction SilentlyContinue | Disable-NetAdapter -Confirm:$false -ErrorAction SilentlyContinue
 Set-Service WlanSvc -StartupType Automatic -ErrorAction SilentlyContinue
 Start-Service WlanSvc -ErrorAction SilentlyContinue

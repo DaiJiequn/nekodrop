@@ -8,6 +8,8 @@ if (args.Contains("--give-back"))
 {
     using var s = new Supervisor();
     s.Stop("--give-back", giveBack: true);
+    // The process ends here: wait for Intel's interface and restore in line.
+    WlanBackup.Restore(Console.WriteLine, TimeSpan.FromSeconds(60));
     return;
 }
 
