@@ -263,8 +263,9 @@ Since 0.1.17, nekodrop is developed by AI agents with no human in the loop. Ever
 
 No person approves the steps; fixed rules decide instead:
 - Only changes that pass the build, the radio self-test, the report test and the engine test, and pass QA, are merged.
-- Changes rated **low risk** (documentation, diagnostics, client interface) and **experimental** ones (new behaviour behind a switch that is off by default, with the old code path untouched) are released automatically as **pre-releases**.
-- Changes to default behaviour, the driver INF, the installer and restore scripts, permissions, CI or dependency versions are only opened as pull requests and never released automatically.
+- Every merged change is released automatically as a **pre-release**. The agents prefer **low-risk** changes (documentation, diagnostics, client interface) and **experimental** ones (new behaviour behind a switch that is off by default, with the old code path untouched).
+- A **high-risk** change (default behaviour, the driver INF, the installer and restore scripts, permissions, CI, dependency versions) gets a second, independent review before it ships.
+- **Rollback.** When reports show that a release broke something that worked before, the next hour reverts the change first and ships the revert, before any new work.
 - Nothing ships without a release note that says what wasn't tested on hardware.
 
 The weak spot is that the agents have no Intel Wi-Fi card to test on. Diagnostic reports from users are what tells them whether a change worked, so please keep [reporting](../../issues/10).
