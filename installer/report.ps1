@@ -180,7 +180,10 @@ W "- Windows: $(if ($os) { $os.Caption }) $(if ($cv) { $cv.DisplayVersion }) (bu
 W "- Service: $(if ($svc) { "$($svc.Status), start $svcStart" } else { 'not installed' }); mode $(if ($config) { $config.Mode } else { '?' })"
 W "- Card: $(if ($card) { "$($card.FriendlyName) ($($card.InstanceId -replace '\\[^\\]+$', ''))" } else { 'no supported Intel card found' })"
 $lastErr = $serviceLog | Where-Object { $_ -match 'start failed|bring-up failed|keeps failing|taking the card failed|LMAC error|UMAC error|firmware error|refusing|cannot give' } | Select-Object -Last 1
-W "- Last error: $(if ($lastErr) { '`' + (Redact $lastErr) + '`' } else { 'none in the log' })"
+# The AirDrop engine's failures too (#4: "none in the log" beside send failures).
+$lastEngineErr = $engineLog | Where-Object { $_ -match '"state":"failed"|Traceback|\bERROR\b|send failed|WinError' -and $_ -notmatch 'mdns: (send|query) failed' } | Select-Object -Last 1
+W "- Last error: $(if ($lastErr) { '`' + (Redact $lastErr) + '`' } else { 'none in the service log' })"
+W "- Last AirDrop engine error: $(if ($lastEngineErr) { '`' + (Redact ($lastEngineErr -replace '`', "'")) + '`' } else { 'none' })"
 W ''
 W '## Bring-up (last radio start)'
 W ''
@@ -201,9 +204,19 @@ if ($start -lt 0) {
   W (Stage 'Firmware setup commands' 'radio: ready on channel' 'firmware init commands failed|PHY context add failed|MAC context|binding failed')
   W (Stage 'Radio ready' 'radio: ready on channel' 'radio exited during bring-up|never became ready')
   $awdl = $attempt | Where-Object { $_ -match 'rx: \d+ frames, (\d+) AWDL action frames' } | ForEach-Object { [int]$Matches[1] } | Measure-Object -Maximum
+  # MIF counts (0.1.9+): awdld takes a peer as valid only after one (#16).
+  $mif = $attempt | Where-Object { $_ -match 'AWDL action frames \((\d+) PSF, (\d+) MIF' } | ForEach-Object { [int]$Matches[2] } | Measure-Object -Maximum
   $peers = @($attempt | Where-Object { $_ -match 'event: peer-channel|event: peer-country' }).Count
-  W "| AWDL frames heard | $(if ($awdl.Maximum -gt 0) { 'ok' } else { '?' }) | $(if ($awdl.Count) { "up to $($awdl.Maximum) AWDL action frames; $peers peer channel/country events" } else { 'no rx statistics yet' }) |"
-  W (Stage 'Wi-Fi station' 'event: wifi connected' 'event: wifi (failed|auth|deauth)|not supported beside AirDrop')
+  W "| AWDL frames heard | $(if ($awdl.Maximum -gt 0) { 'ok' } else { '?' }) | $(if ($awdl.Count) { "up to $($awdl.Maximum) AWDL action frames$(if ($mif.Count) { " ($($mif.Maximum) MIF)" }); $peers peer channel/country events" } else { 'no rx statistics yet' }) |"
+  # The latest station event decides: "authenticating" is a step of every join,
+  # not a failure (#4, #14, #16 all showed FAIL while connected).
+  $wifiLast = $attempt | Where-Object { $_ -match 'event: wifi \S|not supported beside AirDrop|not joining a saved network' } | Select-Object -Last 1
+  $wifiRow = if (-not $wifiLast) { 'not applicable' }
+    elseif ($wifiLast -match 'event: wifi connected') { 'ok' }
+    elseif ($wifiLast -match 'event: wifi (failed|deauth)|not supported beside AirDrop') { 'FAIL' }
+    elseif ($wifiLast -match 'not joining a saved network') { 'not applicable' }
+    else { 'joining' }
+  W "| Wi-Fi station | $(if ($wifiRow -eq 'not applicable') { '-' } else { $wifiRow }) | $(if ($wifiLast) { '`' + (Redact (($wifiLast -replace '^\S+ \S+ ', '') -replace '\|', '/')) + '`' } else { 'no station in this start' }) |"
   W ''
   $fw = $attempt | Where-Object { $_ -match 'LMAC error|UMAC error|SecBoot|UMAC PC' } | Select-Object -Last 4
   if ($fw) {
