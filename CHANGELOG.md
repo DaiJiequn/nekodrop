@@ -6,6 +6,22 @@
 
 ---
 
+## v0.1.24 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **修复：开启实验性 A-MPDU 后找不到 iPhone（0.1.22 起的回归，[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：0.1.22 在 A-MPDU 模式下把监听的 BSSID 改成了 AWDL BSSID 并加了 ACK 速率，0.1.23 又在会话期间把接收过滤收窄到只收组播。AX200 实测 0.1.23 开 A-MPDU 后 3 分半钟都没发现设备（PSF 计数停住、`0 addressed to us`），而 0.1.20 同样开着 A-MPDU 还能发现。现在 MAC 上下文恢复到 0.1.20 的样子。默认路径（A-MPDU 关闭）从没用过这两处改动，不受影响。
+- **修复：「按需」模式下在 nekodrop 里连接 Wi-Fi 会白白重启无线（[#11](https://github.com/zheznanohana/nekodrop/issues/11)）**：只有「同时联网和 AirDrop」模式会在 AirDrop 旁边连 Wi-Fi。以前在其他模式下点连接，服务会重启 radio 但什么也连不上，每点一次 AirDrop 发现就从头开始。现在会直接提示需要切换模式。
+- **设置窗口标题显示版本号**（[#11](https://github.com/zheznanohana/nekodrop/issues/11)）。
+- 另外包含 0.1.23 之后合入的：AirDrop 引擎发送优化（64 KiB DVZip 块、自适应不压缩直传、2 MiB 套接字缓冲、`TCP_NODELAY`），安装器按厂商识别网卡、`restore.ps1` 不再假设 Intel。
+
+### English
+- **Fix: no devices found with experimental A-MPDU on (regression since 0.1.22, [#4](https://github.com/zheznanohana/nekodrop/issues/4))**: 0.1.22 gave the A-MPDU listener AWDL's BSSID and ACK rates, and 0.1.23 narrowed its receive filter to group frames during a session. On an AX200, 0.1.23 found nothing for 3.5 minutes with A-MPDU on (PSF count frozen, `0 addressed to us`) while 0.1.20 still found the iPhone. The MAC context is back to 0.1.20's. The default path (A-MPDU off) never used either change.
+- **Fix: joining Wi-Fi in nekodrop outside Concurrent mode restarted the radio for nothing ([#11](https://github.com/zheznanohana/nekodrop/issues/11))**: only "Wi-Fi and AirDrop together" runs Wi-Fi beside AirDrop. In the other modes, choosing a network restarted the radio and joined nothing, resetting discovery each time. The Wi-Fi window now says which mode is needed.
+- **The settings window title shows the version** ([#11](https://github.com/zheznanohana/nekodrop/issues/11)).
+- Also includes what landed after 0.1.23: AirDrop engine send tuning (64 KiB DVZip chunks with an adaptive stored bypass, 2 MiB socket buffers, `TCP_NODELAY`), vendor-aware card classification in the installer and a vendor-agnostic `restore.ps1`.
+
+---
+
 ## v0.1.23 (Hourly / Pre-release) — 2026-11-22
 
 ### 中文
