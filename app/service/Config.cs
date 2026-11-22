@@ -35,6 +35,13 @@ public sealed class ServiceConfig
     /// earlier, repeated discovery scans so the firmware learns the country sooner. Off by default.
     /// </summary>
     public bool FastUnlock { get; set; }
+    /// <summary>
+    /// The user's manual choice when the card is not recognized by its ID
+    /// (Settings, "Wi-Fi card"): its PCI hardware ID ("PCI\VEN_xxxx&amp;DEV_yyyy")
+    /// and a CardCatalog.ManualModels key; both "" for automatic.
+    /// </summary>
+    public string ManualCard { get; set; } = "";
+    public string ManualModel { get; set; } = "";
     /// <summary>Seconds without AirDrop use before on-demand mode gives the card back.</summary>
     public int IdleSeconds { get; set; } = 90;
     /// <summary>Intel's own INF (oemNN.inf), remembered when the card is first taken.</summary>

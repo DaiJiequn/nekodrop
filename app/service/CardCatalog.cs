@@ -49,7 +49,7 @@ public sealed record AdapterCapabilities(bool SupportsConcurrentWifi, bool Suppo
 public sealed record AdapterProfile(string VendorId, string DeviceId, string VendorName, string FamilyName,
                                     RadioBackendKind Backend, AdapterCapabilities Capabilities,
                                     string ProxyInfName, string ProxyService, string ProxyProvider,
-                                    string[] VendorProviderPatterns, bool Active)
+                                    string[] VendorProviderPatterns, bool Active, string? RadioFamily = null)
 {
     /// <summary>The hardware ID Windows binds a driver to (UpdateDriverForPlugAndPlayDevices).</summary>
     public string HardwareId => $"PCI\\VEN_{VendorId}&DEV_{DeviceId}";
@@ -69,8 +69,9 @@ public sealed record AdapterProfile(string VendorId, string DeviceId, string Ven
 /// </summary>
 public static class CardCatalog
 {
-    // nekodrop's one register proxy (driver/regproxy). A future Realtek card
-    // goes through the same proxy once it picks its BAR by device (HARDWARE.md).
+    // nekodrop's one register proxy (driver/regproxy): selects the largest
+    // memory BAR (>= 8 KiB) so it covers both Intel (8 KiB BAR0) and
+    // Realtek RTL8852CE (1 MiB BAR2).
     const string ProxyInf = "winawdl_regproxy.inf";
     const string ProxyService = "WUDFRd";
     const string ProxyProvider = "winairdrop project";
@@ -95,12 +96,12 @@ public static class CardCatalog
         Intel("7AF0", "AX210 / AX211 / AX411"), Intel("51F0", "AX210 / AX211 / AX411"),
         Intel("51F1", "AX210 / AX211 / AX411"), Intel("54F0", "AX210 / AX211 / AX411"),
         Intel("7F70", "AX210 / AX211 / AX411"),
-        // Not taken (docs/HARDWARE.md, step 4): winawdl drives it with devourer,
-        // which has no station (so no Wi-Fi beside AirDrop), and its registers
-        // are a BAR of at least 64 KiB. The proxy's INF does not match it yet.
+        // Built-in on-demand backend (winawdl's devourer, nekodrop-radio-rtl.exe):
+        // monitor and inject only (no station, so Concurrent runs OnDemand), and
+        // its registers sit in a 1 MiB BAR (>= 64 KiB).
         new AdapterProfile("10EC", "C852", "Realtek", "RTL8852CE", RadioBackendKind.Devourer,
             new AdapterCapabilities(false, false, false, false, 0x10000),
-            ProxyInf, ProxyService, ProxyProvider, ["Realtek"], Active: false),
+            ProxyInf, ProxyService, ProxyProvider, ["Realtek"], Active: true),
     ];
 
     /// <summary>The cards the service takes.</summary>
@@ -149,6 +150,54 @@ public static class CardCatalog
     public static NetMode EffectiveMode(NetMode requested, AdapterCapabilities caps) =>
         requested == NetMode.Concurrent && !caps.SupportsConcurrentWifi ? NetMode.OnDemand : requested;
 
+    /// <summary>Executable name under radio\ and arguments for launching a card's radio daemon.</summary>
+    public sealed record RadioLaunch(string ExeName, IReadOnlyList<string> Args);
+
+    /// <summary>The radio daemon and its arguments for a card: its backend's (RadioBackends.cs).</summary>
+    public static RadioLaunch BuildRadioLaunch(
+        AdapterProfile profile, int channel, bool kernel,
+        string country, string? staConf, bool aggregate, bool fastUnlock)
+    {
+        var backend = RadioBackends.Get(profile.Backend);
+        return new RadioLaunch(backend.ExeName,
+            backend.BuildArgs(new RadioStart(profile, channel, kernel, country, staConf, aggregate, fastUnlock)));
+    }
+
+    /// <summary>One model the user can pick when a card is not recognized by its ID.</summary>
+    /// <param name="Key">stored in service.json and passed to the radio as --family (Intel)</param>
+    public sealed record ManualModel(string Key, string Name, string VendorId, RadioBackendKind Backend,
+                                     AdapterCapabilities Capabilities, string[] VendorProviderPatterns);
+
+    static readonly AdapterCapabilities RealtekCaps = new(false, false, false, false, 0x10000);
+
+    /// <summary>
+    /// The models a card can be run as by hand (Settings, "Wi-Fi card"): each
+    /// backend's families. The Intel keys are the radio's --family names
+    /// (iwxradio/src/cards.h family_device).
+    /// </summary>
+    public static readonly IReadOnlyList<ManualModel> ManualModels =
+    [
+        new("qu", "Intel AX201 / 9560 (Qu, CNVi)", "8086", RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault, IntelProviders),
+        new("ax200", "Intel AX200", "8086", RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault, IntelProviders),
+        new("ax210", "Intel AX210 (discrete)", "8086", RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault, IntelProviders),
+        new("so", "Intel AX211 / AX411 (So, CNVi)", "8086", RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault, IntelProviders),
+        new("rtl8852ce", "Realtek RTL8852CE", "10EC", RadioBackendKind.Devourer, RealtekCaps, ["Realtek"]),
+    ];
+
+    /// <summary>
+    /// A profile for a card the user matched to a model by hand, or null when
+    /// the model is unknown or the card's vendor is not the model's.
+    /// </summary>
+    public static AdapterProfile? ManualProfile(string instanceOrHardwareId, string modelKey)
+    {
+        if (!TryParsePciId(instanceOrHardwareId, out var v, out var d)) return null;
+        var m = ManualModels.FirstOrDefault(x => x.Key == modelKey);
+        if (m is null || m.VendorId != v) return null;
+        return new AdapterProfile(v, d, v == "8086" ? "Intel" : "Realtek", m.Name + " (chosen in settings)", m.Backend,
+                                  m.Capabilities, ProxyInf, ProxyService, ProxyProvider, m.VendorProviderPatterns,
+                                  Active: true, RadioFamily: m.Backend == RadioBackendKind.Iwx ? m.Key : null);
+    }
+
     /// <summary>
     /// Whether a bound driver's provider is the card vendor's own driver: never
     /// the register proxy, otherwise any of the vendor's provider names.
@@ -166,10 +215,11 @@ public static class CardCatalog
         var fail = new List<string>();
         void Check(bool ok, string what) { if (!ok) fail.Add(what); }
 
-        // The 15 Intel IDs the service took before the catalog (Card.DeviceIds, 0.1.20).
+        // The 15 Intel IDs the service took before the catalog (Card.DeviceIds, 0.1.20)
+        // plus Realtek RTL8852CE (10EC:C852) built-in on-demand backend = 16 active profiles.
         string[] intel = ["43F0", "A0F0", "02F0", "06F0", "34F0", "3DF0", "4DF0",
                           "2723", "2725", "7A70", "7AF0", "51F0", "51F1", "54F0", "7F70"];
-        Check(ActiveProfiles.Count == intel.Length, $"{ActiveProfiles.Count} active profiles, expected {intel.Length}");
+        Check(ActiveProfiles.Count == intel.Length + 1, $"{ActiveProfiles.Count} active profiles, expected {intel.Length + 1}");
         foreach (var dev in intel)
         {
             var id = $"PCI\\VEN_8086&DEV_{dev}&SUBSYS_00748086&REV_00\\3&11583659&0&A3";
@@ -199,13 +249,15 @@ public static class CardCatalog
         Check(!TryParsePciId("USB\\VID_0BDA&PID_8812\\1", out _, out _), "USB ID parsed");
         Check(!TryParsePciId("", out _, out _), "empty ID parsed");
 
-        // Listed but not active: classified, never taken, forced to on demand.
+        // Built-in Realtek RTL8852CE: active, Devourer backend, forced to on demand.
         const string rtl = "PCI\\VEN_10EC&DEV_C852&SUBSYS_C85210EC\\4&1";
-        Check(MatchActive(rtl) is null, "10EC:C852 would be taken");
-        var r = Classify(rtl);
-        if (r is null) fail.Add("10EC:C852 is not classified");
+        var r = MatchActive(rtl);
+        if (r is null) fail.Add("10EC:C852 is not active");
         else
         {
+            Check(Classify(rtl) == r, "10EC:C852 Classify and MatchActive disagree");
+            Check(MatchActive("pci\\ven_10ec&dev_c852&subsys_c85210ec\\4&1") == r, "lower-case 10EC:C852 not taken");
+            Check(r.HardwareId == "PCI\\VEN_10EC&DEV_C852", $"10EC:C852 hardware ID {r.HardwareId}");
             Check(r.VendorName == "Realtek" && r.Backend == RadioBackendKind.Devourer, $"10EC:C852 vendor {r.VendorName} backend {r.Backend}");
             Check(!r.Capabilities.SupportsConcurrentWifi && !r.Capabilities.SupportsFastSend &&
                   !r.Capabilities.SupportsAggregate && !r.Capabilities.SupportsKernelDriver, "10EC:C852 capabilities");
@@ -215,7 +267,58 @@ public static class CardCatalog
             Check(EffectiveMode(NetMode.Off, r.Capabilities) == NetMode.Off, "10EC:C852 Off changed");
             Check(IsVendorProviderMatch(r, "Realtek Semiconductor Corp."), "Realtek provider not matched");
             Check(!IsVendorProviderMatch(r, "Intel"), "Intel provider matched as Realtek's");
+            Check(!IsVendorProviderMatch(r, "winairdrop project"), "proxy provider matched as Realtek's");
         }
+
+        // Radio launch planning for Intel (Iwx) and Realtek (Devourer).
+        static bool SameLaunch(RadioLaunch got, string exe, params string[] args) =>
+            got.ExeName == exe && got.Args.SequenceEqual(args);
+
+        var iwx = ActiveProfiles[0];
+        Check(iwx.Backend == RadioBackendKind.Iwx, $"ActiveProfiles[0] backend {iwx.Backend}, expected Iwx");
+        Check(SameLaunch(BuildRadioLaunch(iwx, 6, false, "", null, false, false),
+                         "nekodrop-radio.exe", "6", "--width", "20", "--tx-window", "48"),
+              "Iwx ch 6 default launch args");
+        Check(SameLaunch(BuildRadioLaunch(iwx, 149, false, "JP", @"C:\run\sta.conf", true, true),
+                         "nekodrop-radio.exe", "149", "--width", "80", "--country", "JP",
+                         "--sta-config", @"C:\run\sta.conf", "--tx-window", "48", "--aggregate", "--fast-unlock"),
+              "Iwx full flags launch args");
+        Check(SameLaunch(BuildRadioLaunch(iwx, 44, true, "US", null, true, true),
+                         "nekodrop-radio.exe", "44", "--width", "80", "--kernel", "--country", "US"),
+              "Iwx kernel mode must suppress the user-mode radio's options");
+        if (r is not null)
+        {
+            Check(SameLaunch(BuildRadioLaunch(r, 6, true, "JP", @"C:\run\sta.conf", true, true),
+                             "nekodrop-radio-rtl.exe", "6", "--width", "20"),
+                  "Devourer ch 6 must strip all Intel flags");
+            Check(SameLaunch(BuildRadioLaunch(r, 149, false, "", null, false, false),
+                             "nekodrop-radio-rtl.exe", "149", "--width", "80"),
+                  "Devourer ch 149 default launch args");
+        }
+
+        // Every backend kind, profile and manual model has a registered radio backend.
+        foreach (var k in Enum.GetValues<RadioBackendKind>())
+            Check(RadioBackends.Registered.Any(b => b.Kind == k), $"no radio backend registered for {k}");
+        foreach (var bk in AllProfiles.Select(x => x.Backend).Concat(ManualModels.Select(x => x.Backend)).Distinct())
+            Check(RadioBackends.Registered.Any(b => b.Kind == bk), $"profile backend {bk} has no radio backend");
+
+        // Manual models: by vendor, Intel ones pass --family, Realtek none.
+        var mq = ManualProfile("PCI\\VEN_8086&DEV_9999&SUBSYS_00748086\\3&1", "qu");
+        if (mq is null) fail.Add("manual qu on 8086:9999 refused");
+        else
+        {
+            Check(mq.HardwareId == "PCI\\VEN_8086&DEV_9999" && mq.Backend == RadioBackendKind.Iwx && mq.RadioFamily == "qu",
+                  $"manual qu profile {mq.HardwareId} {mq.Backend} {mq.RadioFamily}");
+            Check(SameLaunch(BuildRadioLaunch(mq, 6, false, "", null, false, false),
+                             "nekodrop-radio.exe", "6", "--width", "20", "--tx-window", "48", "--family", "qu"),
+                  "manual qu launch args");
+        }
+        var mr = ManualProfile("PCI\\VEN_10EC&DEV_C852", "rtl8852ce");
+        Check(mr is { Backend: RadioBackendKind.Devourer, RadioFamily: null }, "manual rtl8852ce profile");
+        Check(ManualProfile("PCI\\VEN_10EC&DEV_C852", "qu") is null, "an Intel model accepted for a Realtek card");
+        Check(ManualProfile("PCI\\VEN_8086&DEV_2723", "nope") is null, "an unknown model accepted");
+        Check(ManualProfile("USB\\VID_0BDA&PID_8812", "rtl8852ce") is null, "a USB device accepted");
+        Check(ManualModels.Select(x => x.Key).Distinct().Count() == ManualModels.Count, "duplicate manual model keys");
 
         // Ethernet chips from the same vendors and Wi-Fi cards nekodrop does not know.
         foreach (var other in new[] { "PCI\\VEN_8086&DEV_15F3&SUBSYS_00008086\\1", "PCI\\VEN_10EC&DEV_8168&SUBSYS_00000000\\1",

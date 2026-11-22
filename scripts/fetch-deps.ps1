@@ -1,5 +1,6 @@
 # Fetches what the build needs into third_party\ (not in this repository):
-#   winawdl         radio pipe, awdld (OWL), Wintun, the AirDrop engine (MIT)
+#   winawdl         radio pipe, RTL8852CE radio, awdld (OWL), Wintun, AirDrop engine (MIT/GPL-2.0/GPL-3.0)
+#   devourer        winawdl's Realtek RTL8852CE user-mode radio library (GPL-2.0)
 #   ForbiddenItlwm  iwlwifi firmware and its licence (GPL-2.0 / Intel redistribution)
 #   winlibs MinGW   GCC for awdld
 #   WDK (NuGet)     UMDF headers and tools, only when no WDK is installed
@@ -24,6 +25,7 @@ function Get-File($url, $out, $sha256) {
 }
 
 Get-Repo winawdl https://github.com/raph559/winawdl.git 0db7031589dc2bca03c0893db341176376962047
+Get-Repo 'winawdl\upstream\devourer' https://github.com/raph559/devourer.git 8d936de2a3805ce126e5236349afe40e645aaf9b
 Get-Repo ForbiddenItlwm https://github.com/retropineaple/ForbiddenItlwm.git 96ff71e0211789239f6fbf6b64ac8e7fd22b41aa
 
 # Wintun for awdld: winawdl's script checks its SHA-256 and WireGuard's signature.

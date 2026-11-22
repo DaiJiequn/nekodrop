@@ -193,9 +193,11 @@ bool IwxDevice::identify(std::string &error) {
   _hw_rf_id = rd(IWX_CSR_HW_RF_ID);
   /* The card's family, transport parameters and firmware (iwx_attach's
    * iwx_devices / iwl_dev_info_table walk, cards.h). */
-  _card = cards::select(static_cast<uint16_t>(_proxy.device()), _hw_rev, _hw_rf_id);
+  const uint16_t device = _opt.family_device ? _opt.family_device : static_cast<uint16_t>(_proxy.device());
+  _card = cards::select(device, _hw_rev, _hw_rf_id);
   _log("card " + hex(_proxy.vendor()) + ":" + hex(_proxy.device()) + " subsystem " +
-       hex(_proxy.subsystem()) + ", hw_rev " + hex(_hw_rev_raw) + " rf_id " + hex(_hw_rf_id));
+       hex(_proxy.subsystem()) + ", hw_rev " + hex(_hw_rev_raw) + " rf_id " + hex(_hw_rf_id) +
+       (_opt.family_device ? ", run as " + hex(_opt.family_device) + " (model chosen in settings)" : ""));
   if (!_card.known) {
     error = "unsupported card: " + _card.why;
     return false;

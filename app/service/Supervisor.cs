@@ -5,8 +5,9 @@ using System.Text.Json.Nodes;
 namespace NekoDrop.Service;
 
 /// <summary>
-/// Owns the card and the two daemons: nekodrop-radio (the user-mode Intel
-/// driver) and awdld (winawdl's AWDL daemon). Channel policy, after
+/// Owns the card and the two daemons: the user-mode radio (nekodrop-radio for
+/// Intel, nekodrop-radio-rtl for Realtek RTL8852CE) and awdld (winawdl's AWDL
+/// daemon). Channel policy, after
 /// ForbiddenItlwm 0.6.0: start on 6, where every country allows AWDL; when a
 /// peer's channel sequence names 44 or 149 and its country is known, restart
 /// there (the move waits until nothing is transferring); fall back to 6 if
@@ -19,6 +20,8 @@ public sealed class Supervisor : IDisposable
     readonly string _root = AppContext.BaseDirectory;
     readonly object _lock = new();
     readonly ServiceConfig _cfg = ServiceConfig.Load();
+    /// <summary>The card being driven, for the settings ("Intel AX200"), "" when none was found.</summary>
+    string _cardLabel = "";
     Process? _radio, _awdld;
     int _channel;
     /// <summary>The network last read from Windows; once the card is ours the WLAN service sees nothing.</summary>
@@ -52,6 +55,7 @@ public sealed class Supervisor : IDisposable
     /// not enumerate PCI devices each time. Before a card is seen (or with none)
     /// it is the Intel set, so those paths behave exactly as before the catalog.
     /// </summary>
+    AdapterProfile _profile = CardCatalog.ActiveProfiles[0];
     AdapterCapabilities _caps = AdapterCapabilities.IntelDefault;
 
     /// <summary>
@@ -74,6 +78,9 @@ public sealed class Supervisor : IDisposable
                 ["country"] = _cfg.Country,
                 ["aggregate"] = _cfg.Aggregate,
                 ["fastUnlock"] = _cfg.FastUnlock,
+                ["card"] = _cardLabel,
+                ["manualCard"] = _cfg.ManualCard,
+                ["manualModel"] = _cfg.ManualModel,
                 ["wifi"] = _wifi,
                 ["detail"] = _detail,
                 ["ssid"] = _staSsid,
@@ -150,12 +157,16 @@ public sealed class Supervisor : IDisposable
         Say($"===== nekodrop service {version}; {windows}; mode {_cfg.Mode}, country \"{_cfg.Country}\" =====");
         try
         {
+            Card.Manual = (_cfg.ManualCard, _cfg.ManualModel);
             var card = Card.Find();
-            if (card is null) Say("card: no supported Wi-Fi card present");
+            if (card is null) Say("card: no supported Wi-Fi card present" +
+                                  (_cfg.ManualCard != "" ? $" (chosen in settings: {_cfg.ManualCard} as {_cfg.ManualModel}, not found)" : ""));
             else
             {
                 var p = card.Profile;
+                _profile = p;
                 _caps = p.Capabilities;
+                _cardLabel = $"{p.VendorName} {p.FamilyName}";
                 // Same line as before the catalog for Intel cards ("Intel INF on record").
                 Say($"card: {card.InstanceId}; driver service {card.Service}, INF {Path.GetFileName(card.InfPath)} ({card.Provider}), problem {card.Problem}" +
                     $"; {p.VendorName} INF on record {Path.GetFileName(_cfg.VendorInf)}");
@@ -227,6 +238,31 @@ public sealed class Supervisor : IDisposable
         if (State is RadioState.On or RadioState.Starting)
             _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         Publish();
+    }
+
+    /// <summary>
+    /// The user's manual card choice (Settings): a PCI hardware ID and a
+    /// CardCatalog.ManualModels key, or "" and "" for automatic. Used only for a
+    /// card the catalog does not recognize by its ID. Returns "" or why not.
+    /// </summary>
+    public string SetManualCard(string hardwareId, string model)
+    {
+        hardwareId = hardwareId.Trim();
+        if (hardwareId == "") model = "";
+        else if (CardCatalog.ManualProfile(hardwareId, model) is null) return "this model does not fit this card";
+        lock (_lock)
+        {
+            _cfg.ManualCard = hardwareId;
+            _cfg.ManualModel = model;
+            _cfg.Save();
+            Card.Manual = (hardwareId, model);
+        }
+        Say(hardwareId == "" ? "card: automatic detection" : $"card: {hardwareId} chosen in settings as {model}");
+        if (Card.Find() is { } c) { _profile = c.Profile; _caps = c.Profile.Capabilities; _cardLabel = $"{c.Profile.VendorName} {c.Profile.FamilyName}"; }
+        else _cardLabel = "";
+        if (_wanted) _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        Publish();
+        return "";
     }
 
     /// <summary>The client wants AirDrop now (opened the window, a phone nearby is sharing).</summary>
@@ -365,22 +401,10 @@ public sealed class Supervisor : IDisposable
             // Stop may have run meanwhile: never take the card or start a radio for it (Codex review #10).
             if (!_wanted) { lock (_lock) State = RadioState.Off; Publish(); return; }
             if (!kernel) TakeCard();
+            else if (Card.Find() is { } kc) { _profile = kc.Profile; _caps = kc.Profile.Capabilities; }
             if (!_wanted) { lock (_lock) State = RadioState.Off; Publish(); return; }
-            var width = channel <= 14 ? 20 : 80;
-            var args = new List<string> { channel.ToString(), "--width", width.ToString() };
-            if (kernel) args.Add("--kernel");
-            if (_cfg.Country != "") args.AddRange(["--country", _cfg.Country]);
-            if (staConf is not null) args.AddRange(["--sta-config", staConf]);
-            // Radio options only for a card whose radio has them (all Intel cards do).
-            // Faster sending (48 frames in flight) is always on since 0.1.25: it was a
-            // switch from 0.1.9 and no card reported it making things worse (AX211 537 MB
-            // at 3.4 MB/s with 0 given up #9, AX210 a little faster #14, AX200 same speed #4).
-            if (!kernel && _caps.SupportsFastSend) args.AddRange(["--tx-window", "48"]);
-            if (_cfg.Aggregate && !kernel && _caps.SupportsAggregate) args.Add("--aggregate");
-            // The firmware scan and country notice it needs are the user-mode Intel radio's,
-            // the radio that also runs the Wi-Fi station; not with nekodrop-wlan.sys.
-            if (_cfg.FastUnlock && !kernel && _caps.SupportsConcurrentWifi) args.Add("--fast-unlock");
-            _radio = Spawn(Path.Combine(_root, "radio", "nekodrop-radio.exe"), args, OnRadioLine);
+            var launch = CardCatalog.BuildRadioLaunch(_profile, channel, kernel, _cfg.Country, staConf, _cfg.Aggregate, _cfg.FastUnlock);
+            _radio = Spawn(Path.Combine(_root, "radio", launch.ExeName), launch.Args, OnRadioLine);
             _startedAt = DateTime.UtcNow;
             // awdld connects to the radio's pipe; give the firmware time to boot.
             for (int i = 0; i < 100 && State == RadioState.Starting && _radio is { HasExited: false }; i++) Thread.Sleep(100);
@@ -769,7 +793,10 @@ public sealed class Supervisor : IDisposable
 
     void TakeCard()
     {
-        var card = Card.Find() ?? throw new InvalidOperationException("no supported Wi-Fi card found");
+        var card = Card.Find() ?? throw new InvalidOperationException(
+            "no supported Wi-Fi card found (Settings > Wi-Fi card lets you choose the model by hand)");
+        _profile = card.Profile;
+        _cardLabel = $"{card.Profile.VendorName} {card.Profile.FamilyName}";
         _caps = card.Profile.Capabilities;
         if (Card.TakenByProxy(card)) return;
         // Only the vendor's INF is the one to give the card back to, never the proxy's (issue #12).

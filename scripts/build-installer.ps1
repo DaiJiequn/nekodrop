@@ -1,6 +1,6 @@
 # Builds every part of nekodrop, stages it in build\stage, and makes
 # build\nekodrop-<version>-setup.exe with Inno Setup 6 (or a zip without it).
-#   radio\    nekodrop-radio.exe (user-mode Intel driver) + Intel firmware
+#   radio\    nekodrop-radio.exe (Intel) + Intel firmware, nekodrop-radio-rtl.exe (RTL8852CE)
 #   awdl\     awdld.exe (winawdl's AWDL daemon, OWL) + wintun.dll
 #   airdrop\  winawdl's AirDrop engine (Python, MIT)
 #   python\   the Python embeddable distribution
@@ -23,6 +23,12 @@ New-Item -ItemType Directory -Force $stage, $downloads | Out-Null
 New-Item -ItemType Directory -Force "$stage\radio\firmware" | Out-Null
 Copy-Item "$repo\build\iwxradio\winawdl_radio.exe" "$stage\radio\nekodrop-radio.exe"
 Copy-Item "$repo\build\iwxradio\firmware\*" "$stage\radio\firmware\"
+
+'radio (Realtek RTL8852CE)'
+& "$PSScriptRoot\build-radio-rtl.ps1" | Out-Null
+$rtlRadio = "$repo\build\rtlradio\winawdl_radio.exe"
+if (-not (Test-Path $rtlRadio)) { throw "RTL radio binary missing: $rtlRadio" }
+Copy-Item $rtlRadio "$stage\radio\nekodrop-radio-rtl.exe"
 
 'awdl'
 & "$PSScriptRoot\build-awdl.ps1" -MinGW "$repo\third_party\winlibs\mingw64\bin" | Out-Null
@@ -139,6 +145,9 @@ Copy-Item "$repo\third_party\winawdl\awdl\LICENSE" "$stage\licenses\awdld-GPL-3.
 Copy-Item "$repo\third_party\winawdl\airdrop\LICENSE" "$stage\licenses\airdrop-engine-MIT.txt"
 Copy-Item "$repo\LICENSE" "$stage\licenses\nekodrop-GPL-2.0.txt"
 Copy-Item "$repo\third_party\winawdl\deps\wintun\LICENSE.txt" "$stage\licenses\wintun.txt"
+$devourerLicense = @("$repo\third_party\winawdl\upstream\devourer\LICENSE", "$repo\third_party\winawdl\radio\LICENSE") |
+  Where-Object { Test-Path $_ } | Select-Object -First 1
+if ($devourerLicense) { Copy-Item $devourerLicense "$stage\licenses\devourer-GPL-2.0.txt" }
 
 $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") |
         Where-Object { Test-Path $_ } | Select-Object -First 1

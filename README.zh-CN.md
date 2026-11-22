@@ -57,28 +57,31 @@
 
 ## 支持的网卡
 
-nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`）直接驱动无线网卡芯片。当前已原生支持 Intel 22000 / AX210 族网卡（移植自 [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`），并正在以底层原生自带的方式快速扩展 Realtek（`RTL8852CE` / `RTL8852BE`）与 MediaTek（`MT7921` / `MT7922`）等跨品牌网卡。
+nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`）直接驱动无线网卡芯片。当前已内置原生支持 Intel 22000 / AX210 族网卡（`nekodrop-radio.exe`，移植自 [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`，支持同时连 Wi-Fi 或按需接管）以及 **Realtek RTL8852CE**（`10EC:C852`，`nekodrop-radio-rtl.exe`，基于 [winawdl](https://github.com/raph559/winawdl)/[devourer](https://github.com/raph559/devourer)，自动运行按需接管模式——CI 已编译并通过离线单测，待在 nekodrop 内实机确认）。全部 15 款 Intel 网卡的默认并发与按需行为 100% 保持不变。
 
 **完整跨品牌网卡兼容性文档（Intel / Realtek / MediaTek / 高通）：[docs/COMPATIBILITY.zh-CN.md](docs/COMPATIBILITY.zh-CN.md)** · **更新日志：[CHANGELOG.md](CHANGELOG.md)** · **底层多网卡架构：[docs/HARDWARE.md](docs/HARDWARE.md)**
 
-当前已内置启用的 Intel 网卡速览：
+当前已内置启用的网卡速览：
 
-| 网卡 | PCI ID（`8086:`） | 固件 | 状态 |
+| 网卡 | PCI ID | 固件 / 后端 | 状态 |
 |---|---|---|---|
-| **Intel Wi-Fi 6 AX201** 160 MHz（CNVi） | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | ✅ **已实测**（`43F0` 上的 QuZ） |
-| Qu/QuZ 上的 Intel Wireless-AC 9560 / 9462 / 9461（CNVi） | 与 AX201 相同 | `Qu/QuZ-jf-b0-68` | ⚠️ 未测试 |
-| Intel Wi-Fi 6 AX200（独立网卡） | `2723` | `cc-a0-68` | ✅ 用户反馈双向 AirDrop 可用（[#1](../../issues/1)、[#4](../../issues/4)） |
-| Intel Wi-Fi 6E AX210（独立网卡） | `2725` | `ty-a0-gf-a0-68` + PNVM | ✅ 用户反馈双向 AirDrop 可用（[#14](../../issues/14)、[#18](../../issues/18)）；部分机器仍在修（[#11](../../issues/11)） |
-| Intel Wi-Fi 6E AX211（CNVi，第 12 代及以后） | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM | ✅ 用户反馈双向 AirDrop 可用（[#9](../../issues/9)）；部分机器发现设备还不稳定（[#16](../../issues/16)） |
-| Intel Wi-Fi 6E AX411 / Killer AX1690（CNVi） | 与 AX211 相同 | `so-a0-gf4-a0-68` + PNVM | ⚠️ 未测试（[#7](../../issues/7)） |
-| So 平台上的 Intel Wi-Fi 6 AX203 / 9560 | 与 AX211 相同 | `so-a0-hr/jf-b0-68` | ⚠️ 未测试 |
-| Intel SnJ `2726`、QnJ `2720`、Meteor Lake `7E40`/`2729` | | 上游没有固件 | ❌ |
-| Intel BE200 / BE201（Wi-Fi 7） | | 上游没有驱动 | ❌ |
-| Realtek、MediaTek、高通、博通 | | | ❌ |
+| **Intel Wi-Fi 6 AX201** 160 MHz（CNVi） | `8086:` `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ✅ **已实测**（`43F0` 上的 QuZ） |
+| Qu/QuZ 上的 Intel Wireless-AC 9560 / 9462 / 9461（CNVi） | 与 AX201 相同 | `Qu/QuZ-jf-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试 |
+| Intel Wi-Fi 6 AX200（独立网卡） | `8086:2723` | `cc-a0-68`（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#1](../../issues/1)、[#4](../../issues/4)） |
+| Intel Wi-Fi 6E AX210（独立网卡） | `8086:2725` | `ty-a0-gf-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#14](../../issues/14)、[#18](../../issues/18)）；部分机器仍在修（[#11](../../issues/11)） |
+| Intel Wi-Fi 6E AX211（CNVi，第 12 代及以后） | `8086:` `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#9](../../issues/9)）；部分机器发现设备还不稳定（[#16](../../issues/16)） |
+| Intel Wi-Fi 6E AX411 / Killer AX1690（CNVi） | 与 AX211 相同 | `so-a0-gf4-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试（[#7](../../issues/7)） |
+| So 平台上的 Intel Wi-Fi 6 AX203 / 9560 | 与 AX211 相同 | `so-a0-hr/jf-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试 |
+| **Realtek RTL8852CE** | `10EC:C852` | 内嵌固件（`devourer`，仅按需接管） | ⚠️ 已内置，CI 已编译并离线自测，nekodrop 内待实机确认 |
+| Intel SnJ `2726`、QnJ `2720`、Meteor Lake `7E40`/`2729` | `8086:` | 上游没有固件 | ❌ |
+| Intel BE200 / BE201（Wi-Fi 7） | `8086:` | 上游没有驱动 | ❌ |
+| 其他 Realtek、MediaTek、高通、博通 | | | ❌ |
 
-怎么看自己的网卡：打开 *设备管理器 → 网络适配器*。没有受支持的 Intel 网卡时，安装程序会拒绝安装，并列出本机检测到的无线网卡、PCI/USB ID 和不支持原因（若为 **Realtek RTL8852CE** `10EC:C852` 会指引上游 [winawdl](https://github.com/raph559/winawdl)），以及运行 `installer/report.ps1` 的指引。在未测试的 Intel 网卡上，nekodrop 可能启动不了固件；这时网卡不会坏，运行下面的**一键回退**即可，也欢迎在 [Issues](../../issues) 附上日志反馈。
+怎么看自己的网卡：打开 *设备管理器 → 网络适配器*。没有受支持的无线网卡时，安装程序会拒绝安装，并列出本机检测到的无线网卡、PCI/USB ID 和不支持原因，以及运行 `installer/report.ps1` 的指引。在未实测的网卡上（包括新内置的 Realtek RTL8852CE 后端），nekodrop 可能启动不了 radio；这时网卡不会坏，运行下面的**一键回退**即可，也欢迎在 [Issues](../../issues) 附上日志反馈。
 
-不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。**Realtek RTL8852CE**（`10EC:C852`）现在就可以用上游的 [winawdl](https://github.com/raph559/winawdl)（只有 AirDrop，不能同时连 Wi-Fi）。已安装 nekodrop 时，运行 `NekoDropService.exe --status` 可查看匹配到的网卡档案、能力与当前驱动提供者，`NekoDropService.exe --selftest` 可在无网卡、无管理员权限下运行网卡目录离线自检（目录中的 RTL8852CE 目前仅为未启用占位条目，暂不代表新增 Realtek 硬件支持）。radio 启动时会记一行 `backend …` 日志，写明当前驱动后端具备哪些能力（Wi-Fi 站点、固件扫描、A-MPDU 发送等）；离线自检 `iwx_selftest` 在每次构建时校验这套能力契约，其中包括一个模拟的、无 Wi-Fi 站点的未来 Realtek 后端；`install.ps1 -SelfTest`、`restore.ps1 -SelfTest` 和 `report.ps1 -SelfTest` 也会在每次构建时于 Windows PowerShell 5.1 下运行离线自检。这些改动不改变 Intel 网卡的默认行为，也尚未启用 Realtek 硬件支持。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
+网卡按 PCI ID 自动识别。没识别出来时，可以在 *设置 → 网卡* 里手动选择网卡和型号（只对驱动包里列出的硬件 ID 有效）。想给 nekodrop 适配新的网卡家族，见 [docs/ADDING-A-CARD.md](docs/ADDING-A-CARD.md)。
+
+不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。已安装 nekodrop 时，运行 `NekoDropService.exe --status` 可查看匹配到的网卡档案、能力与当前驱动提供者，`NekoDropService.exe --selftest` 可在无网卡、无管理员权限下校验全部 16 个活跃网卡档案（15 款 Intel + Realtek RTL8852CE）以及双后端启动参数规划。Intel 的 radio 启动时会记一行 `backend …` 日志并在每次构建时运行 `iwx_selftest`；Realtek 的 radio 构建会同步运行四项离线单测（`block_ack_test`、`reorder_buffer_test`、`outgoing_session_test`、`dma_address_test`）；`install.ps1 -SelfTest`、`restore.ps1 -SelfTest` 和 `report.ps1 -SelfTest` 也会在每次构建时于 Windows PowerShell 5.1 下运行离线自检。Intel 网卡的默认并发与按需行为 100% 保持不变。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
 
 ### 出问题了？一键回退
 
@@ -106,7 +109,7 @@ nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`�
 ## 系统要求
 
 - Windows 10 2004（版本 19041）或更新的 64 位系统（Windows 10 22H2 在 0.1.16 及以上已确认双向可用，[#18](../../issues/18)）。
-- 受支持的 Intel 网卡（见上表）。
+- 受支持的无线网卡：Intel Wi-Fi 6/6E（支持同时连 Wi-Fi 与按需模式）或 Realtek RTL8852CE `10EC:C852`（已内置按需模式，nekodrop 内待实机确认；见上表）。
 - 安装需要管理员权限。
 - 发送文件需要蓝牙：AirDrop 用蓝牙低功耗信标唤醒附近的苹果设备。
 - 苹果设备那边把 AirDrop 设为 **所有人（10 分钟）**。“仅限联系人”需要 Apple ID 证书，nekodrop 没有。
@@ -250,14 +253,15 @@ DMA 内存不够分配额外的发送环，或者走的是内核驱动路径时�
 
 ## 从源码构建
 
-需要 Visual Studio 2022 Build Tools（C++、Windows SDK、CMake）、.NET 8 SDK 和 Git。Inno Setup 6 可选，没装就输出 zip。不用装 WDK，脚本会用它的 NuGet 包。
+需要 Visual Studio 2022 Build Tools（C++、Windows SDK、CMake、vcpkg）、.NET 8 SDK 和 Git。Inno Setup 6 可选，没装就输出 zip。不用装 WDK，脚本会用它的 NuGet 包。
 
 ```powershell
 git clone https://github.com/zheznanohana/nekodrop.git
 cd nekodrop
-.\scripts\fetch-deps.ps1        # 下载 winawdl、ForbiddenItlwm（固件）、MinGW、WDK NuGet 到 third_party\
+.\scripts\fetch-deps.ps1        # 下载 winawdl、devourer、ForbiddenItlwm（固件）、MinGW、WDK NuGet 到 third_party\
 .\scripts\build-installer.ps1   # 全部构建 → build\nekodrop-0.1.8-setup.exe
-.\scripts\build-radio.ps1       # 只构建用户态驱动并跑离线自检
+.\scripts\build-radio.ps1       # 只构建 Intel 用户态驱动并跑离线自检
+.\scripts\build-radio-rtl.ps1   # 只构建 Realtek RTL8852CE radio（devourer）并跑离线单测
 ```
 
 | 目录 | 内容 |
@@ -295,7 +299,8 @@ nekodrop 是在其他开源项目的基础上做的。这里写清楚哪些是**
 |---|---|---|---|
 | [retropineaple/ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 0.6.0（itlwm 分支，macOS） | GPL-2.0 | Intel 22000 系列驱动 `hal_iwx`：固件加载、TLV 解析、context info、收发环、固件命令、寄存器头文件 `if_iwxreg.h`。还有它的 AWDL 策略：信道跟随（44/149 的 min 规则、国家码学习）、接收 Block Ack、BA 期间关混杂、速率阶梯、主机侧单播重发、信标提示 | `iwxradio/`，从内核 C 移植成用户态 C++ 驱动 |
 | ForbiddenItlwm 的固件目录 | Intel 再分发许可 | iwlwifi 固件 `iwlwifi-Qu*-hr-b0-68.ucode` | 随安装包放在 `radio\firmware\` |
-| [raph559/winawdl](https://github.com/raph559/winawdl) | MIT | 在 Windows 上从用户态接管 PCIe 网卡的方法：UMDF 寄存器代理驱动（原本给 Realtek RTL8852CE 用）和用户态 DMA；radio 管道协议 | `driver/regproxy/`（改成 AX201 的 PCI ID）、`iwxradio/`（管道和 DMA） |
+| [raph559/winawdl](https://github.com/raph559/winawdl) | MIT / GPL-2.0（`radio/`） | 在 Windows 上从用户态接管 PCIe 网卡的方法：UMDF 寄存器代理驱动、用户态 DMA、radio 管道协议，以及 RTL8852CE radio 守护进程（`radio/`） | `driver/regproxy/`（支持 Intel 与 RTL8852CE 的 PCI ID）、`iwxradio/`（管道和 DMA）、`radio\nekodrop-radio-rtl.exe` |
+| [raph559/devourer](https://github.com/raph559/devourer)（`winawdl/pcie-windows`） | GPL-2.0 | Realtek RTL8852CE 用户态 PCIe 驱动（`KESTREL_8852C`，内嵌固件与双向 A-MPDU 栈） | 编译打包为 `radio\nekodrop-radio-rtl.exe`（`licenses\devourer-GPL-2.0.txt`） |
 | winawdl 的 `awdl/`（`awdld`） | GPL-3.0 或更新（基于 OWL） | AWDL 守护进程：OWL 的协议核心加上 Windows I/O 层和 Wintun | 从源码编译，随安装包放在 `awdl\awdld.exe` |
 | winawdl 的 `airdrop/` | MIT | Python 写的 AirDrop 引擎：mDNS、HTTPS 接收端、发送端、蓝牙信标 | 放在 `airdrop\`，打了两个小补丁（`scripts/patch-engine.py`：固定实例名、备用端口） |
 | [seemoo-lab/owl](https://github.com/seemoo-lab/owl) | GPL-3.0 | `awdld` 里的 AWDL 实现 | 经由 winawdl |
@@ -331,6 +336,7 @@ nekodrop 整体以 **GPL-2.0** 发布（见 [LICENSE](LICENSE)），因为 `iwxr
 
 - `if_iwxreg.h`：BSD/GPL-2.0 双许可。
 - `driver/regproxy` 和 AirDrop 引擎：沿用 winawdl 的 MIT 许可。
+- `nekodrop-radio-rtl.exe`（`raph559/winawdl` `radio/` + `raph559/devourer`）：GPL-2.0（`licenses\devourer-GPL-2.0.txt`）。
 - `awdld`：GPL-3.0 或更新，来自 winawdl/OWL，是通过管道通信的独立程序。
 - iwlwifi 固件：Intel 再分发许可（`licenses\iwlwifi-firmware.txt`）。
 - Wintun 和 TAP-Windows：各按其许可。

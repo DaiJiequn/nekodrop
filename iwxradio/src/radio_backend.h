@@ -72,6 +72,10 @@ struct RadioOpenOptions {
   bool verbose = false;
   /* Experimental A-MPDU sending to the AWDL peer: one more TX ring. */
   bool aggregate = false;
+  /* --family (the user's manual choice in Settings, for a card whose PCI
+   * device ID nekodrop does not know): the device ID whose transport
+   * parameters to use (cards::family_device), 0 for the card's own. */
+  uint16_t family_device = 0;
 };
 
 using RadioLogger = std::function<void(const std::string &)>;

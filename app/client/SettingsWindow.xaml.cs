@@ -28,11 +28,73 @@ public partial class SettingsWindow : Window
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
         UpdateStatus.Text = "nekodrop " + Updater.Current;
+        ShowCard(A.Service.Last);
+        A.Service.Reply += OnCardsReply;
+        Closed += (_, _) => A.Service.Reply -= OnCardsReply;
+        A.Service.RequestCards();
         /* Always visible, also after "Check now" replaces the status line (#11). */
         Title = L.T("set.title") + " · nekodrop " + Updater.Current;
     }
 
     string _releasesUrl = Updater.ReleasesPage;
+
+    /// <summary>A row of the card or model list.</summary>
+    sealed record Item(string Key, string Label, string Vendor = "");
+
+    void ShowCard(System.Text.Json.Nodes.JsonObject? state)
+    {
+        var card = (string?)state?["card"] ?? "";
+        var manual = (string?)state?["manualCard"] ?? "";
+        CardStatus.Text = card != "" ? L.F(manual != "" ? "set.card.manual" : "set.card.detected", card)
+                                     : L.T("set.card.none");
+    }
+
+    /// <summary>The service's card list and models (the "cards" event); a manual choice's answer ("card-manual").</summary>
+    void OnCardsReply(System.Text.Json.Nodes.JsonObject o) => Dispatcher.BeginInvoke(() =>
+    {
+        var ev = (string?)o["event"];
+        if (ev == "card-manual")
+        {
+            var error = (string?)o["error"] ?? "";
+            CardError.Text = error == "" ? L.T("set.card.applied") : L.T("set.card.mismatch");
+            return;
+        }
+        if (ev != "cards") return;
+        var manualHw = (string?)A.Service.Last?["manualCard"] ?? "";
+        var manualModel = (string?)A.Service.Last?["manualModel"] ?? "";
+        CardBox.Items.Clear();
+        foreach (var c in o["candidates"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray())
+        {
+            var hw = (string?)c?["hw"] ?? "";
+            var name = (string?)c?["name"] ?? "";
+            var tag = (bool?)c?["recognized"] == true ? L.T("set.card.recognized") : L.T("set.card.unrecognized");
+            CardBox.Items.Add(new Item(hw, $"{(name == "" ? hw : name)} ({hw.Replace("PCI\\", "")}) · {tag}"));
+        }
+        ModelBox.Items.Clear();
+        foreach (var m in o["models"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray())
+            ModelBox.Items.Add(new Item((string?)m?["key"] ?? "", (string?)m?["name"] ?? "", (string?)m?["vendor"] ?? ""));
+        CardBox.SelectedItem = CardBox.Items.Cast<Item>().FirstOrDefault(i => i.Key == manualHw) ??
+                               CardBox.Items.Cast<Item>().FirstOrDefault();
+        ModelBox.SelectedItem = ModelBox.Items.Cast<Item>().FirstOrDefault(i => i.Key == manualModel);
+        if (CardBox.Items.Count == 0) CardError.Text = L.T("set.card.nolist");
+    });
+
+    void CardApply_Click(object sender, RoutedEventArgs e)
+    {
+        if (CardBox.SelectedItem is not Item card || ModelBox.SelectedItem is not Item model)
+        {
+            CardError.Text = L.T("set.card.pick");
+            return;
+        }
+        CardError.Text = "";
+        A.Service.SetManualCard(card.Key, model.Key);
+    }
+
+    void CardAuto_Click(object sender, RoutedEventArgs e)
+    {
+        CardError.Text = "";
+        A.Service.SetManualCard("", "");
+    }
 
     async void CheckNow_Click(object sender, RoutedEventArgs e)
     {

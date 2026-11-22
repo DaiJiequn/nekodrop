@@ -37,6 +37,17 @@ constexpr bool rf_cdb(uint32_t rf_id) { return (rf_id >> 28) & 1; }
 constexpr uint16_t kDeviceIds[] = {0x02F0, 0x06F0, 0x34F0, 0x3DF0, 0x4DF0, 0x43F0, 0xA0F0, 0x2723,
                                    0x2725, 0x7A70, 0x7AF0, 0x51F0, 0x51F1, 0x54F0, 0x7F70};
 
+/* --family <name>: a representative device ID of each family, for a card
+ * the user matched to a model by hand (Settings, "Wi-Fi card"). The keys are
+ * the service's CardCatalog.ManualModels for Intel; 0 for an unknown name. */
+inline uint16_t family_device(const std::string &name) {
+  if (name == "qu") return 0x06F0;    /* iwl_qu_trans_cfg */
+  if (name == "ax200") return 0x2723; /* discrete 22000 */
+  if (name == "ax210") return 0x2725; /* discrete Ty */
+  if (name == "so") return 0x51F0;    /* So CNVi, long-latency (the safe one) */
+  return 0;
+}
+
 /* `hw_rev` as iwx keeps it: CSR_HW_REV with the step moved to bits 2-3. */
 inline CardInfo select(uint16_t device, uint32_t hw_rev, uint32_t rf_id) {
   CardInfo c;

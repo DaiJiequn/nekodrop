@@ -16,6 +16,12 @@ if (args.Contains("--selftest"))
     return;
 }
 
+// The card the user matched to a model by hand, for every path below that looks for the card.
+{
+    var manual = ServiceConfig.Load();
+    Card.Manual = (manual.ManualCard, manual.ManualModel);
+}
+
 // --give-back: hand the card to the vendor's driver (Intel's today) and exit (uninstall, recovery).
 if (args.Contains("--give-back"))
 {

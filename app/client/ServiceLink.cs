@@ -67,6 +67,11 @@ public sealed class ServiceLink : IDisposable
     public void SetMode(string mode) => Send(new JsonObject { ["do"] = "mode", ["mode"] = mode });
     public void SetAggregate(bool on) => Send(new JsonObject { ["do"] = "aggregate", ["on"] = on });
     public void SetFastUnlock(bool on) => Send(new JsonObject { ["do"] = "fast-unlock", ["on"] = on });
+    /// <summary>Asks for the card list and models (answered with a "cards" event).</summary>
+    public void RequestCards() => Send(new JsonObject { ["do"] = "cards" });
+    /// <summary>Runs `hardwareId` as `model`; "" and "" go back to automatic.</summary>
+    public void SetManualCard(string hardwareId, string model) =>
+        Send(new JsonObject { ["do"] = "card-manual", ["hw"] = hardwareId, ["model"] = model });
 
     public void Dispose() => _cts.Cancel();
 }

@@ -57,28 +57,31 @@ Other AX201 laptops should behave the same, since the chip and firmware are iden
 
 ## Supported hardware
 
-nekodrop talks to the Wi-Fi chip directly through modular backends (`CardCatalog` + `radio_backend.h`). Today's built-in driver supports Intel 22000/AX210-family cards (ported from [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)'s `hal_iwx`), with Realtek (`RTL8852CE` / `RTL8852BE`) and MediaTek (`MT7921` / `MT7922`) multi-vendor backends actively being integrated as native built-in support.
+nekodrop talks to the Wi-Fi chip directly through modular backends (`CardCatalog` + `radio_backend.h`). Today's built-in radios support Intel 22000/AX210-family cards (`nekodrop-radio.exe`, ported from [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)'s `hal_iwx`, concurrent Wi-Fi + AirDrop or on-demand) and **Realtek RTL8852CE** (`10EC:C852`, `nekodrop-radio-rtl.exe`, built from [winawdl](https://github.com/raph559/winawdl)/[devourer](https://github.com/raph559/devourer), on-demand mode — compiled and offline-tested in CI, awaiting real-hardware confirmation inside nekodrop). All 15 Intel cards keep 100% unchanged default concurrent and on-demand behavior.
 
 **Full multi-vendor compatibility matrix (Intel / Realtek / MediaTek / Qualcomm): [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)** · **Release history: [CHANGELOG.md](CHANGELOG.md)** · **Driver architecture: [docs/HARDWARE.md](docs/HARDWARE.md)**
 
-Quick summary of currently active Intel cards:
+Quick summary of currently active cards:
 
-| Card | PCI IDs (`8086:`) | Firmware | Status |
+| Card | PCI IDs | Firmware / Backend | Status |
 |---|---|---|---|
-| **Intel Wi-Fi 6 AX201** 160 MHz (CNVi) | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | ✅ **tested** (QuZ on `43F0`) |
-| Intel Wireless-AC 9560 / 9462 / 9461 on Qu/QuZ (CNVi) | same IDs as AX201 | `Qu/QuZ-jf-b0-68` | ⚠️ untested |
-| Intel Wi-Fi 6 AX200 (discrete) | `2723` | `cc-a0-68` | ✅ two-way AirDrop in user reports ([#1](../../issues/1), [#4](../../issues/4)) |
-| Intel Wi-Fi 6E AX210 (discrete) | `2725` | `ty-a0-gf-a0-68` + PNVM | ✅ two-way AirDrop in user reports ([#14](../../issues/14), [#18](../../issues/18)); some machines still being fixed ([#11](../../issues/11)) |
-| Intel Wi-Fi 6E AX211 (CNVi, 12th gen+) | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM | ✅ two-way AirDrop in a user report ([#9](../../issues/9)); discovery not yet reliable on every machine ([#16](../../issues/16)) |
-| Intel Wi-Fi 6E AX411 / Killer AX1690 (CNVi) | same IDs as AX211 | `so-a0-gf4-a0-68` + PNVM | ⚠️ untested ([#7](../../issues/7)) |
-| Intel Wi-Fi 6 AX203 / 9560 on So | same IDs as AX211 | `so-a0-hr/jf-b0-68` | ⚠️ untested |
-| Intel SnJ `2726`, QnJ `2720`, Meteor Lake `7E40`/`2729` | | not shipped upstream | ❌ |
-| Intel BE200 / BE201 (Wi-Fi 7) | | no upstream driver | ❌ |
-| Realtek, MediaTek, Qualcomm, Broadcom | | | ❌ |
+| **Intel Wi-Fi 6 AX201** 160 MHz (CNVi) | `8086:` `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` (`iwx`, Concurrent & On-Demand) | ✅ **tested** (QuZ on `43F0`) |
+| Intel Wireless-AC 9560 / 9462 / 9461 on Qu/QuZ (CNVi) | same IDs as AX201 | `Qu/QuZ-jf-b0-68` (`iwx`, Concurrent & On-Demand) | ⚠️ untested |
+| Intel Wi-Fi 6 AX200 (discrete) | `8086:2723` | `cc-a0-68` (`iwx`, Concurrent & On-Demand) | ✅ two-way AirDrop in user reports ([#1](../../issues/1), [#4](../../issues/4)) |
+| Intel Wi-Fi 6E AX210 (discrete) | `8086:2725` | `ty-a0-gf-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | ✅ two-way AirDrop in user reports ([#14](../../issues/14), [#18](../../issues/18)); some machines still being fixed ([#11](../../issues/11)) |
+| Intel Wi-Fi 6E AX211 (CNVi, 12th gen+) | `8086:` `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | ✅ two-way AirDrop in a user report ([#9](../../issues/9)); discovery not yet reliable on every machine ([#16](../../issues/16)) |
+| Intel Wi-Fi 6E AX411 / Killer AX1690 (CNVi) | same IDs as AX211 | `so-a0-gf4-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | ⚠️ untested ([#7](../../issues/7)) |
+| Intel Wi-Fi 6 AX203 / 9560 on So | same IDs as AX211 | `so-a0-hr/jf-b0-68` (`iwx`, Concurrent & On-Demand) | ⚠️ untested |
+| **Realtek RTL8852CE** | `10EC:C852` | embedded (`devourer`, On-Demand only) | ⚠️ built-in, CI-compiled & offline-tested, untested inside nekodrop |
+| Intel SnJ `2726`, QnJ `2720`, Meteor Lake `7E40`/`2729` | `8086:` | not shipped upstream | ❌ |
+| Intel BE200 / BE201 (Wi-Fi 7) | `8086:` | no upstream driver | ❌ |
+| Other Realtek, MediaTek, Qualcomm, Broadcom | | | ❌ |
 
-To check your card: *Device Manager → Network adapters*. On a PC without a supported Intel card, the installer refuses and lists each detected wireless card, its PCI/USB ID, why nekodrop does not run on it (pointing **Realtek RTL8852CE** `10EC:C852` owners to upstream [winawdl](https://github.com/raph559/winawdl)), and how to run `installer/report.ps1`. On an untested Intel card nekodrop may fail to start the firmware; if it does, the card stays usable: run **restore** (below) and please report the log in an [issue](../../issues).
+To check your card: *Device Manager → Network adapters*. On a PC without a supported Wi-Fi card, the installer refuses and lists each detected wireless card, its PCI/USB ID, why nekodrop does not run on it, and how to run `installer/report.ps1`. On an untested card (including the built-in Realtek RTL8852CE backend), nekodrop may fail to start the radio; if it does, the card stays usable: run **restore** (below) and please report the log in an [issue](../../issues).
 
-Not sure which card you have, or want another card supported? The [diagnostic report](#reporting-a-problem-the-diagnostic-report) works without nekodrop installed: download [`installer/report.ps1`](installer/report.ps1) and run `powershell -ExecutionPolicy Bypass -File report.ps1`. It lists every wireless card with its PCI ID, chip, driver and why nekodrop does or does not run on it; please post it in an [issue](../../issues). With a **Realtek RTL8852CE** (`10EC:C852`) you can use upstream [winawdl](https://github.com/raph559/winawdl) today (AirDrop only, no Wi-Fi at the same time). On an installed nekodrop, `NekoDropService.exe --status` prints the matched card profile, capabilities and bound driver provider, and `NekoDropService.exe --selftest` runs offline catalog checks without a card or administrator rights (the RTL8852CE entry in the service catalog is inactive and does not enable Realtek support yet). The radio logs one `backend …` line at start with what its driver can do (Wi-Fi station, firmware scan, A-MPDU sending…), and its offline self-test `iwx_selftest` checks that capability contract on every build, including a stand-in for a future station-less Realtek backend; `install.ps1 -SelfTest`, `restore.ps1 -SelfTest` and `report.ps1 -SelfTest` likewise run offline under Windows PowerShell 5.1 on every build. None of this changes Intel default behaviour or enables Realtek support yet. What other cards would take: [docs/HARDWARE.md](docs/HARDWARE.md).
+Cards are recognized by their PCI ID. When yours is not, *Settings > Wi-Fi card* lets you pick the card and its model by hand (for hardware IDs the driver package lists). To add a new card family to nekodrop, see [docs/ADDING-A-CARD.md](docs/ADDING-A-CARD.md).
+
+Not sure which card you have, or want another card supported? The [diagnostic report](#reporting-a-problem-the-diagnostic-report) works without nekodrop installed: download [`installer/report.ps1`](installer/report.ps1) and run `powershell -ExecutionPolicy Bypass -File report.ps1`. It lists every wireless card with its PCI ID, chip, driver and why nekodrop does or does not run on it; please post it in an [issue](../../issues). On an installed nekodrop, `NekoDropService.exe --status` prints the matched card profile, capabilities and bound driver provider, and `NekoDropService.exe --selftest` runs offline catalog and radio-launch checks across all 16 active profiles (15 Intel + Realtek RTL8852CE) without a card or administrator rights. Intel's radio logs one `backend …` line at start and runs `iwx_selftest` on every build; the Realtek radio build runs its own offline unit tests (`block_ack_test`, `reorder_buffer_test`, `outgoing_session_test`, `dma_address_test`) on every build; `install.ps1 -SelfTest`, `restore.ps1 -SelfTest` and `report.ps1 -SelfTest` likewise run offline under Windows PowerShell 5.1 on every build. Intel cards keep 100% unchanged default concurrent and on-demand behavior. What other cards would take: [docs/HARDWARE.md](docs/HARDWARE.md).
 
 ### Something went wrong? One-click restore
 
@@ -106,7 +109,7 @@ Logs are what let us fix things, especially on cards we don't have. Please attac
 ## Requirements
 
 - Windows 10 2004 (build 19041) or later, x64 (Windows 10 22H2 confirmed working in 0.1.16+, [#18](../../issues/18)).
-- A supported Intel Wi-Fi card (see above).
+- A supported Wi-Fi card: Intel Wi-Fi 6/6E (Concurrent & On-Demand) or Realtek RTL8852CE `10EC:C852` (built-in On-Demand, untested inside nekodrop; see above).
 - Administrator rights to install.
 - Bluetooth, for sending: AirDrop wakes nearby Apple devices with a Bluetooth LE beacon.
 - On the Apple side, AirDrop set to **Everyone for 10 Minutes**. *Contacts Only* needs an Apple ID certificate nekodrop doesn't have.
@@ -250,14 +253,15 @@ Design notes: [docs/DESIGN.md](docs/DESIGN.md) (driver, DMA, risks) · [docs/CLI
 
 ## Building from source
 
-Needs Visual Studio 2022 Build Tools (C++, Windows SDK, CMake), the .NET 8 SDK and Git. Inno Setup 6 is optional (without it you get a zip). No WDK install is needed: the NuGet package is used.
+Needs Visual Studio 2022 Build Tools (C++, Windows SDK, CMake, vcpkg), the .NET 8 SDK and Git. Inno Setup 6 is optional (without it you get a zip). No WDK install is needed: the NuGet package is used.
 
 ```powershell
 git clone https://github.com/zheznanohana/nekodrop.git
 cd nekodrop
-.\scripts\fetch-deps.ps1        # winawdl, ForbiddenItlwm (firmware), MinGW, WDK NuGet → third_party\
+.\scripts\fetch-deps.ps1        # winawdl, devourer, ForbiddenItlwm (firmware), MinGW, WDK NuGet → third_party\
 .\scripts\build-installer.ps1   # everything → build\nekodrop-0.1.8-setup.exe
-.\scripts\build-radio.ps1       # just the user-mode driver, plus its offline self-tests
+.\scripts\build-radio.ps1       # just the Intel user-mode driver, plus its offline self-tests
+.\scripts\build-radio-rtl.ps1   # just the Realtek RTL8852CE radio (devourer), plus its offline unit tests
 ```
 
 | Folder | What |
@@ -295,7 +299,8 @@ nekodrop is built on other open-source projects. This section says exactly what 
 |---|---|---|---|
 | [retropineaple/ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 0.6.0 (itlwm fork, macOS) | GPL-2.0 | The Intel 22000-series driver `hal_iwx`: firmware loading, TLV parsing, context info, TX/RX rings, firmware commands, the register header `if_iwxreg.h`. Its AWDL strategies too: channel following (the 44/149 min rule, country-code learning), receive Block Ack, promiscuous off during BA, rate stepping, host-side unicast resend, beacon hints | `iwxradio/`, ported from kernel C to a user-mode C++ driver |
 | ForbiddenItlwm's firmware folder | Intel redistribution license | iwlwifi firmware `iwlwifi-Qu*-hr-b0-68.ucode` | shipped in `radio\firmware\` |
-| [raph559/winawdl](https://github.com/raph559/winawdl) | MIT | The way to take over a PCIe Wi-Fi card from user mode on Windows: the UMDF register-proxy driver (originally for Realtek RTL8852CE) and user-mode DMA; the radio pipe protocol | `driver/regproxy/` (adapted to the AX201's PCI IDs), `iwxradio/` (pipe and DMA) |
+| [raph559/winawdl](https://github.com/raph559/winawdl) | MIT / GPL-2.0 (`radio/`) | The way to take over a PCIe Wi-Fi card from user mode on Windows: the UMDF register-proxy driver, user-mode DMA, the radio pipe protocol, and the RTL8852CE radio daemon (`radio/`) | `driver/regproxy/` (Intel + RTL8852CE PCI IDs), `iwxradio/` (pipe and DMA), `radio\nekodrop-radio-rtl.exe` |
+| [raph559/devourer](https://github.com/raph559/devourer) (`winawdl/pcie-windows`) | GPL-2.0 | Realtek RTL8852CE user-mode PCIe driver (`KESTREL_8852C`, embedded firmware and A-MPDU stack) | built into `radio\nekodrop-radio-rtl.exe` (`licenses\devourer-GPL-2.0.txt`) |
 | winawdl `awdl/` (`awdld`) | GPL-3.0-or-later (builds on OWL) | The AWDL daemon: OWL's protocol core with a Windows I/O layer and Wintun | built from source, shipped as `awdl\awdld.exe` |
 | winawdl `airdrop/` | MIT | The AirDrop engine in Python: mDNS, the HTTPS receiver, the sender, the BLE beacon | shipped as `airdrop\` with two small patches (`scripts/patch-engine.py`: stable instance name, spare ports) |
 | [seemoo-lab/owl](https://github.com/seemoo-lab/owl) | GPL-3.0 | The AWDL implementation inside `awdld` | through winawdl |
@@ -331,6 +336,7 @@ nekodrop as a whole is **GPL-2.0** (see [LICENSE](LICENSE)), because `iwxradio/`
 
 - `if_iwxreg.h`: dual BSD/GPL-2.0.
 - `driver/regproxy` and the AirDrop engine: keep winawdl's MIT license.
+- `nekodrop-radio-rtl.exe` (`raph559/winawdl` `radio/` + `raph559/devourer`): GPL-2.0 (`licenses\devourer-GPL-2.0.txt`).
 - `awdld`: GPL-3.0-or-later, from winawdl/OWL. It is a separate program talking over a pipe.
 - iwlwifi firmware: Intel's redistribution license (`licenses\iwlwifi-firmware.txt`).
 - Wintun and TAP-Windows: their own licenses.

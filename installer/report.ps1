@@ -49,9 +49,9 @@ $WifiChips = @{
   '8086:E440' = @('intel-be', 'Intel Wi-Fi 7 (CNVi)')
   '8086:E340' = @('intel-be', 'Intel Wi-Fi 7 (CNVi)')
   '8086:D340' = @('intel-be', 'Intel Wi-Fi 7 (CNVi)')
-  # Realtek (Linux rtw88/rtw89 device IDs). The RTL8852CE is the one winawdl,
-  # which driver/regproxy was adapted from, drives in user mode.
-  '10EC:C852' = @('rtl-winawdl', 'Realtek RTL8852CE')
+  # Realtek (Linux rtw88/rtw89 device IDs). RTL8852CE is natively supported
+  # via nekodrop's built-in devourer backend (on-demand AirDrop).
+  '10EC:C852' = @('supported-rtl', 'Realtek RTL8852CE')
   '10EC:8852' = @('rtl', 'Realtek RTL8852AE')
   '10EC:A85A' = @('rtl', 'Realtek RTL8852AE')
   '10EC:B852' = @('rtl', 'Realtek RTL8852BE')
@@ -95,17 +95,17 @@ $WifiChips = @{
 }
 # kind -> what the report says, and a hint for the reader (may be empty).
 $WifiKinds = @{
-  'supported'   = @('supported by nekodrop', '')
-  'intel-fw'    = @('not supported: its firmware is not shipped upstream', 'nekodrop runs the Intel cards whose firmware ForbiddenItlwm ships (API 68); this one has none there.')
-  'intel-be'    = @('not supported: Intel Wi-Fi 7, no upstream driver', 'ForbiddenItlwm, which nekodrop ports, has no driver for Wi-Fi 7 cards yet.')
-  'intel-other' = @('not supported: an Intel device ID nekodrop does not know', 'Please post this report in an issue: if upstream ships firmware for this card, its ID can be added.')
-  'rtl-winawdl' = @('not supported by nekodrop; upstream winawdl drives it (AirDrop only, no Wi-Fi at the same time)', 'The first candidate for Realtek support in nekodrop; see docs/HARDWARE.md.')
-  'rtl'         = @('not supported: Realtek', 'The only Realtek chip with a user-mode Windows driver so far is the RTL8852CE (10EC:C852, in winawdl).')
-  'mtk'         = @('not supported: MediaTek', 'No user-mode Windows driver exists for MediaTek Wi-Fi yet.')
-  'qcom'        = @('not supported: Qualcomm', 'No user-mode Windows driver exists for Qualcomm Wi-Fi yet.')
-  'bcm'         = @('not supported: Broadcom', 'There is no open Windows driver path for Broadcom Wi-Fi.')
-  'usb'         = @('not supported: USB adapter', 'nekodrop drives PCIe cards only.')
-  'other'       = @('not supported: unrecognized wireless adapter', '')
+  'supported'     = @('supported by nekodrop', '')
+  'supported-rtl' = @('supported by nekodrop (on-demand AirDrop, built-in RTL8852CE backend)', 'Windows keeps Wi-Fi normally; nekodrop takes the card only during AirDrop transfers.')
+  'intel-fw'      = @('not supported: its firmware is not shipped upstream', 'nekodrop runs the Intel cards whose firmware ForbiddenItlwm ships (API 68); this one has none there.')
+  'intel-be'      = @('not supported: Intel Wi-Fi 7, no upstream driver', 'ForbiddenItlwm, which nekodrop ports, has no driver for Wi-Fi 7 cards yet.')
+  'intel-other'   = @('not supported: an Intel device ID nekodrop does not know', 'Please post this report in an issue: if upstream ships firmware for this card, its ID can be added.')
+  'rtl'           = @('not supported: Realtek', 'Among Realtek chips, nekodrop currently has built-in support for RTL8852CE (10EC:C852) only.')
+  'mtk'           = @('not supported: MediaTek', 'No user-mode Windows driver exists for MediaTek Wi-Fi yet.')
+  'qcom'          = @('not supported: Qualcomm', 'No user-mode Windows driver exists for Qualcomm Wi-Fi yet.')
+  'bcm'           = @('not supported: Broadcom', 'There is no open Windows driver path for Broadcom Wi-Fi.')
+  'usb'           = @('not supported: USB adapter', 'nekodrop drives PCIe cards only.')
+  'other'         = @('not supported: unrecognized wireless adapter', '')
 }
 $WifiVendors = @{ '8086' = 'Intel'; '10EC' = 'Realtek'; '14C3' = 'MediaTek'; '17CB' = 'Qualcomm'; '168C' = 'Qualcomm Atheros'; '14E4' = 'Broadcom'
                   '0BDA' = 'Realtek'; '0E8D' = 'MediaTek'; '148F' = 'MediaTek (Ralink)'; '0CF3' = 'Qualcomm Atheros'; '8087' = 'Intel' }
@@ -115,8 +115,8 @@ function Classify-WifiCard([string]$InstanceId, [string]$FriendlyName = '') {
   $parts = $id -split '\\'
   $bus = $parts[0]
   $vendor = ''; $device = ''
-  if ($id -match '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})') { $vendor = $Matches[1]; $device = $Matches[2] }
-  elseif ($id -match '^USB\\VID_([0-9A-F]{4})&PID_([0-9A-F]{4})') { $vendor = $Matches[1]; $device = $Matches[2] }
+  if ($id -match '^PCI\\VEN_([0-9A-F]{4})&DEV_([0-9A-F]{4})(?:&|\\|$)') { $vendor = $Matches[1]; $device = $Matches[2] }
+  elseif ($id -match '^USB\\VID_([0-9A-F]{4})&PID_([0-9A-F]{4})(?:&|\\|$)') { $vendor = $Matches[1]; $device = $Matches[2] }
   $kind = 'other'; $chip = ''
   if ($bus -eq 'USB') { $kind = 'usb' }
   elseif ($bus -eq 'PCI' -and $vendor) {
@@ -226,8 +226,8 @@ if ($SelfTest) {
     @('PCI\VEN_8086&DEV_2726&SUBSYS_00248086', 'intel-fw', 'Intel SnJ'),
     @('PCI\VEN_8086&DEV_272B&SUBSYS_00F48086&REV_1A\4&1', 'intel-be', 'Intel BE200 (Wi-Fi 7)'),
     @('PCI\VEN_8086&DEV_1234&SUBSYS_00008086\4&1', 'intel-other', 'Intel 1234 (not in nekodrop''s table)'),
-    @('PCI\VEN_10EC&DEV_C852&SUBSYS_C85210EC&REV_00\4&1&0&00E8', 'rtl-winawdl', 'Realtek RTL8852CE'),
-    @('pci\ven_10ec&dev_c852&subsys_c85210ec', 'rtl-winawdl', 'Realtek RTL8852CE'),
+    @('PCI\VEN_10EC&DEV_C852&SUBSYS_C85210EC&REV_00\4&1&0&00E8', 'supported-rtl', 'Realtek RTL8852CE'),
+    @('pci\ven_10ec&dev_c852&subsys_c85210ec', 'supported-rtl', 'Realtek RTL8852CE'),
     @('PCI\VEN_10EC&DEV_B852&SUBSYS_B85217AA\4&1', 'rtl', 'Realtek RTL8852BE'),
     @('PCI\VEN_10EC&DEV_ABCD&SUBSYS_000010EC', 'rtl', 'Realtek ABCD (not in nekodrop''s table)'),
     @('PCI\VEN_14C3&DEV_7922&SUBSYS_7922103C\4&1', 'mtk', 'MediaTek MT7922'),
@@ -246,6 +246,8 @@ if ($SelfTest) {
   }
   if ((Classify-WifiCard 'PCI\VEN_10EC&DEV_C852&SUBSYS_1\4&1' 'Realtek 8852CE').HardwareId -ne 'VEN_10EC&DEV_C852&SUBSYS_1') { $fail += 'hardware ID not split from the instance path' }
   if ((Classify-WifiCard 'PCI\VEN_10EC&DEV_C852').Family -ne 'Realtek RTL8852CE') { $fail += 'Family alias mismatch' }
+  $rtlCard = Classify-WifiCard 'PCI\VEN_10EC&DEV_C852&SUBSYS_C85210EC&REV_00\4&1&0&00E8'
+  if ($rtlCard.Status -notmatch 'on-demand' -or $rtlCard.Status -notmatch 'RTL8852CE') { $fail += "10EC:C852 status missing on-demand/RTL8852CE: $($rtlCard.Status)" }
   foreach ($d in $SupportedIntelIds) {
     if ((Classify-WifiCard "PCI\VEN_8086&DEV_$d").Kind -ne 'supported') { $fail += "8086:$d not supported" }
   }
@@ -420,11 +422,11 @@ $svcStart = Try-Get { (Get-CimInstance Win32_Service -Filter "Name='NekoDropServ
 $exe = Join-Path $app 'NekoDropService.exe'
 $version = Try-Get { (Get-Item $exe).VersionInfo.ProductVersion }
 $config = Try-Get { Get-Content (Join-Path $state 'service.json') -Raw | ConvertFrom-Json }
-$ids = $SupportedIntelIds -join '|'
+$SupportedCardPattern = '^PCI\\(?:VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')|VEN_10EC&DEV_C852)(?=&|\\|$)'
 # Every present device once: the supported card and the other wireless cards
 # below both come from it.
 $pnpAll = @(Try-Get { Get-PnpDevice -PresentOnly } | Where-Object { $_ })
-$card = $pnpAll | Where-Object { $_.InstanceId -match "PCI\\VEN_8086&DEV_($ids)" } | Select-Object -First 1
+$card = $pnpAll | Where-Object { $_.InstanceId -match $SupportedCardPattern } | Select-Object -First 1
 # A device property as text ('' when missing); any device, not only $card, so
 # the report can show an unsupported card's driver too.
 function Dev-Prop([string]$instanceId, [string]$key) {
@@ -480,7 +482,7 @@ function Wireless-Summary($dev) {
   $hw = if ($c.Bus -and $c.HardwareId -and $c.HardwareId -ne $c.Bus) { "$($c.Bus)\$($c.HardwareId)" } else { $c.HardwareId }
   return "$(Dev-Name $dev) (``$(Redact $hw)``): $($c.Chip), $($c.Status)"
 }
-$procs = @('nekodrop-radio', 'awdld', 'nekodrop', 'NekoDropService') | ForEach-Object {
+$procs = @('nekodrop-radio', 'nekodrop-radio-rtl', 'awdld', 'nekodrop', 'NekoDropService') | ForEach-Object {
   $p = Get-Process $_ -ErrorAction SilentlyContinue
   if ($p) { "$_ (running)" } else { "$_ (not running)" }
 }
@@ -526,8 +528,8 @@ W "- Windows: $(if ($os) { $os.Caption }) $(if ($cv) { $cv.DisplayVersion }) (bu
 W "- Service: $(if ($svc) { "$($svc.Status), start $svcStart" } else { 'not installed' }); mode $(if ($config) { $config.Mode } else { '?' })"
 # Without a supported card, say which card is there and why it is not (#16).
 $cardSummary = if ($card) { "$($card.FriendlyName) ($($card.InstanceId -replace '\\[^\\]+$', ''))" }
-  elseif ($otherWireless.Count) { "no supported Intel card found; detected $(Wireless-Summary $otherWireless[0])$(if ($otherWireless.Count -gt 1) { " (+$($otherWireless.Count - 1) more below)" })" }
-  else { 'no supported Intel card found' }
+  elseif ($otherWireless.Count) { "no supported Wi-Fi card found; detected $(Wireless-Summary $otherWireless[0])$(if ($otherWireless.Count -gt 1) { " (+$($otherWireless.Count - 1) more below)" })" }
+  else { 'no supported Wi-Fi card found' }
 W "- Card: $cardSummary"
 $lastErr = $serviceLog | Where-Object { $_ -match 'start failed|bring-up failed|keeps failing|taking the card failed|LMAC error|UMAC error|firmware error|refusing|cannot give' } | Select-Object -Last 1
 # The AirDrop engine's failures too (#4: "none in the log" beside send failures).
@@ -616,7 +618,7 @@ if ($card) {
   # The NTSTATUS behind a problem code (#18: code 31 with 0xC0000494 on Windows 10).
   $problemStatus = Card-Prop 'DEVPKEY_Device_ProblemStatus'
   if ($problemStatus) { W ("- Problem status: 0x{0:X8}" -f ([int64]$problemStatus -band 0xFFFFFFFF)) }
-  W "- Intel driver to give it back to: $(if ($config -and $config.VendorInf) { Split-Path $config.VendorInf -Leaf } else { 'not recorded' })"
+  W "- Vendor driver to give it back to: $(if ($config -and $config.VendorInf) { Split-Path $config.VendorInf -Leaf } else { 'not recorded' })"
   # Windows' own record of the card's driver installs and start failures.
   $devId = ($card.InstanceId -split '\\')[1] -replace '&SUBSYS.*$', ''
   $pnp = @(Try-Get { Get-WinEvent -LogName 'Microsoft-Windows-Kernel-PnP/Configuration' -MaxEvents 400 -ErrorAction Stop |
@@ -673,7 +675,7 @@ if ($card) {
   # card) can confuse which one Windows uses for its own Wi-Fi.
   $otherWireless | ForEach-Object { W "- Additional wireless device: $(Wireless-Summary $_)" }
 } else {
-  W 'No Intel Wi-Fi card nekodrop supports is present.'
+  W 'No Wi-Fi card nekodrop supports is present.'
   # Each wireless card that is there, with what it is and its driver, so a
   # report tells an unlisted ID from a card nekodrop cannot drive (#16).
   foreach ($o in $otherWireless) {

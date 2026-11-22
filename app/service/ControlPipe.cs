@@ -71,6 +71,24 @@ public sealed class ControlPipe(Supervisor sup)
                         break;
                     case "aggregate": sup.SetAggregate((bool?)cmd?["on"] ?? false); break;
                     case "fast-unlock": sup.SetFastUnlock((bool?)cmd?["on"] ?? false); break;
+                    case "cards":
+                    {
+                        // For the manual choice: the PCI network controllers and the models a card can be run as.
+                        var candidates = new JsonArray();
+                        foreach (var c in Card.Candidates())
+                            candidates.Add(new JsonObject { ["hw"] = c.HardwareId, ["name"] = c.Name, ["recognized"] = c.Recognized });
+                        var models = new JsonArray();
+                        foreach (var m in CardCatalog.ManualModels)
+                            models.Add(new JsonObject { ["key"] = m.Key, ["name"] = m.Name, ["vendor"] = m.VendorId });
+                        await Send(writer, new JsonObject { ["event"] = "cards", ["candidates"] = candidates, ["models"] = models });
+                        break;
+                    }
+                    case "card-manual":
+                    {
+                        var why = sup.SetManualCard((string?)cmd?["hw"] ?? "", (string?)cmd?["model"] ?? "");
+                        await Send(writer, new JsonObject { ["event"] = "card-manual", ["error"] = why });
+                        break;
+                    }
                     case "wifi-scan": sup.WifiScan((string?)cmd?["ssid"]); break;
                     case "wifi-connect":
                     {

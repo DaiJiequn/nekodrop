@@ -32,7 +32,7 @@ a card or administrator rights.
 | Intel QnJ, SnJ, Meteor Lake (Ma) | `8086:2720` `2726` `2729` `7E40` | depends on upstream | `iwxradio/src/cards.h` knows them, but ForbiddenItlwm ships no firmware for them (QuQnj API 48, SoSnj and Ma API 63). `8086:7E40` is often sold as "AX211". |
 | Intel Wi-Fi 7: BE200, BE201/BE211 | `8086:272B` `A840` `7740` `E440` … | depends on upstream | ForbiddenItlwm has no Wi-Fi 7 driver. |
 | Another Intel device ID | `8086:*` | maybe easy | If upstream has firmware for it, adding the ID to `cards.h`, `CardCatalog.cs`, the register proxy's INF and `install.ps1` may be all. The report says *an Intel device ID nekodrop does not know*: please post it. |
-| **Realtek RTL8852CE** | `10EC:C852` | **the most feasible** | See below. |
+| **Realtek RTL8852CE** | `10EC:C852` | **built-in (on-demand)** | Native dual-binary backend (`nekodrop-radio-rtl.exe`, from winawdl/devourer) is built and offline-tested in CI; awaiting real-hardware confirmation inside nekodrop. See below. |
 | Other Realtek (RTL8852AE/BE, RTL8851BE, RTL8922AE, RTL8821CE/8822CE…) | `10EC:*` | low | No user-mode Windows driver; winawdl's devourer is built only for the 8852C on Windows. |
 | MediaTek MT7921/7922/7925/7927/7902, AMD RZ608/616/717 | `14C3:*` | low (long project) | No user-mode Windows driver exists. Would be a port of Linux `mt76` (registers, DMA, firmware, power) with nobody here owning the hardware. |
 | Qualcomm (FastConnect 6800/6900/7800), Atheros | `17CB:*` `168C:*` | low | No user-mode Windows driver path. |
@@ -49,51 +49,59 @@ branch. Its register proxy's INF matches only `PCI\VEN_10EC&DEV_C852`, and its
 radio build turns on only devourer's `KESTREL_8852C`. RTL8852CE owners can use
 winawdl today: AirDrop only, with no Wi-Fi connection while it has the card.
 
-Bringing it into nekodrop is several high-risk changes at once:
+nekodrop now ships RTL8852CE support **built-in** (not hidden behind an
+off-by-default experimental switch) using a modular dual-binary dispatch:
+Intel cards keep `radio\nekodrop-radio.exe` with 100% unchanged flags and
+behavior, while RTL8852CE runs `radio\nekodrop-radio-rtl.exe` (winawdl's
+`winawdl_radio.exe` backed by `raph559/devourer`, speaking the exact same
+`\\.\pipe\winawdl-radio` v3 protocol and `regproxy_ioctl.h` v2 interface):
 
-1. **Register window.** nekodrop's register proxy maps the first memory BAR of
-   at least 8 KiB (`MIN_BAR_LEN 0x2000`, Intel's CSR window). The 8852CE's
-   registers are its 1 MiB BAR2, which winawdl found with a 64 KiB minimum.
-   The proxy would need to pick the BAR by device, and its INF would gain a
-   Realtek ID while the Windows 10 INF fix (#18, #12) still awaits
-   confirmation.
-2. **Build.** devourer is a git submodule built with CMake and a vcpkg
-   manifest; `scripts/fetch-deps.ps1`, `scripts/build-installer.ps1` and CI
-   would need it.
+1. **Register window.** `driver/regproxy/regproxy.c` picks the largest
+   memory BAR of at least 8 KiB (`MIN_BAR_LEN 0x2000`), covering both Intel's
+   8 KiB BAR0 and the 8852CE's 1 MiB BAR2, and `winawdl_regproxy.inf` lists
+   the generic `PCI\VEN_10EC&DEV_C852` ID (no `SUBSYS`, so it never takes over
+   the card on install).
+2. **Build.** `scripts/fetch-deps.ps1` pins `raph559/devourer` under
+   `third_party\winawdl\upstream\devourer`; `scripts/build-radio-rtl.ps1`
+   locates vcpkg across local and CI layouts, builds `winawdl_radio.exe`
+   statically (`/MT`, `x64-windows-static`) and runs its four offline unit
+   tests (`block_ack_test`, `reorder_buffer_test`, `outgoing_session_test`,
+   `dma_address_test`); `scripts/build-installer.ps1` stages it as
+   `radio\nekodrop-radio-rtl.exe` alongside `licenses\devourer-GPL-2.0.txt`.
 3. **Wi-Fi beside AirDrop.** devourer only monitors and injects; it has no
-   station. nekodrop's default *together* mode (`NetMode.Concurrent`) cannot
-   work, so an RTL8852CE would have to be locked to *on demand*. The service
-   already does this from the card's profile (see below); the user's saved
-   mode stays as chosen.
-4. **Taking and giving back the card.** The service (`CardCatalog.cs`) and
-   standalone rollback (`installer/restore.ps1`) no longer assume Intel:
-   `restore.ps1` matches either a device currently bound to nekodrop's proxy or
-   a known catalog ID, validates recorded `VendorInf` paths against poisoned
-   proxy INFs (#12), and picks driver-store fallbacks by PCI vendor.
-   `installer/install.ps1` still allows only the 15 active Intel IDs, and
-   refuses unsupported wireless cards with the same classification as
-   `report.ps1` (including an upstream `winawdl` pointer for `10EC:C852`).
-   `install.ps1 -SelfTest`, `restore.ps1 -SelfTest`, and `report.ps1 -SelfTest`
-   run offline under Windows PowerShell 5.1 in `scripts/build-installer.ps1`.
+   station. `CardCatalog.EffectiveMode` automatically downgrades
+   `NetMode.Concurrent` to `NetMode.OnDemand` from the card's profile, while
+   preserving the user's saved mode setting.
+4. **Taking, launching and giving back the card.** `CardCatalog.cs` marks
+   `10EC:C852` active (`RadioBackendKind.Devourer`) and provides
+   `BuildRadioLaunch`, which strips Intel-only CLI flags when spawning
+   `nekodrop-radio-rtl.exe`. `installer/install.ps1` and `installer/report.ps1`
+   classify `10EC:C852` as `supported-rtl`, and `install.ps1`, `restore.ps1`,
+   `uninstall.ps1` and `report.ps1` all include `nekodrop-radio-rtl`. All
+   three scripts' `-SelfTest` suites run offline under Windows PowerShell 5.1
+   in `scripts/build-installer.ps1`.
 
 ### The service's card catalog
 
 `app/service/CardCatalog.cs` is the service's one list of cards. Each
 `AdapterProfile` holds the PCI vendor and device ID, the vendor's name, the
-radio that drives it (`Iwx` today, `Devourer` for the RTL8852CE), its
+radio that drives it (`Iwx` for Intel, `Devourer` for Realtek RTL8852CE), its
 `AdapterCapabilities` (Wi-Fi beside AirDrop, faster sending, A-MPDU sending,
 nekodrop-wlan.sys, the smallest register BAR), the register proxy's INF,
 service and provider, and the provider names of the vendor's own driver.
 `Card.cs` takes only *active* profiles; `Supervisor.cs` runs the mode the
 card can run (`CardCatalog.EffectiveMode`: *together* becomes *on demand*
-without a station) and passes only the radio options the card has. The 15
-Intel profiles have every capability, so nothing changes for them.
+without a station) and uses `CardCatalog.BuildRadioLaunch` to select
+`nekodrop-radio.exe` or `nekodrop-radio-rtl.exe` with only the options that
+backend accepts. The 15 Intel profiles have every capability, so nothing
+changes for them.
 
-The RTL8852CE is listed but not active: it is never taken. It is there so
+All 16 profiles (15 Intel + Realtek RTL8852CE `10EC:C852`) are active.
 `NekoDropService.exe --selftest` (run by `scripts/build-installer.ps1`, so on
-every CI build) checks the multi-vendor parsing, the forced *on demand* and
-the provider matching without a card or administrator rights.
-`NekoDropService.exe --status` prints the profile of the card it finds.
+every CI build) checks the multi-vendor parsing, the forced *on demand* mode,
+provider matching and `BuildRadioLaunch` across both `Iwx` and `Devourer`
+without a card or administrator rights. `NekoDropService.exe --status` prints
+the profile of the card it finds.
 
 ### The radio's backend contract
 
@@ -153,16 +161,19 @@ the RX and TX-status handlers, `poll`, `check_health`, `healthy`,
    PCI/USB ID, why nekodrop does not run on it, an upstream `winawdl` pointer
    for an RTL8852CE (`10EC:C852`), and `installer/report.ps1` guidance, in pure
    ASCII for Inno Setup's error box, checked offline by `install.ps1 -SelfTest`.
-5. **Experimental RTL8852CE.** `restore.ps1` is already standalone and
-   vendor-agnostic (checked offline by `restore.ps1 -SelfTest`). What remains
-   is register proxy BAR selection by device, devourer build integration, and
-   winawdl's RTL8852CE support behind an experimental switch, off by default
-   (its profile becomes active only with the switch on), forced to *on demand*
-   by its profile, as a radio backend declaring the capabilities in the table
-   above.
+5. **Built-in RTL8852CE (done, awaiting real-hardware confirmation inside nekodrop).**
+   `regproxy.c` selects the largest memory BAR (`>= 8 KiB`), `winawdl_regproxy.inf`
+   adds generic `PCI\VEN_10EC&DEV_C852`, `build-radio-rtl.ps1` builds and tests
+   winawdl/devourer's `nekodrop-radio-rtl.exe`, `CardCatalog.cs` activates
+   `10EC:C852` as a native built-in backend (not behind an off-by-default
+   experimental switch) automatically downgraded to *on demand*, and
+   `install.ps1`, `report.ps1`, `restore.ps1`, and `uninstall.ps1` all support
+   it. Intel cards keep `nekodrop-radio.exe` and their exact existing behavior.
 
 When adding IDs, keep `AllProfiles` in `app/service/CardCatalog.cs`,
-`$SupportedIntelIds` in `installer/report.ps1`, `installer/install.ps1` and
-`installer/restore.ps1`, `kDeviceIds` in `iwxradio/src/cards.h`, and the
-register proxy's INF in step. The service and installer self-tests expect
-exactly the 15 Intel IDs: update their lists too.
+`$SupportedIntelIds` (and `$SupportedCardPattern`) in `installer/report.ps1`,
+`installer/install.ps1` and `installer/restore.ps1`, `kDeviceIds` in
+`iwxradio/src/cards.h`, and the register proxy's INF in step. The service
+self-test expects 16 active profiles (15 Intel + Realtek `10EC:C852`), and the
+installer self-tests keep the Intel ID table and multi-vendor classification
+tables in sync across scripts.

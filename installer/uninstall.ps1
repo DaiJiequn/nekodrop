@@ -1,5 +1,5 @@
 #Requires -RunAsAdministrator
-# Removes nekodrop: gives the Wi-Fi card back to Intel's driver first, then
+# Removes nekodrop: gives the Wi-Fi card back to its vendor driver first, then
 # removes the service, the driver package, the certificate trust, the firewall
 # rules, nekodrop's TAP adapter, settings and the files. Received files stay
 # where they were saved. Best effort: a step that fails is reported in
@@ -28,7 +28,7 @@ Try-Step 'Giving the Wi-Fi card back' {
   $root = [IO.Path]::GetFullPath($Target).TrimEnd('\') + '\'
   # Never by path under a drive root or a folder that is not nekodrop's.
   $byPath = $root.Length -gt 4 -and ((Test-Path (Join-Path $root 'NekoDropService.exe')) -or (Test-Path (Join-Path $root 'python\python.exe')))
-  @(Get-Process nekodrop, nekodrop-radio, awdld -ErrorAction SilentlyContinue) +
+  @(Get-Process nekodrop, nekodrop-radio, nekodrop-radio-rtl, awdld -ErrorAction SilentlyContinue) +
   @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
       try { $byPath -and $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } catch { $false } }) |
     Stop-Process -Force -ErrorAction SilentlyContinue

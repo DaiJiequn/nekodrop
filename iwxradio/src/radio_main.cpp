@@ -11,7 +11,7 @@
  * Usage: winawdl_radio <channel> [--width 20|40|80] [--country XX]
  *          [--mac-type listener|ibss|sta] [--firmware DIR]
  *          [--data-rate 6|12|24|36|48|54|MCS0..MCS15] [--verbose]
- *          [--tx-window N] [--aggregate] [--fast-unlock]
+ *          [--tx-window N] [--aggregate] [--fast-unlock] [--family qu|ax200|ax210|so]
  * winawdl's own options (--retries, --capture, --no-block-ack,
  * --no-aggregate, --no-quick-submit) are accepted and ignored.
  */
@@ -142,6 +142,10 @@ bool parse_options(int argc, char **argv, Options &o) {
     else if (a == "--no-block-ack") o.no_block_ack = true;
     else if (a == "--aggregate") o.aggregate = o.dev.aggregate = true;
     else if (a == "--fast-unlock") o.fast_unlock = true;
+    else if (a == "--family") {
+      o.dev.family_device = cards::family_device(value());
+      if (!o.dev.family_device) return false;
+    }
     else if (a == "--tx-window") {
       const int n = std::atoi(value().c_str());
       if (n < 1 || n > 64) return false;

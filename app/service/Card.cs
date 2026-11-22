@@ -30,8 +30,17 @@ public static class Card
     public sealed record Info(string InstanceId, string HardwareId, string Service, string InfPath,
                               AdapterProfile Profile, string Provider = "", uint Problem = 0);
 
+    /// <summary>The user's manual choice (Settings, "Wi-Fi card"): a PCI hardware ID and a CardCatalog.ManualModels key.</summary>
+    public static (string HardwareId, string Model) Manual { get; set; } = ("", "");
+
+    /// <summary>
+    /// The card to drive: a card the catalog recognizes by its ID first; when
+    /// there is none, the card the user matched to a model by hand.
+    /// </summary>
     public static Info? Find()
     {
+        Info? manual = null;
+        var (manualHw, manualModel) = Manual;
         var set = SetupDiGetClassDevsW(IntPtr.Zero, "PCI", IntPtr.Zero, DIGCF_PRESENT | DIGCF_ALLCLASSES);
         if (set == new IntPtr(-1)) return null;
         try
@@ -40,17 +49,69 @@ public static class Card
             for (uint i = 0; SetupDiEnumDeviceInfo(set, i, ref data); i++)
             {
                 var id = InstanceId(set, ref data);
-                // Only active profiles: a card listed for diagnostics (RTL8852CE) is never taken.
-                if (CardCatalog.MatchActive(id) is not { } profile) continue;
-                var service = RegistryProperty(set, ref data, SPDRP_SERVICE);
-                var (inf, provider) = DriverInf(id);
-                uint problem = 0;
-                if (CM_Get_DevNode_Status(out _, out var p, data.DevInst, 0) == 0) problem = p;
-                return new Info(id, profile.HardwareId, service, inf, profile, provider, problem);
+                // Only active profiles: cards listed for diagnostics only are never taken.
+                var profile = CardCatalog.MatchActive(id);
+                if (profile is null && manual is null && manualHw.Length > 0 &&
+                    id.StartsWith(manualHw, StringComparison.OrdinalIgnoreCase) &&
+                    (id.Length == manualHw.Length || id[manualHw.Length] is '&' or '\\'))
+                {
+                    if (CardCatalog.ManualProfile(id, manualModel) is { } mp) manual = Describe(set, ref data, id, mp);
+                    continue;
+                }
+                if (profile is null) continue;
+                return Describe(set, ref data, id, profile);
             }
         }
         finally { SetupDiDestroyDeviceInfoList(set); }
-        return null;
+        return manual;
+    }
+
+    static Info Describe(IntPtr set, ref SP_DEVINFO_DATA data, string id, AdapterProfile profile)
+    {
+        var service = RegistryProperty(set, ref data, SPDRP_SERVICE);
+        var (inf, provider) = DriverInf(id);
+        uint problem = 0;
+        if (CM_Get_DevNode_Status(out _, out var p, data.DevInst, 0) == 0) problem = p;
+        return new Info(id, profile.HardwareId, service, inf, profile, provider, problem);
+    }
+
+    /// <summary>A PCI device that may be a Wi-Fi card, for the manual choice.</summary>
+    /// <param name="HardwareId">"PCI\VEN_xxxx&amp;DEV_yyyy"</param>
+    /// <param name="Recognized">the catalog takes it by its ID</param>
+    public sealed record Candidate(string HardwareId, string Name, bool Recognized);
+
+    static readonly Guid NetClass = new("4d36e972-e325-11ce-bfc1-08002be10318");
+
+    /// <summary>
+    /// PCI network controllers (class Net, the proxy's class, or no driver at
+    /// all) from vendors with a nekodrop backend, for Settings' card list.
+    /// </summary>
+    public static IReadOnlyList<Candidate> Candidates()
+    {
+        var list = new List<Candidate>();
+        var vendors = CardCatalog.ManualModels.Select(m => m.VendorId).ToHashSet();
+        var set = SetupDiGetClassDevsW(IntPtr.Zero, "PCI", IntPtr.Zero, DIGCF_PRESENT | DIGCF_ALLCLASSES);
+        if (set == new IntPtr(-1)) return list;
+        try
+        {
+            var data = new SP_DEVINFO_DATA { cbSize = (uint)Marshal.SizeOf<SP_DEVINFO_DATA>() };
+            for (uint i = 0; SetupDiEnumDeviceInfo(set, i, ref data); i++)
+            {
+                var id = InstanceId(set, ref data);
+                if (!CardCatalog.TryParsePciId(id, out var v, out var d) || !vendors.Contains(v)) continue;
+                var recognized = CardCatalog.MatchActive(id) is not null;
+                var className = RegistryProperty(set, ref data, SPDRP_CLASS);
+                // Network adapters, the proxy's own class, or a card with no driver yet;
+                // never the vendors' Ethernet chips' audio, USB or bridge functions.
+                if (!recognized && data.ClassGuid != NetClass && data.ClassGuid != Guid.Empty &&
+                    !className.Equals("WinAwdlRadio", StringComparison.OrdinalIgnoreCase)) continue;
+                var name = RegistryProperty(set, ref data, SPDRP_FRIENDLYNAME);
+                if (name.Length == 0) name = RegistryProperty(set, ref data, SPDRP_DEVICEDESC);
+                list.Add(new Candidate($"PCI\\VEN_{v}&DEV_{d}", name, recognized));
+            }
+        }
+        finally { SetupDiDestroyDeviceInfoList(set); }
+        return list;
     }
 
     public static bool TakenByProxy(Info card) =>
@@ -123,7 +184,8 @@ public static class Card
         return (inf is null ? "" : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "INF", inf), provider);
     }
 
-    const uint DIGCF_PRESENT = 0x2, DIGCF_ALLCLASSES = 0x4, SPDRP_SERVICE = 0x4, INSTALLFLAG_FORCE = 0x1;
+    const uint DIGCF_PRESENT = 0x2, DIGCF_ALLCLASSES = 0x4, SPDRP_SERVICE = 0x4, INSTALLFLAG_FORCE = 0x1,
+               SPDRP_DEVICEDESC = 0x0, SPDRP_CLASS = 0x7, SPDRP_FRIENDLYNAME = 0xC;
 
     [StructLayout(LayoutKind.Sequential)]
     struct SP_DEVINFO_DATA { public uint cbSize; public Guid ClassGuid; public uint DevInst; public IntPtr Reserved; }

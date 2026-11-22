@@ -48,9 +48,9 @@ $WifiChips = @{
   '8086:E440' = @('intel-be', 'Intel Wi-Fi 7 (CNVi)')
   '8086:E340' = @('intel-be', 'Intel Wi-Fi 7 (CNVi)')
   '8086:D340' = @('intel-be', 'Intel Wi-Fi 7 (CNVi)')
-  # Realtek (Linux rtw88/rtw89 device IDs). The RTL8852CE is the one winawdl,
-  # which driver/regproxy was adapted from, drives in user mode.
-  '10EC:C852' = @('rtl-winawdl', 'Realtek RTL8852CE')
+  # Realtek (Linux rtw88/rtw89 device IDs). RTL8852CE is natively supported
+  # via nekodrop's built-in devourer backend (on-demand AirDrop).
+  '10EC:C852' = @('supported-rtl', 'Realtek RTL8852CE')
   '10EC:8852' = @('rtl', 'Realtek RTL8852AE')
   '10EC:A85A' = @('rtl', 'Realtek RTL8852AE')
   '10EC:B852' = @('rtl', 'Realtek RTL8852BE')
@@ -94,17 +94,17 @@ $WifiChips = @{
 }
 # kind -> what the report says, and a hint for the reader (may be empty).
 $WifiKinds = @{
-  'supported'   = @('supported by nekodrop', '')
-  'intel-fw'    = @('not supported: its firmware is not shipped upstream', 'nekodrop runs the Intel cards whose firmware ForbiddenItlwm ships (API 68); this one has none there.')
-  'intel-be'    = @('not supported: Intel Wi-Fi 7, no upstream driver', 'ForbiddenItlwm, which nekodrop ports, has no driver for Wi-Fi 7 cards yet.')
-  'intel-other' = @('not supported: an Intel device ID nekodrop does not know', 'Please post this report in an issue: if upstream ships firmware for this card, its ID can be added.')
-  'rtl-winawdl' = @('not supported by nekodrop; upstream winawdl drives it (AirDrop only, no Wi-Fi at the same time)', 'The first candidate for Realtek support in nekodrop; see docs/HARDWARE.md.')
-  'rtl'         = @('not supported: Realtek', 'The only Realtek chip with a user-mode Windows driver so far is the RTL8852CE (10EC:C852, in winawdl).')
-  'mtk'         = @('not supported: MediaTek', 'No user-mode Windows driver exists for MediaTek Wi-Fi yet.')
-  'qcom'        = @('not supported: Qualcomm', 'No user-mode Windows driver exists for Qualcomm Wi-Fi yet.')
-  'bcm'         = @('not supported: Broadcom', 'There is no open Windows driver path for Broadcom Wi-Fi.')
-  'usb'         = @('not supported: USB adapter', 'nekodrop drives PCIe cards only.')
-  'other'       = @('not supported: unrecognized wireless adapter', '')
+  'supported'     = @('supported by nekodrop', '')
+  'supported-rtl' = @('supported by nekodrop (on-demand AirDrop, built-in RTL8852CE backend)', 'Windows keeps Wi-Fi normally; nekodrop takes the card only during AirDrop transfers.')
+  'intel-fw'      = @('not supported: its firmware is not shipped upstream', 'nekodrop runs the Intel cards whose firmware ForbiddenItlwm ships (API 68); this one has none there.')
+  'intel-be'      = @('not supported: Intel Wi-Fi 7, no upstream driver', 'ForbiddenItlwm, which nekodrop ports, has no driver for Wi-Fi 7 cards yet.')
+  'intel-other'   = @('not supported: an Intel device ID nekodrop does not know', 'Please post this report in an issue: if upstream ships firmware for this card, its ID can be added.')
+  'rtl'           = @('not supported: Realtek', 'Among Realtek chips, nekodrop currently has built-in support for RTL8852CE (10EC:C852) only.')
+  'mtk'           = @('not supported: MediaTek', 'No user-mode Windows driver exists for MediaTek Wi-Fi yet.')
+  'qcom'          = @('not supported: Qualcomm', 'No user-mode Windows driver exists for Qualcomm Wi-Fi yet.')
+  'bcm'           = @('not supported: Broadcom', 'There is no open Windows driver path for Broadcom Wi-Fi.')
+  'usb'           = @('not supported: USB adapter', 'nekodrop drives PCIe cards only.')
+  'other'         = @('not supported: unrecognized wireless adapter', '')
 }
 $WifiVendors = @{ '8086' = 'Intel'; '10EC' = 'Realtek'; '14C3' = 'MediaTek'; '17CB' = 'Qualcomm'; '168C' = 'Qualcomm Atheros'; '14E4' = 'Broadcom'
                   '0BDA' = 'Realtek'; '0E8D' = 'MediaTek'; '148F' = 'MediaTek (Ralink)'; '0CF3' = 'Qualcomm Atheros'; '8087' = 'Intel' }
@@ -145,14 +145,11 @@ function Test-KnownWifiId([string]$InstanceId) {
 }
 
 # ------------------------------------------------------ the refusal message
-# The supported-card check: exact 15 Intel IDs with 4-hex boundary so a 5-digit
-# device ID (e.g. DEV_43F01) can never match a supported 4-digit ID.
-$SupportedCardPattern = '^PCI\\VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')(?=&|\\|$)'
-# Its first line is the message the setup showed before, so nothing a user or
-# an issue quoted changes meaning.
-$NoSupportedCard = 'This PC has no Intel Wi-Fi card nekodrop supports (AX201, AX200, AX210, AX211, AX411, or 9560 on Qu); nekodrop cannot run here.'
-$WinawdlUrl = 'https://github.com/raph559/winawdl'
-$HardwareUrl = 'https://github.com/zheznanohana/nekodrop/blob/main/docs/HARDWARE.md'
+# The supported-card check: exact 15 Intel IDs plus Realtek RTL8852CE
+# (10EC:C852), with a 4-hex boundary so a 5-digit device ID (e.g. DEV_43F01 or
+# DEV_C8520) can never match a supported 4-digit ID.
+$SupportedCardPattern = '^PCI\\(?:VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')|VEN_10EC&DEV_C852)(?=&|\\|$)'
+$NoSupportedCard = 'This PC has no Wi-Fi card nekodrop supports (Intel AX201, AX200, AX210, AX211, AX411, 9560 on Qu, or Realtek RTL8852CE 10EC:C852); nekodrop cannot run here.'
 $ReportUrl = 'https://github.com/zheznanohana/nekodrop/blob/main/installer/report.ps1'
 $IssuesUrl = 'https://github.com/zheznanohana/nekodrop/issues'
 # Adapter names that say wireless. As report.ps1: not bare "Killer" (its
@@ -212,14 +209,7 @@ function Format-UnsupportedCardMessage($Devices) {
       if (-not $name) { $name = (ConvertTo-AsciiText $d.Name).Trim() }
       $label = if ($name) { "$name ($id)" } else { $id }
       $lines += "- $($label): $($c.Chip), $($c.Status)."
-      # Each link on a line of its own: the error box and Out-String wrap long
-      # lines, and a link broken in two cannot be copied.
-      if ($c.Kind -eq 'rtl-winawdl') {
-        $lines += '  RTL8852CE (10EC:C852) runs AirDrop today with upstream winawdl (AirDrop only, no Wi-Fi at the same time):'
-        $lines += "  $WinawdlUrl"
-        $lines += '  RTL8852CE support in nekodrop:'
-        $lines += "  $HardwareUrl"
-      } elseif ($c.Note) {
+      if ($c.Note) {
         $lines += "  $($c.Note)"
       }
     }
@@ -246,8 +236,8 @@ if ($SelfTest) {
   }
   function Ascii([string]$s) { return ("$s" -cmatch '^[\x09\x0A\x0D\x20-\x7E]*$') }
 
-  # The supported-card check: exact 15 Intel IDs with 4-hex boundary.
-  if ($SupportedCardPattern -ne '^PCI\\VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0|2723|2725|7A70|7AF0|51F0|51F1|54F0|7F70)(?=&|\\|$)') {
+  # The supported-card check: exact 15 Intel IDs + Realtek RTL8852CE with 4-hex boundary.
+  if ($SupportedCardPattern -ne '^PCI\\(?:VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0|2723|2725|7A70|7AF0|51F0|51F1|54F0|7F70)|VEN_10EC&DEV_C852)(?=&|\\|$)') {
     $fail += "supported-card pattern changed: $SupportedCardPattern"
   }
   foreach ($d in $SupportedIntelIds) {
@@ -257,20 +247,26 @@ if ($SelfTest) {
     if ("pci\ven_8086&dev_$($d.ToLower())&subsys_00748086" -notmatch $SupportedCardPattern) { $fail += "8086:$d not accepted in lower case" }
     if ((Classify-WifiCard "PCI\VEN_8086&DEV_$d&SUBSYS_00748086").Kind -ne 'supported') { $fail += "8086:$d not classified as supported" }
   }
-  foreach ($no in 'PCI\VEN_8086&DEV_43F01&SUBSYS_00748086', 'PCI\VEN_8086&DEV_7E40&SUBSYS_00908086', 'PCI\VEN_8086&DEV_272B&SUBSYS_00F48086', 'PCI\VEN_10EC&DEV_C852&SUBSYS_C85210EC', 'PCI\VEN_8086&DEV_15F3&SUBSYS_00008086') {
+  # Built-in Realtek RTL8852CE (10EC:C852): accepted in all forms and classified as supported-rtl.
+  foreach ($okRtl in 'PCI\VEN_10EC&DEV_C852&SUBSYS_C85210EC&REV_00\4&1&0&00E8', 'PCI\VEN_10EC&DEV_C852', 'PCI\VEN_10EC&DEV_C852\4&1', 'pci\ven_10ec&dev_c852&subsys_c85210ec') {
+    if ($okRtl -notmatch $SupportedCardPattern) { $fail += "$okRtl not accepted" }
+    $rc = Classify-WifiCard $okRtl
+    if ($rc.Kind -ne 'supported-rtl' -or $rc.Chip -ne 'Realtek RTL8852CE') { $fail += "$okRtl classified as $($rc.Kind) / $($rc.Chip)" }
+  }
+  foreach ($no in 'PCI\VEN_8086&DEV_43F01&SUBSYS_00748086', 'PCI\VEN_8086&DEV_7E40&SUBSYS_00908086', 'PCI\VEN_8086&DEV_272B&SUBSYS_00F48086', 'PCI\VEN_10EC&DEV_C8520&SUBSYS_C85210EC', 'PCI\VEN_10EC&DEV_B852&SUBSYS_B85217AA', 'PCI\VEN_10EC&DEV_8168&SUBSYS_86771043', 'PCI\VEN_8086&DEV_15F3&SUBSYS_00008086') {
     if ($no -match $SupportedCardPattern) { $fail += "$no accepted as supported" }
   }
   if ((Classify-WifiCard 'PCI\VEN_8086&DEV_43F01&SUBSYS_00748086').Kind -eq 'supported' -or (Test-KnownWifiId 'PCI\VEN_8086&DEV_43F01&SUBSYS_00748086')) {
     $fail += '5-digit device ID DEV_43F01 matched as known/supported'
   }
-  if ((Classify-WifiCard 'PCI\VEN_10EC&DEV_C8520&SUBSYS_C85210EC').Kind -eq 'rtl-winawdl' -or (Test-KnownWifiId 'PCI\VEN_10EC&DEV_C8520&SUBSYS_C85210EC')) {
+  if ((Classify-WifiCard 'PCI\VEN_10EC&DEV_C8520&SUBSYS_C85210EC').Kind -eq 'supported-rtl' -or (Test-KnownWifiId 'PCI\VEN_10EC&DEV_C8520&SUBSYS_C85210EC')) {
     $fail += '5-digit device ID DEV_C8520 matched as RTL8852CE'
   }
 
-  # A laptop with an RTL8852CE that has no driver yet (so no adapter and no
-  # class), its Realtek Ethernet chip, a Wi-Fi Direct virtual adapter and TAP.
+  # A laptop with an unsupported Realtek RTL8852BE that has no driver yet (so no
+  # adapter and no class), its Realtek Ethernet chip, a Wi-Fi Direct virtual adapter and TAP.
   $rtlPnp = @(
-    (Dev 'PCI\VEN_10EC&DEV_C852&SUBSYS_C85210EC&REV_00\4&1&0&00E8' '' ''),
+    (Dev 'PCI\VEN_10EC&DEV_B852&SUBSYS_B85217AA&REV_00\4&1&0&00E8' '' ''),
     (Dev 'PCI\VEN_10EC&DEV_8168&SUBSYS_86771043&REV_15\4&2&0&00E5' 'Realtek PCIe GbE Family Controller'),
     (Dev 'SWD\MSRRAS\MS_NDISWANIP' 'WAN Miniport (IP)'),
     (Dev 'ROOT\NET\0000' 'Microsoft Wi-Fi Direct Virtual Adapter'),
@@ -278,12 +274,12 @@ if ($SelfTest) {
   )
   $rtlNics = @((Nic 'PCI\VEN_10EC&DEV_8168&SUBSYS_86771043&REV_15\4&2&0&00E5' 14 '802.3'), (Nic 'ROOT\NET\0000' 9 'Native 802.11'))
   $sel = @(Select-WirelessDevices $rtlPnp $rtlNics)
-  if ($sel.Count -ne 1 -or $sel[0].InstanceId -notmatch 'DEV_C852') { $fail += "RTL8852CE laptop: selected $(@($sel | ForEach-Object { $_.InstanceId }) -join ', ')" }
+  if ($sel.Count -ne 1 -or $sel[0].InstanceId -notmatch 'DEV_B852') { $fail += "RTL8852BE laptop: selected $(@($sel | ForEach-Object { $_.InstanceId }) -join ', ')" }
   $msg = Format-UnsupportedCardMessage $sel
-  foreach ($want in $NoSupportedCard, '10EC:C852', 'PCI\VEN_10EC&DEV_C852', 'Realtek RTL8852CE', 'winawdl', $WinawdlUrl, 'docs/HARDWARE.md', 'report.ps1', $IssuesUrl) {
-    if (-not $msg.Contains($want)) { $fail += "RTL8852CE message lacks '$want'" }
+  foreach ($want in $NoSupportedCard, '10EC:B852', 'PCI\VEN_10EC&DEV_B852', 'Realtek RTL8852BE', 'not supported: Realtek', 'RTL8852CE (10EC:C852)', 'report.ps1', $IssuesUrl) {
+    if (-not $msg.Contains($want)) { $fail += "RTL8852BE message lacks '$want'" }
   }
-  if ($msg.Contains('8168') -or $msg.Contains('SUBSYS') -or $msg.Contains('4&1&0')) { $fail += 'RTL8852CE message shows the Ethernet chip or the instance path' }
+  if ($msg.Contains('8168') -or $msg.Contains('SUBSYS') -or $msg.Contains('4&1&0')) { $fail += 'RTL8852BE message shows the Ethernet chip or the instance path' }
 
   # MediaTek RZ616 found by its medium, a USB stick (serial = MAC address) found
   # by name, Intel Meteor Lake and BE200, an Intel ID nobody knows, Qualcomm,
@@ -329,10 +325,10 @@ if ($SelfTest) {
   # A localized name (Chinese) and a trademark sign: left out, chip still named,
   # and the whole message stays ASCII for the setup's ANSI error box.
   $cjk = Dev 'PCI\VEN_14C3&DEV_7922&SUBSYS_7922103C\4&1' ('MediaTek ' + [char]0x65E0 + [char]0x7EBF + ' Wi-Fi')
-  $tm = Dev 'PCI\VEN_10EC&DEV_C852&SUBSYS_1\4&1' ('Realtek' + [char]0x00AE + ' 8852CE WiFi 6E PCI-E NIC')
+  $tm = Dev 'PCI\VEN_10EC&DEV_B852&SUBSYS_1\4&1' ('Realtek' + [char]0x00AE + ' 8852BE WiFi 6 PCI-E NIC')
   if (@(Select-WirelessDevices @((Dev 'PCI\VEN_1AE0&DEV_0001\4&1' ('Contoso ' + [char]0x65E0 + [char]0x7EBF))) @()).Count -ne 1) { $fail += 'a Chinese wireless adapter name was not recognized' }
   $msg = Format-UnsupportedCardMessage @($cjk, $tm)
-  if (-not $msg.Contains('MediaTek MT7922') -or -not $msg.Contains('Realtek RTL8852CE') -or -not $msg.Contains('PCI\VEN_10EC&DEV_C852')) { $fail += 'a card with a non-ASCII name lost its chip or ID' }
+  if (-not $msg.Contains('MediaTek MT7922') -or -not $msg.Contains('Realtek RTL8852BE') -or -not $msg.Contains('PCI\VEN_10EC&DEV_B852')) { $fail += 'a card with a non-ASCII name lost its chip or ID' }
   foreach ($m in $msg, (Format-UnsupportedCardMessage $manyPnp), (Format-UnsupportedCardMessage $rtlPnp)) {
     if (-not (Ascii $m)) { $fail += 'message is not plain ASCII' }
     foreach ($ln in ($m -split "`r?`n")) {
@@ -453,7 +449,7 @@ function Stop-FromTarget {
   $root = [IO.Path]::GetFullPath($Target).TrimEnd('\') + '\'
   # Never by path under a drive root or a folder that is not nekodrop's.
   $byPath = $root.Length -gt 4 -and ((Test-Path (Join-Path $root 'NekoDropService.exe')) -or (Test-Path (Join-Path $root 'python\python.exe')))
-  $ours = @(Get-Process nekodrop, nekodrop-radio, awdld, NekoDropService -ErrorAction SilentlyContinue) +
+  $ours = @(Get-Process nekodrop, nekodrop-radio, nekodrop-radio-rtl, awdld, NekoDropService -ErrorAction SilentlyContinue) +
           @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
               try { $byPath -and $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } catch { $false } })
   $ours = @($ours | Sort-Object Id -Unique)
@@ -545,7 +541,7 @@ Step 'install and start NekoDropService (LocalSystem, automatic)' {
   $exe = Join-Path $Target 'NekoDropService.exe'
   if (-not (Get-Service $Service -ErrorAction SilentlyContinue)) {
     New-Service -Name $Service -BinaryPathName "`"$exe`"" -DisplayName 'nekodrop AirDrop' `
-      -Description 'AirDrop on the built-in Intel Wi-Fi card: owns the card while AirDrop is on.' -StartupType Automatic | Out-Null
+      -Description 'AirDrop on the built-in Wi-Fi card: owns the card while AirDrop is on.' -StartupType Automatic | Out-Null
     sc.exe failure $Service reset= 86400 actions= restart/5000/restart/30000/""/0 | Out-Null
   }
   Start-Service $Service
