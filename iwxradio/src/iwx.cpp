@@ -1570,17 +1570,26 @@ int IwxDevice::mac_ctxt_cmd(uint32_t action) {
    * sending: 0.1.22 gave it AWDL's BSSID and ACK rates there, and on an AX200
    * discovery stopped (PSF count frozen, 0 frames addressed to us, no peer for
    * minutes) while 0.1.20 with the broadcast BSSID still found the iPhone (#4). */
-  std::memcpy(cmd.bssid_addr, _opt.mac_type == MacType::Listener ? kBroadcast : kAwdlBssid, 6);
-  if (_opt.mac_type != MacType::Listener) {
+  /* Experimental A-MPDU only, while promiscuous receive is off for the
+   * peer's station (asking/agreed): ForbiddenItlwm's listener in exactly that
+   * state (awdlCoexBaFilterOff, filter 3): AWDL's BSSID, ACK rates, group
+   * frames only. With the broadcast BSSID the firmware took the agreement
+   * but sent every frame singly with no Block Ack (#4 AX200, #9 AX211).
+   * Discovery runs promiscuous with the broadcast BSSID as before: 0.1.22
+   * set AWDL's BSSID there too and found nothing (#4). */
+  const bool ba_listener = _opt.mac_type == MacType::Listener && _opt.aggregate && !_promisc && _ba_station;
+  std::memcpy(cmd.bssid_addr, (_opt.mac_type == MacType::Listener && !ba_listener) ? kBroadcast : kAwdlBssid, 6);
+  if (_opt.mac_type != MacType::Listener || ba_listener) {
     /* ACK rates: the OFDM basics on 5 GHz, CCK and OFDM on 2.4 GHz. */
     cmd.cck_rates = htole32(_channel <= 14 ? 0x0f : 0);
     cmd.ofdm_rates = htole32(0x15); /* 6, 12, 24 */
-    cmd.qos_flags = htole32(IWX_MAC_QOS_FLG_TGN);
+    if (_opt.mac_type != MacType::Listener) cmd.qos_flags = htole32(IWX_MAC_QOS_FLG_TGN);
   }
-  cmd.filter_flags = htole32((_promisc ? IWX_MAC_FILTER_IN_PROMISC : 0u) |
-                             IWX_MAC_FILTER_IN_CONTROL_AND_MGMT | IWX_MAC_FILTER_ACCEPT_GRP |
-                             IWX_MAC_FILTER_IN_BEACON | IWX_MAC_FILTER_IN_PROBE_REQUEST |
-                             IWX_MAC_FILTER_IN_CRC32);
+  cmd.filter_flags = htole32(ba_listener ? IWX_MAC_FILTER_ACCEPT_GRP
+                                         : (_promisc ? IWX_MAC_FILTER_IN_PROMISC : 0u) |
+                                               IWX_MAC_FILTER_IN_CONTROL_AND_MGMT | IWX_MAC_FILTER_ACCEPT_GRP |
+                                               IWX_MAC_FILTER_IN_BEACON | IWX_MAC_FILTER_IN_PROBE_REQUEST |
+                                               IWX_MAC_FILTER_IN_CRC32);
   if (_opt.mac_type == MacType::Ibss) {
     cmd.ibss.bi = htole32(100);
     cmd.ibss.bi_reciprocal = htole32(iwx_reciprocal(100));
