@@ -10,8 +10,9 @@ namespace NekoDrop.Service;
 /// <param name="Aggregate">experimental A-MPDU sending is on in the settings</param>
 /// <param name="FastUnlock">experimental fast passive-channel unlock is on in the settings</param>
 /// <param name="CoexPlan">experimental coexistence plan (router entries in the AWDL schedule) is on</param>
+/// <param name="BtCoexBalanced">experimental balanced Bluetooth coexistence is on in the settings</param>
 public sealed record RadioStart(AdapterProfile Profile, int Channel, bool Kernel, string Country, string? StaConf,
-                                bool Aggregate, bool FastUnlock, bool CoexPlan = false)
+                                bool Aggregate, bool FastUnlock, bool CoexPlan = false, bool BtCoexBalanced = false)
 {
     /// <summary>20 MHz on 2.4 GHz, 80 MHz on 5 GHz.</summary>
     public int Width => Channel <= 14 ? 20 : 80;
@@ -72,6 +73,9 @@ public sealed class IwxRadioBackend : IRadioBackend
         if (s.FastUnlock && !s.Kernel && caps.SupportsConcurrentWifi) args.Add("--fast-unlock");
         // Only the user-mode Intel radio runs the station whose channel the plan names.
         if (s.CoexPlan && !s.Kernel && caps.SupportsConcurrentWifi) args.Add("--coex-plan");
+        // Balanced Wi-Fi/Bluetooth arbitration in the firmware the user-mode radio boots;
+        // nekodrop-wlan.sys keeps its own.
+        if (s.BtCoexBalanced && !s.Kernel) args.AddRange(["--bt-coex", "1"]);
         if (!s.Kernel && s.Profile.RadioFamily is { Length: > 0 } family) args.AddRange(["--family", family]);
         return args;
     }

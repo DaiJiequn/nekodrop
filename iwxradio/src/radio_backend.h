@@ -76,6 +76,11 @@ struct RadioOpenOptions {
    * device ID nekodrop does not know): the device ID whose transport
    * parameters to use (cards::family_device), 0 for the card's own. */
   uint16_t family_device = 0;
+  /* --bt-coex: the firmware's Bluetooth coexistence mode on a combined
+   * Wi-Fi/Bluetooth card (1 network arbitration, 2 Bluetooth first, 3 Wi-Fi
+   * first, as ForbiddenItlwm's itlawdlbtcoex), 0 for the backend's default.
+   * Windows' AirDrop beacon goes out on that card's Bluetooth half. */
+  uint32_t bt_coex = 0;
 };
 
 using RadioLogger = std::function<void(const std::string &)>;

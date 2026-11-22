@@ -42,6 +42,12 @@ public sealed class ServiceConfig
     /// </summary>
     public bool CoexPlan { get; set; }
     /// <summary>
+    /// Experimental balanced Bluetooth coexistence on Intel cards (radio --bt-coex 1, as
+    /// ForbiddenItlwm's itlawdlbtcoex=1): the firmware stops always favouring Wi-Fi, so the
+    /// Bluetooth beacon that wakes Apple devices gets out while AWDL listens. Off by default.
+    /// </summary>
+    public bool BtCoexBalanced { get; set; }
+    /// <summary>
     /// The user's manual choice when the card is not recognized by its ID
     /// (Settings, "Wi-Fi card"): its PCI hardware ID ("PCI\VEN_xxxx&amp;DEV_yyyy")
     /// and a CardCatalog.ManualModels key; both "" for automatic.

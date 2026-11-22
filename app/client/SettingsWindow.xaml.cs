@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
         AggregateBox.IsChecked = (bool?)A.Service.Last?["aggregate"] ?? false;
         FastUnlockBox.IsChecked = (bool?)A.Service.Last?["fastUnlock"] ?? false;
         CoexPlanBox.IsChecked = (bool?)A.Service.Last?["coexPlan"] ?? false;
+        BtCoexBox.IsChecked = (bool?)A.Service.Last?["btCoex"] ?? false;
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
         UpdateStatus.Text = "nekodrop " + Updater.Current;
@@ -175,6 +176,8 @@ public partial class SettingsWindow : Window
         if (fastUnlock != ((bool?)A.Service.Last?["fastUnlock"] ?? false)) A.Service.SetFastUnlock(fastUnlock);
         var coexPlan = CoexPlanBox.IsChecked == true;
         if (coexPlan != ((bool?)A.Service.Last?["coexPlan"] ?? false)) A.Service.SetCoexPlan(coexPlan);
+        var btCoex = BtCoexBox.IsChecked == true;
+        if (btCoex != ((bool?)A.Service.Last?["btCoex"] ?? false)) A.Service.SetBtCoex(btCoex);
         A.Window?.FolderChanged();
         if (languageChanged) A.ApplyLanguage();
         Close();

@@ -871,10 +871,20 @@ bool IwxDevice::run_init_sequence(std::string &error) {
     err = send_cmd(IWX_TX_ANT_CONFIGURATION_CMD, &ant, sizeof(ant), false, nullptr);
   }
   if (!err) {
-    /* WiFi-only arbitration with Bluetooth, as itlwm does by default. */
+    /* Arbitration with the card's Bluetooth half: Wi-Fi first, as itlwm,
+     * unless --bt-coex asks for another mode. Windows sends the AirDrop
+     * beacon that wakes Apple devices through that Bluetooth half, and Wi-Fi
+     * first can starve it while AWDL listens (mode 1 found them in seconds on
+     * an AX200 where Wi-Fi first often never did). */
     iwx_bt_coex_cmd bt{};
-    bt.mode = htole32(IWX_BT_COEX_WIFI);
+    const uint32_t mode = _opt.bt_coex >= IWX_BT_COEX_NW && _opt.bt_coex <= IWX_BT_COEX_WIFI
+                              ? _opt.bt_coex
+                              : uint32_t(IWX_BT_COEX_WIFI);
+    bt.mode = htole32(mode);
     err = send_cmd(IWX_BT_CONFIG, &bt, sizeof(bt), false, nullptr);
+    if (!err)
+      _log(std::string("bluetooth coexistence: mode ") + std::to_string(mode) +
+           (mode == IWX_BT_COEX_NW ? " (network)" : mode == IWX_BT_COEX_BT ? " (Bluetooth first)" : " (Wi-Fi first)"));
   }
   if (!err) {
     /* iwx_send_soc_conf with the card's transport parameters (cards.h):
