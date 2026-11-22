@@ -101,4 +101,16 @@ driver ("a wheel") is a one-step addition; the rest are driver ports.
 | Intel Meteor Lake `7E40`/`2729`, SnJ `2726` | `cards.h` knows them; needs the `ma`/`SnJ` firmware and API 72–83 command versions |
 | MediaTek MT7921/MT7922 `14C3:7961`/`0608`/`7922`/`0616` | no Windows user-mode driver yet: a port of Linux mt76 |
 | Intel BE200/BE201 | needs the MLD command set (API 86+) |
+| Atheros AR9xxx (ath9k) | no firmware at all (the driver does everything), fully open: Linux `ath9k`, OpenBSD `athn`; old 802.11n cards |
 | Qualcomm, Broadcom | not planned (MHI/QMI firmware stack; closed AWDL offload) |
+
+Where the driver to port comes from: the Intel radio is ForbiddenItlwm's,
+itself OpenBSD's iwx ported to macOS. No other card family has an open
+Hackintosh driver (Broadcom and old Atheros cards there run Apple's own closed
+drivers with patches), so the source to port is the Linux/BSD driver, as
+itlwm did: `rtw89` (Realtek 8852AE/BE/CE, GPL-2.0 OR BSD-3-Clause),
+`mt76` (MediaTek, ISC), `ath9k`/`athn`. A port is a new backend under
+`iwxradio/` (or a separate daemon speaking the radio pipe) on the same
+register proxy and user-mode DMA.
+
+驱动从哪里移植：Intel 的 radio 来自 ForbiddenItlwm，而它本身是 OpenBSD iwx 驱动的 macOS 移植。其他牌子在黑苹果上都没有开源驱动（Broadcom 和老 Atheros 用的是苹果自己的闭源驱动加补丁），所以要像 itlwm 一样，从 Linux/BSD 驱动移植：`rtw89`（Realtek）、`mt76`（MediaTek）、`ath9k`/`athn`（Atheros）。

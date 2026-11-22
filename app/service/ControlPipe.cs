@@ -78,8 +78,8 @@ public sealed class ControlPipe(Supervisor sup)
                         foreach (var c in Card.Candidates())
                             candidates.Add(new JsonObject { ["hw"] = c.HardwareId, ["name"] = c.Name, ["recognized"] = c.Recognized });
                         var models = new JsonArray();
-                        foreach (var m in CardCatalog.ManualModels)
-                            models.Add(new JsonObject { ["key"] = m.Key, ["name"] = m.Name, ["vendor"] = m.VendorId });
+                        foreach (var model in CardCatalog.ManualModels)
+                            models.Add(new JsonObject { ["key"] = model.Key, ["name"] = model.Name, ["vendor"] = model.VendorId });
                         await Send(writer, new JsonObject { ["event"] = "cards", ["candidates"] = candidates, ["models"] = models });
                         break;
                     }
