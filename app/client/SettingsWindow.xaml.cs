@@ -23,7 +23,6 @@ public partial class SettingsWindow : Window
         ModeConcurrent.IsChecked = mode == "concurrent";
         ModeOnDemand.IsChecked = mode == "ondemand";
         ModeOff.IsChecked = mode == "off";
-        AggregateBox.IsChecked = (bool?)A.Service.Last?["aggregate"] ?? false;
         FastUnlockBox.IsChecked = (bool?)A.Service.Last?["fastUnlock"] ?? false;
         CoexPlanBox.IsChecked = (bool?)A.Service.Last?["coexPlan"] ?? false;
         BtCoexBox.IsChecked = (bool?)A.Service.Last?["btCoex"] ?? false;
@@ -170,8 +169,6 @@ public partial class SettingsWindow : Window
         A.Engine.Apply(s);
         var mode = ModeConcurrent.IsChecked == true ? "concurrent" : ModeOnDemand.IsChecked == true ? "ondemand" : "off";
         if (mode != (string?)A.Service.Last?["mode"]) A.Service.SetMode(mode);
-        var aggregate = AggregateBox.IsChecked == true;
-        if (aggregate != ((bool?)A.Service.Last?["aggregate"] ?? false)) A.Service.SetAggregate(aggregate);
         var fastUnlock = FastUnlockBox.IsChecked == true;
         if (fastUnlock != ((bool?)A.Service.Last?["fastUnlock"] ?? false)) A.Service.SetFastUnlock(fastUnlock);
         var coexPlan = CoexPlanBox.IsChecked == true;

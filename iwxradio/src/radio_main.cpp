@@ -986,7 +986,7 @@ int main(int argc, char **argv) {
     if (opt.fast_unlock) log_line(radio::kFastUnlockOnLine);
     if (opt.coex_plan) log_line("experimental coexistence plan: on (router entries in our schedule when the station is on another 5 GHz channel)");
     if constexpr (caps.supports_aggregate) agg.on = opt.aggregate && dev.agg_available();
-    if (opt.aggregate) log_line(agg.on ? "experimental A-MPDU sending: on" : "experimental A-MPDU sending: not available on this path");
+    if (opt.aggregate) log_line(agg.on ? "A-MPDU sending: on" : "A-MPDU sending: not available on this path");
     awdl::BaFilter ba_filter;
     uint16_t mgmt_seq = 0;
     uint64_t ba_answers = 0;

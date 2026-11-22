@@ -17,7 +17,7 @@ public enum RadioBackendKind
 /// </summary>
 /// <param name="SupportsConcurrentWifi">the radio runs a Wi-Fi station beside AWDL (mode Concurrent)</param>
 /// <param name="SupportsFastSend">the radio takes --tx-window (experimental faster sending)</param>
-/// <param name="SupportsAggregate">the radio takes --aggregate (experimental A-MPDU sending)</param>
+/// <param name="SupportsAggregate">the radio takes --aggregate (A-MPDU sending, always on since 0.1.35)</param>
 /// <param name="SupportsKernelDriver">nekodrop-wlan.sys can own the card (Windows' Wi-Fi and AWDL on one driver)</param>
 /// <param name="MinBarBytes">the smallest register BAR the register proxy must map (driver/regproxy MIN_BAR_LEN)</param>
 public sealed record AdapterCapabilities(bool SupportsConcurrentWifi, bool SupportsFastSend, bool SupportsAggregate,

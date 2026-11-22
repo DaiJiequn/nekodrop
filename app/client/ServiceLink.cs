@@ -65,7 +65,6 @@ public sealed class ServiceLink : IDisposable
     public void Wake() => Send(new JsonObject { ["do"] = "wake" });
     public void Touch() => Send(new JsonObject { ["do"] = "touch" });
     public void SetMode(string mode) => Send(new JsonObject { ["do"] = "mode", ["mode"] = mode });
-    public void SetAggregate(bool on) => Send(new JsonObject { ["do"] = "aggregate", ["on"] = on });
     public void SetFastUnlock(bool on) => Send(new JsonObject { ["do"] = "fast-unlock", ["on"] = on });
     public void SetCoexPlan(bool on) => Send(new JsonObject { ["do"] = "coex-plan", ["on"] = on });
     public void SetBtCoex(bool on) => Send(new JsonObject { ["do"] = "bt-coex", ["on"] = on });

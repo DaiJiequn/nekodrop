@@ -577,7 +577,7 @@ if ($start -lt 0) {
   $aggLast = if ($aggActive) { $aggActive } else { $attempt | Where-Object { $_ -match 'radio: aggregate: (idle|asking|agreed)' } | Select-Object -Last 1 }
   if ($aggLast) {
     $aggRow = if ($aggLast -match 'aggregate: agreed') { 'ok' } elseif ($aggLast -match 'aggregate: asking') { 'asking' } else { '-' }
-    W "| A-MPDU sending (experimental) | $aggRow | ``$((($aggLast -replace '^\S+ \S+ radio: \S+ radio: ', '') -replace '\|', '/'))`` |"
+    W "| A-MPDU sending | $aggRow | ``$((($aggLast -replace '^\S+ \S+ radio: \S+ radio: ', '') -replace '\|', '/'))`` |"
   }
   # The latest station event decides: "authenticating" is a step of every join,
   # not a failure (#4, #14, #16 all showed FAIL while connected).
@@ -703,7 +703,8 @@ if ($card) {
 if ($config) {
   W "- Settings: mode $($config.Mode), country '$($config.Country)', start channel $($config.StartChannel), peer channel $($config.PeerChannel), on-demand idle $($config.IdleSeconds) s"
   # The experimental switches change how the radio sends and scans: say which are on.
-  W "- Faster sending: always on (0.1.25+). Experimental: A-MPDU sending $(if ($config.Aggregate) { 'on' } else { 'off' }), fast passive-channel unlock $(if ($config.FastUnlock) { 'on' } else { 'off' })"
+  # A-MPDU has no switch since 0.1.35 (an old config's "Aggregate" field is stale, so ignore it).
+  W "- Faster sending: always on (0.1.25+). A-MPDU sending: always on (0.1.35+). Experimental: fast passive-channel unlock $(if ($config.FastUnlock) { 'on' } else { 'off' })"
 }
 W ''
 

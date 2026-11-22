@@ -123,9 +123,7 @@
       <Border Style="{StaticResource CardBox}">
         <StackPanel>
           <TextBlock Text="{local:T set.experimental}" FontWeight="SemiBold"/>
-          <CheckBox x:Name="AggregateBox" Content="{local:T set.aggregate}"/>
-          <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.aggregate.hint}"/>
-          <CheckBox x:Name="FastUnlockBox" Content="{local:T set.fastUnlock}" Margin="0,8,0,0"/>
+          <CheckBox x:Name="FastUnlockBox" Content="{local:T set.fastUnlock}"/>
           <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.fastUnlock.hint}"/>
           <CheckBox x:Name="CoexPlanBox" Content="{local:T set.coexPlan}" Margin="0,8,0,0"/>
           <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.coexPlan.hint}"/>

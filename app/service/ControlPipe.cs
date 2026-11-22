@@ -69,7 +69,6 @@ public sealed class ControlPipe(Supervisor sup)
                     case "mode":
                         if (Enum.TryParse<NetMode>((string?)cmd?["mode"], true, out var m)) sup.SetMode(m);
                         break;
-                    case "aggregate": sup.SetAggregate((bool?)cmd?["on"] ?? false); break;
                     case "fast-unlock": sup.SetFastUnlock((bool?)cmd?["on"] ?? false); break;
                     case "coex-plan": sup.SetCoexPlan((bool?)cmd?["on"] ?? false); break;
                     case "bt-coex": sup.SetBtCoex((bool?)cmd?["on"] ?? false); break;

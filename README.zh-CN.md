@@ -50,7 +50,7 @@
 | 系统 | Windows 11 专业版 x64 |
 | iPhone → Windows | ✅ 可用：照片和文件完整收到 |
 | Windows → iPhone | ✅ 可用：右键 → 用 nekodrop 发送，iPhone 接受并收到 |
-| AirDrop 速度 | 打开 A-MPDU 后电脑 → iPhone **30.8 MB/s**（104.8 MB 用 3.4 秒；每个聚合 63 帧，确认率 99.7%）；同一个文件 iPhone → 电脑平均 **13.5 MB/s**（0.1.30） |
+| AirDrop 速度 | 电脑 → iPhone **30.8 MB/s**（104.8 MB 用 3.4 秒；每个聚合 63 帧，确认率 99.7%）；同一个文件 iPhone → 电脑平均 **13.5 MB/s**（0.1.30） |
 | 同时上网 | ✅ 可用：AirDrop 运行时电脑通过 nekodrop 自己的 WPA2 连接保持在线，Wi-Fi 和 AWDL 在同一个 5 GHz 信道上也没问题 |
 
 之后用户也在 AX200、AX210、AX211 上确认了双向 AirDrop 可用（见下表）。欢迎在 [Issues](../../issues) 反馈其他机器的结果。
@@ -172,9 +172,8 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 
 ### 实验性功能
 
-在 *设置 → 实验性功能* 里，默认都关闭；关掉后行为和原来完全一样。
+在 *设置 → 实验性功能* 里，默认都关闭；关掉后行为和原来完全一样。（聚合发送 A-MPDU 已在 0.1.35 转正、始终打开：AX201 上发给 iPhone 30.8 MB/s，AX200 上 9–25 MiB/s。）
 
-- **聚合发送（A-MPDU）**：把多帧打包发出，发给 iPhone 快很多（AX201 上 30.8 MB/s，AX200 上 9–25 MiB/s）。
 - **蓝牙与 Wi-Fi 均衡共存（Intel）**：让蓝牙信标发得出去，电脑几秒内就能找到 iPhone 和 Mac（感谢 [@XXD051030](https://github.com/XXD051030)，[#26](../../pull/26)）。
 - **Wi-Fi 和 AirDrop 不在同一信道时按苹果的方式分时**：告诉 iPhone 电脑什么时候在路由器那边；目前没测出提升（[#4](../../issues/4)）。
 - **更快解锁被动 5 GHz 信道**：更早扫描，让拒绝国家码的网卡更快可以发射（[#11](../../issues/11)）。
@@ -224,7 +223,7 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 |---|---|
 | iPhone 搜不到电脑 | 把 iPhone 的 AirDrop 设为“所有人（10 分钟）”，关掉再打开（清掉缓存的旧记录），手机解锁并放在附近 |
 | 电脑找 iPhone 很慢 | 打开 *设置 → 实验性功能 →「蓝牙与 Wi-Fi 均衡共存」*（Intel 网卡） |
-| 发给 iPhone 很慢 | 打开 *设置 → 实验性功能 →「聚合发送（A-MPDU）」*。nekodrop 连的 5 GHz Wi-Fi 和 AirDrop（44 或 149）不在同一信道时会变慢；在 nekodrop 里断开 Wi-Fi，或者把路由器改到那个信道会好很多 |
+| 发给 iPhone 很慢 | nekodrop 连的 5 GHz Wi-Fi 和 AirDrop（44 或 149）不在同一信道时会变慢；在 nekodrop 里断开 Wi-Fi，或者把路由器改到那个信道会好很多 |
 | iPhone 上出现两个电脑 | 之前运行留下的缓存记录，在 iPhone 上把 AirDrop 关掉再打开 |
 | 没网 | 托盘 → **Wi-Fi…**，确认已连接。网络可能需要网页登录，或者是纯 WPA3 / 企业网（见上表） |
 | Windows 的 Wi-Fi 图标没了 | 同时模式下是正常的：网卡归 nekodrop 管。用 **Wi-Fi…**，或者切到“按需” |

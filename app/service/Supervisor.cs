@@ -77,7 +77,6 @@ public sealed class Supervisor : IDisposable
                 ["mode"] = _cfg.Mode.ToString().ToLowerInvariant(),
                 ["channel"] = _channel,
                 ["country"] = _cfg.Country,
-                ["aggregate"] = _cfg.Aggregate,
                 ["fastUnlock"] = _cfg.FastUnlock,
                 ["coexPlan"] = _cfg.CoexPlan,
                 ["btCoex"] = _cfg.BtCoexBalanced,
@@ -210,21 +209,6 @@ public sealed class Supervisor : IDisposable
         // Saved as chosen; a card without a station runs Concurrent on demand.
         if (EffectiveMode() == NetMode.Concurrent) Start("mode changed");
         else Stop("mode changed", giveBack: true);
-        Publish();
-    }
-
-    /// <summary>Experimental A-MPDU sending; a running radio restarts to take it.</summary>
-    public void SetAggregate(bool on)
-    {
-        lock (_lock)
-        {
-            if (_cfg.Aggregate == on) return;
-            _cfg.Aggregate = on;
-            _cfg.Save();
-        }
-        Say($"experimental A-MPDU sending: {(on ? "on" : "off")}");
-        if (State is RadioState.On or RadioState.Starting)
-            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         Publish();
     }
 
@@ -439,7 +423,7 @@ public sealed class Supervisor : IDisposable
             if (!kernel) TakeCard();
             else if (Card.Find() is { } kc) { _profile = kc.Profile; _caps = kc.Profile.Capabilities; }
             if (!_wanted) { lock (_lock) State = RadioState.Off; Publish(); return; }
-            var launch = CardCatalog.BuildRadioLaunch(_profile, channel, kernel, _cfg.Country, staConf, _cfg.Aggregate, _cfg.FastUnlock,
+            var launch = CardCatalog.BuildRadioLaunch(_profile, channel, kernel, _cfg.Country, staConf, true, _cfg.FastUnlock,
                                                       _cfg.CoexPlan, _cfg.BtCoexBalanced);
             _radio = Spawn(Path.Combine(_root, "radio", launch.ExeName), launch.Args, OnRadioLine);
             _startedAt = DateTime.UtcNow;

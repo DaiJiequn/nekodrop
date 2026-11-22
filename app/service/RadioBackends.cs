@@ -7,7 +7,8 @@ namespace NekoDrop.Service;
 /// <param name="Kernel">nekodrop-wlan.sys owns the card (Intel only)</param>
 /// <param name="Country">two letters learned from a peer or a network, "" if none</param>
 /// <param name="StaConf">the Wi-Fi station's config file (Concurrent mode), or null</param>
-/// <param name="Aggregate">experimental A-MPDU sending is on in the settings</param>
+/// <param name="Aggregate">A-MPDU sending (always true from the service since 0.1.35; the radio
+/// skips it by itself without DMA room for the extra ring)</param>
 /// <param name="FastUnlock">experimental fast passive-channel unlock is on in the settings</param>
 /// <param name="CoexPlan">experimental coexistence plan (router entries in the AWDL schedule) is on</param>
 /// <param name="BtCoexBalanced">experimental balanced Bluetooth coexistence is on in the settings</param>

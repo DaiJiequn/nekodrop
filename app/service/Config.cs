@@ -28,8 +28,8 @@ public sealed class ServiceConfig
     public string Country { get; set; } = "";
     /// <summary>Last 5 GHz channel a peer used (44 or 149), 0 if none.</summary>
     public int PeerChannel { get; set; }
-    /// <summary>Experimental A-MPDU sending to the iPhone (radio --aggregate).</summary>
-    public bool Aggregate { get; set; }
+    // "Aggregate" (the A-MPDU switch) is gone: always on since 0.1.35, after
+    // AX201 (30.8 MB/s) and AX200 (9-25 MiB/s, #4) data. Old files' field is ignored.
     /// <summary>
     /// Experimental fast unlock of a passive 5 GHz AWDL channel (radio --fast-unlock, #11):
     /// earlier, repeated discovery scans so the firmware learns the country sooner. Off by default.

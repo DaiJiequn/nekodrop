@@ -50,7 +50,7 @@ Everything below was tested by the author on their own laptop, not just in theor
 | OS | Windows 11 Pro x64 |
 | iPhone → Windows | ✅ works: photos and files arrive intact |
 | Windows → iPhone | ✅ works: right-click → Send with nekodrop, accepted and received on the iPhone |
-| AirDrop speed | PC → iPhone **30.8 MB/s** with A-MPDU on (104.8 MB in 3.4 s; 63 frames per aggregate, 99.7% acknowledged); iPhone → PC **13.5 MB/s** average for the same file (0.1.30) |
+| AirDrop speed | PC → iPhone **30.8 MB/s** (104.8 MB in 3.4 s; 63 frames per aggregate, 99.7% acknowledged); iPhone → PC **13.5 MB/s** average for the same file (0.1.30) |
 | Wi-Fi at the same time | ✅ works: the PC stays online through nekodrop's own WPA2 connection while AirDrop runs, including with Wi-Fi and AWDL on the same 5 GHz channel |
 
 Users have since confirmed two-way AirDrop on the AX200, AX210 and AX211 as well (see the table below). Reports from other machines are welcome in [Issues](../../issues).
@@ -172,9 +172,8 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 ### Experimental features
 
-In *Settings → Experimental*, all off by default; turning one off restores the old behaviour exactly.
+In *Settings → Experimental*, all off by default; turning one off restores the old behaviour exactly. (Aggregated sending, A-MPDU, graduated from here in 0.1.35 and is always on: 30.8 MB/s to an iPhone on AX201, 9–25 MiB/s on AX200.)
 
-- **Aggregated sending (A-MPDU)**: packs frames together for much faster sending to iPhone (30.8 MB/s on AX201, 9–25 MiB/s on AX200).
 - **Balanced Bluetooth coexistence (Intel)**: lets the Bluetooth beacon through so the PC finds iPhones and Macs in seconds (thanks to [@XXD051030](https://github.com/XXD051030), [#26](../../pull/26)).
 - **Time sharing when Wi-Fi and AirDrop use different channels**: tells the iPhone when the PC is away with the router; no measurable gain so far ([#4](../../issues/4)).
 - **Faster unlock of a passive 5 GHz channel**: scans sooner so cards that refuse the country code can transmit earlier ([#11](../../issues/11)).
@@ -224,7 +223,7 @@ Design notes: [docs/DESIGN.md](docs/DESIGN.md) (driver, DMA, risks) · [docs/CLI
 |---|---|
 | iPhone doesn't see the PC | Set the iPhone's AirDrop to *Everyone for 10 Minutes*, turn it off and on (this clears a cached record), and keep the phone unlocked nearby |
 | The PC takes long to find the iPhone | Turn on *Settings → Experimental → Balanced Bluetooth coexistence* (Intel cards) |
-| Sending to the iPhone is slow | Turn on *Settings → Experimental → Aggregated sending (A-MPDU)*. If nekodrop's Wi-Fi is on a different 5 GHz channel than AirDrop (44 or 149), speed drops; disconnecting Wi-Fi in nekodrop or moving the router to that channel helps |
+| Sending to the iPhone is slow | If nekodrop's Wi-Fi is on a different 5 GHz channel than AirDrop (44 or 149), speed drops; disconnecting Wi-Fi in nekodrop or moving the router to that channel helps |
 | The PC shows up twice on the iPhone | A cached record from an earlier run. Toggle AirDrop on the iPhone |
 | No internet | Tray → **Wi-Fi…**: check you're connected. The network may need a sign-in page or be WPA3-only/802.1X (see above) |
 | The Windows Wi-Fi icon disappeared | Expected in *together* mode: nekodrop owns the card. Use **Wi-Fi…**, or switch to *on demand* |
