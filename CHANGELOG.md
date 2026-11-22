@@ -1,14 +1,17 @@
 # Changelog / 更新日志
 
 > Release channels / 发布通道：
-> - **Stable（稳定版 / Latest）**：长期保留、经过稳定基线锁定的版本（客户端默认仅接收稳定版更新）。当前首个稳定版为 **`v0.1.22`**。
+> - **Stable（稳定版 / Latest）**：长期保留、经过稳定基线锁定的版本（客户端默认仅接收稳定版更新）。当前稳定版为 **`v0.1.30`**（首个稳定基线为 `v0.1.22`）。
 > - **Hourly（每时预览版 / Pre-release）**：持续迭代的自动构建预览版（客户端勾选「预览版更新」可收到）；GitHub Releases 仅滚动保留最新 4 个每时版 + 稳定版（最多 5 个 Release），历史 Git Tag 全部保留。
 
 ---
 
-## v0.1.30 (Hourly / Pre-release) — 2026-11-22
+## v0.1.30 (Stable / 稳定版) — 2026-11-22
 
 ### 中文
+- **🚀 传输速度十倍级跃升（AX201 并发模式实测验证）**：
+  - **PC → iPhone 实测达到 `30.8 MB/s`**（104.8 MB 文件仅用 **3.4 秒**传完，对比此前单帧发送的 1–3 MB/s 提升 **10× 以上**）。开启实验性 A-MPDU 后 **0.304 秒**完成 Block Ack 握手，单次聚合高达 **63 帧**、确认率 **99.69%**（81,451 / 81,707），稳定跑满 **VHT 80 MHz 双流（2SS）MCS 9 + LDPC + SGI（866.7 Mbps）**。
+  - **iPhone → PC 实测平均 `13.5 MB/s`（后半段峰值 ~30 MB/s）**，104.8 MB 安装包 **8.1 秒**收完落盘。
 - **重点修复实验性 A-MPDU 协商与聚合路径（[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#9](https://github.com/zheznanohana/nekodrop/issues/9)）**：
   - 修复 0.1.28 导致 TX AddBA 一直停在 `asking`（`asks 80, agreed 0`）的回归：此前在 `asking` 阶段就切到组播过滤，把 iPhone 返回的单播 ADDBA Response 丢掉了。现在 `asking` 阶段保持混杂与管理帧接收，仅在 `agg_enable(true)` 拿到对端同意后原子切换到 ForbiddenItlwm 的 BA 监听状态（AWDL BSSID + 基础 ACK 速率 + 组播过滤），退出时立即恢复。
   - 修复 A-MPDU 响应路径（`handle_tx_resp`）在 `frame_count > 1` 时提前回收队列索引的隐患（改为仅由 `IWX_BA_NOTIF` 回收），并清零 26 字节 QoS 帧头后的 2 字节对齐填充。
@@ -17,6 +20,9 @@
 - **诊断报告保留每次发送的 A-MPDU 快照（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：在每次批量发送结束、回退或收到 DELBA 时立即写入一条 `aggregate:` 快照，诊断报告的 Bring-up 表优先展示活跃期（`asking`/`agreed`）记录而不再被末尾 `idle` 覆盖。
 
 ### English
+- **🚀 10x+ Transfer Speed Leap (verified on AX201 Concurrent mode)**:
+  - **PC → iPhone measured at `30.8 MB/s`** (104.8 MB transferred in **3.4 s**, up **10x+** from 1–3 MB/s single-frame TX). With experimental A-MPDU enabled, Block Ack negotiation completes in **0.304 s**, reaching **63-frame** aggregates with **99.69%** ACK rate (81,451 / 81,707) at full **VHT 80 MHz 2SS MCS 9 + LDPC + SGI (866.7 Mbps)**.
+  - **iPhone → PC measured at `13.5 MB/s` average (~30 MB/s peak)**, receiving the 104.8 MB installer in **8.1 s**.
 - **Major fix and tuning for experimental A-MPDU TX ([#4](https://github.com/zheznanohana/nekodrop/issues/4), [#9](https://github.com/zheznanohana/nekodrop/issues/9))**:
   - Fixed the 0.1.28 regression where TX AddBA stayed stuck in `asking` (`asks 80, agreed 0`): switching to group-only filtering during `asking` caused the firmware to drop unicast ADDBA Response management frames. Promiscuous/management receive now stays open throughout `asking`, switching atomically to ForbiddenItlwm's BA listener state (AWDL BSSID + basic ACK rates + group-only filter) inside `agg_enable(true)` only after the peer agrees, and restoring immediately on teardown.
   - Fixed `handle_tx_resp` for the aggregation queue so multi-frame A-MPDU responses (`frame_count > 1`) are reclaimed solely by `IWX_BA_NOTIF` (matching Linux iwlwifi / ForbiddenItlwm), and zeroed the 2-byte alignment padding after 26-byte QoS headers.
