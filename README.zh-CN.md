@@ -17,7 +17,7 @@
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078d4">
   <img alt="card" src="https://img.shields.io/badge/card-Intel%20AX201%20%7C%20AX200%20%7C%20AX210%20%7C%20AX211%20(user%20reports)-6c5ce7">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--2.0-blue">
-  <img alt="status" src="https://img.shields.io/badge/status-experimental-orange">
+  <img alt="status" src="https://img.shields.io/badge/status-preview-yellow">
 </p>
 
 <p align="center">
@@ -50,14 +50,14 @@
 | 系统 | Windows 11 专业版 x64 |
 | iPhone → Windows | ✅ 可用：照片和文件完整收到 |
 | Windows → iPhone | ✅ 可用：右键 → 用 nekodrop 发送，iPhone 接受并收到 |
+| AirDrop 速度 | 打开 A-MPDU 后电脑 → iPhone **30.8 MB/s**（104.8 MB 用 3.4 秒；每个聚合 63 帧，确认率 99.7%）；同一个文件 iPhone → 电脑平均 **13.5 MB/s**（0.1.30） |
 | 同时上网 | ✅ 可用：AirDrop 运行时电脑通过 nekodrop 自己的 WPA2 连接保持在线，Wi-Fi 和 AWDL 在同一个 5 GHz 信道上也没问题 |
-| AirDrop 运行时的网速 | 下载峰值约 **28 Mbps**（每秒约 2,370 个包，持续 20 秒；5 GHz 信道 44，80 MHz，WPA2）。这是按 radio 的收包计数、假设每个包都是 1,500 字节满包估算的，取自日常使用而不是测速，链路的真实上限可能更高。测得时 Block Ack 处于拒绝状态（0.1.1 起的默认设置）；开着 Block Ack 时见到的峰值约 22 Mbps |
 
-其他 AX201 笔记本用的是同一颗芯片、同一份固件，应该表现一致，但目前只在这一台上测过。欢迎在 [Issues](../../issues) 反馈其他机器的结果。
+之后用户也在 AX200、AX210、AX211 上确认了双向 AirDrop 可用（见下表）。欢迎在 [Issues](../../issues) 反馈其他机器的结果。
 
 ## 支持的网卡
 
-nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`）直接驱动无线网卡芯片。当前已内置原生支持 Intel 22000 / AX210 族网卡（`nekodrop-radio.exe`，移植自 [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`，支持同时连 Wi-Fi 或按需接管）以及 **Realtek RTL8852CE**（`10EC:C852`，`nekodrop-radio-rtl.exe`，基于 [winawdl](https://github.com/raph559/winawdl)/[devourer](https://github.com/raph559/devourer)，自动运行按需接管模式——CI 已编译并通过离线单测，待在 nekodrop 内实机确认）。全部 15 款 Intel 网卡的默认并发与按需行为 100% 保持不变。
+nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`）直接驱动无线网卡芯片。当前已内置原生支持 Intel 22000 / AX210 族网卡（`nekodrop-radio.exe`，移植自 [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm) 的 `hal_iwx`，支持同时连 Wi-Fi 或按需接管）以及 **Realtek RTL8852CE**（`10EC:C852`，`nekodrop-radio-rtl.exe`，基于 [winawdl](https://github.com/raph559/winawdl)/[devourer](https://github.com/raph559/devourer)，按需接管模式；还没有用户在 nekodrop 里实测过）。
 
 **完整跨品牌网卡兼容性文档（Intel / Realtek / MediaTek / 高通）：[docs/COMPATIBILITY.zh-CN.md](docs/COMPATIBILITY.zh-CN.md)** · **更新日志：[CHANGELOG.md](CHANGELOG.md)** · **底层多网卡架构：[docs/HARDWARE.md](docs/HARDWARE.md)**
 
@@ -67,12 +67,12 @@ nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`�
 |---|---|---|---|
 | **Intel Wi-Fi 6 AX201** 160 MHz（CNVi） | `8086:` `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ✅ **已实测**（`43F0` 上的 QuZ） |
 | Qu/QuZ 上的 Intel Wireless-AC 9560 / 9462 / 9461（CNVi） | 与 AX201 相同 | `Qu/QuZ-jf-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试 |
-| Intel Wi-Fi 6 AX200（独立网卡） | `8086:2723` | `cc-a0-68`（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#1](../../issues/1)、[#4](../../issues/4)） |
+| Intel Wi-Fi 6 AX200（独立网卡） | `8086:2723` | `cc-a0-68`（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#1](../../issues/1)、[#4](../../issues/4)）；打开 A-MPDU 后发给 iPhone 9–25 MiB/s（[#4](../../issues/4)） |
 | Intel Wi-Fi 6E AX210（独立网卡） | `8086:2725` | `ty-a0-gf-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#14](../../issues/14)、[#18](../../issues/18)）；部分机器仍在修（[#11](../../issues/11)） |
-| Intel Wi-Fi 6E AX211（CNVi，第 12 代及以后） | `8086:` `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#9](../../issues/9)）；部分机器发现设备还不稳定（[#16](../../issues/16)） |
-| Intel Wi-Fi 6E AX411 / Killer AX1690（CNVi） | 与 AX211 相同 | `so-a0-gf4-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试（[#7](../../issues/7)） |
+| Intel Wi-Fi 6E AX211（CNVi，第 12 代及以后） | `8086:` `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#9](../../issues/9)、[#29](../../issues/29)）；0.1.31 起 iPhone 能看到电脑（[#24](../../issues/24)） |
+| Intel Wi-Fi 6E AX411 / Killer AX1690（CNVi） | 与 AX211 相同 | `so-a0-gf4-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | 🧪 能识别、固件能启动（[#25](../../issues/25)）；已包含 AX211 的 0.1.31 修复，待用户确认 |
 | So 平台上的 Intel Wi-Fi 6 AX203 / 9560 | 与 AX211 相同 | `so-a0-hr/jf-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试 |
-| **Realtek RTL8852CE** | `10EC:C852` | 内嵌固件（`devourer`，仅按需接管） | ⚠️ 已内置，CI 已编译并离线自测，nekodrop 内待实机确认 |
+| **Realtek RTL8852CE** | `10EC:C852` | 内嵌固件（`devourer`，仅按需接管） | ⚠️ 已内置，还没有用户反馈 |
 | Intel SnJ `2726`、QnJ `2720`、Meteor Lake `7E40`/`2729` | `8086:` | 上游没有固件 | ❌ |
 | Intel BE200 / BE201（Wi-Fi 7） | `8086:` | 上游没有驱动 | ❌ |
 | 其他 Realtek、MediaTek、高通、博通 | | | ❌ |
@@ -81,7 +81,7 @@ nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`�
 
 网卡按 PCI ID 自动识别。没识别出来时，可以在 *设置 → 网卡* 里手动选择网卡和型号（只对驱动包里列出的硬件 ID 有效）。想给 nekodrop 适配新的网卡家族，见 [docs/ADDING-A-CARD.md](docs/ADDING-A-CARD.md)。
 
-不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。已安装 nekodrop 时，运行 `NekoDropService.exe --status` 可查看匹配到的网卡档案、能力与当前驱动提供者，`NekoDropService.exe --selftest` 可在无网卡、无管理员权限下校验全部 16 个活跃网卡档案（15 款 Intel + Realtek RTL8852CE）以及双后端启动参数规划。Intel 的 radio 启动时会记一行 `backend …` 日志并在每次构建时运行 `iwx_selftest`；Realtek 的 radio 构建会同步运行四项离线单测（`block_ack_test`、`reorder_buffer_test`、`outgoing_session_test`、`dma_address_test`）；`install.ps1 -SelfTest`、`restore.ps1 -SelfTest` 和 `report.ps1 -SelfTest` 也会在每次构建时于 Windows PowerShell 5.1 下运行离线自检。Intel 网卡的默认并发与按需行为 100% 保持不变。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
+不确定自己是什么网卡，或者希望支持别的网卡？[诊断报告](#反馈问题诊断报告)不装 nekodrop 也能用：下载 [`installer/report.ps1`](installer/report.ps1)，运行 `powershell -ExecutionPolicy Bypass -File report.ps1`。它会列出每块无线网卡的 PCI ID、芯片、驱动，以及 nekodrop 为什么能或不能在上面运行；欢迎贴到 [Issues](../../issues)。已安装 nekodrop 时，运行 `NekoDropService.exe --status` 可查看匹配到的网卡档案、能力与当前驱动提供者，`NekoDropService.exe --selftest` 可在无网卡、无管理员权限下校验全部 16 个活跃网卡档案（15 款 Intel + Realtek RTL8852CE）以及双后端启动参数规划。Intel 的 radio 启动时会记一行 `backend …` 日志并在每次构建时运行 `iwx_selftest`；Realtek 的 radio 构建会同步运行四项离线单测（`block_ack_test`、`reorder_buffer_test`、`outgoing_session_test`、`dma_address_test`）；`install.ps1 -SelfTest`、`restore.ps1 -SelfTest` 和 `report.ps1 -SelfTest` 也会在每次构建时于 Windows PowerShell 5.1 下运行离线自检。支持其他网卡需要做什么，见 [docs/HARDWARE.md](docs/HARDWARE.md)（英文）。
 
 ### 出问题了？一键回退
 
@@ -129,7 +129,7 @@ nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`�
 
 ### 更新
 
-nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小时检查一次。发现新版本会弹通知，点 **更新** 就会下载安装包，先核对 GitHub 公布的 SHA-256，再运行安装（Windows 会请求管理员权限）。不会在你不知情时自己安装。*设置 → 更新* 里可以关闭自动检查、选择是否包括预览版，也可以手动 **检查更新**。目前所有版本都是预览版。
+nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小时检查一次。发现新版本会弹通知，点 **更新** 就会下载安装包，先核对 GitHub 公布的 SHA-256，再运行安装（Windows 会请求管理员权限）。不会在你不知情时自己安装。*设置 → 更新* 里可以关闭自动检查、选择是否包括预览版，也可以手动 **检查更新**。版本分两个通道：**稳定版**，以及修复一出就构建的预览版。默认包括预览版；取消勾选「包括预览版」就只收稳定版。
 
 ### 卸载
 
@@ -172,15 +172,15 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 
 ### 实验性功能
 
-在 *设置 → 实验性功能* 里。两个开关**默认都关闭**，关闭时 nekodrop 的行为和没有这些功能时完全一样。打开或关闭时 AirDrop 会重启几秒。如果发送或发现变差了就关掉。不管效果好坏，都欢迎在 [Issues](../../issues) 附诊断报告反馈。
+在 *设置 → 实验性功能* 里。四个开关**默认都关闭**，关闭时 nekodrop 的行为和没有这些功能时完全一样。一个开关只在还没测够时留在这里：至少两张不同的网卡测过、没有人报告变差，就改成始终打开。打开或关闭时 AirDrop 会重启几秒。如果发送或发现变差了就关掉。不管效果好坏，都欢迎在 [Issues](../../issues) 附诊断报告反馈。
 
 （0.1.9 起的「更快发送到 iPhone」开关在 0.1.25 起改为始终打开：同时在途的 AWDL 帧从 8 个提高到 48 个，每批数据只敲一次网卡门铃，速率阶梯从 HT MCS 4 起步。没有任何网卡报告它让情况变差：AX200 上和默认一样约 1.3 MB/s（[#4](../../issues/4)），AX210 上略快（[#14](../../issues/14)），AX211 上 537 MB 以 3.4 MB/s 完整传完、没有放弃的帧（[#9](../../issues/9)）。）
 
-**聚合发送（A-MPDU）**（0.1.15 起，**默认关闭**；目前在 AX200 和 AX211 上固件都只发单帧）
+**聚合发送（A-MPDU）**（0.1.15 起，默认关闭；**AX201 和 AX200 上已可用**）
 
-发给 iPhone 慢（约 1.3 MB/s），从 iPhone 收却快（约 9 MB/s）。原因是我们发的每一帧都单独发出、单独等确认，而且只能在 iPhone 正好停在我们信道上的时候发；iPhone 那边会把多帧聚合起来，所以接收快。这个开关照 ForbiddenItlwm 的做法（它的 `-itlawdlcoexbatx`，在 Mac 上 Mac → iPhone 约 22 MB/s）让我们这边也聚合：
-1. 开始给某台 iPhone 发大文件时（每秒约 200 个满长度帧），给这台 iPhone 单独建一个固件站点，配一条聚合发送队列，并打开固件的速率控制（VHT 80 MHz，网卡支持时用双流）。
-2. 向 iPhone 请求 Block Ack 会话（ADDBA）：iPhone 在我们信道上时每 200 毫秒问一次，最多 40 次，然后休息 20 秒再试。
+发给 iPhone 提速最大的一项：**AX201 上 30.8 MB/s**（0.1.30），**AX200 上 9–25 MiB/s**（[#4](../../issues/4)），不开时只有 1–3 MB/s。不开时我们发的每一帧都单独发出、单独等确认，而且只能在 iPhone 正好停在我们信道上的时候发。这个开关照 ForbiddenItlwm 的做法（它的 `-itlawdlcoexbatx`）把帧聚合起来发：
+1. 开始给某台 iPhone 发大文件时（250 毫秒内 24 个满长度帧），给这台 iPhone 单独建一个固件站点，配一条聚合发送队列，并打开固件的速率控制（VHT 80 MHz，网卡支持时用双流）。
+2. 向 iPhone 请求 Block Ack 会话（ADDBA）：每 100 毫秒问一次，最多 20 次；没有回应就退回单帧发送，60 秒后可以再试。发送结束后电脑主动结束会话（DELBA），下一次发送重新开始。
 3. iPhone 同意后，这次传输的帧改成 TID 0 的 QoS 数据帧，由固件打包成 A-MPDU 发出。建立连接这类短交互仍走原来的路径，保留原有的重传。
 4. 从 iPhone 的 AWDL 同步帧跟踪它的时间表：16 个时隙里哪些在我们信道上、每个从什么时候开始。iPhone 不在时，暂停固件里它的队列，免得白白重传；发给它的其他帧也先等着，最多等到它回来。
 5. iPhone 的站点存在期间关闭混杂接收，这样固件会确认 iPhone 发来的帧。
@@ -191,6 +191,14 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 - 如果一直是 `asking`，说明 iPhone 没回应我们的 ADDBA，上游也遇到过，请附上报告。
 
 DMA 内存不够分配额外的发送环，或者走的是内核驱动路径时，这个开关不起作用，发送方式和原来一样。
+
+**蓝牙与 Wi-Fi 均衡共存（Intel）**（0.1.33 起，感谢 [@XXD051030](https://github.com/XXD051030)，[#26](../../pull/26)）
+
+适用于电脑找 iPhone、Mac 慢或者找不到。电脑发送时，靠网卡自带的蓝牙发出信标唤醒附近的苹果设备，但 radio 让固件「Wi-Fi 优先」，AWDL 监听时信标几乎发不出去。这个开关让固件均衡分配（和 ForbiddenItlwm 的 `itlawdlbtcoex=1` 相同）。在一台 AX200 上、没开分享面板的情况下，Mac 9 次都在 2.3 秒内出现，iPhone 9 次里出现 8 次，中位数约 5 秒。只作用于 Intel 用户态 radio。
+
+**Wi-Fi 和 AirDrop 不在同一信道时按苹果的方式分时**（0.1.32 起，移植自 [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30)）
+
+只在 nekodrop 连的 5 GHz Wi-Fi 和 AirDrop 不在同一信道时起作用。照 macOS 的做法，把路由器写进 AirDrop 广告的 16 个时隙里，电脑在这些时隙里不出声，让 iPhone 知道电脑什么时候不在。在一台 AX200 上（Wi-Fi 在 40、AirDrop 在 149）测了五次，**没有可测出的提升**（[#4](../../issues/4)），所以继续保持关闭。把路由器的 5 GHz 设到 AirDrop 信道（44 或 149）效果更明显。
 
 **更快解锁被动 5 GHz 信道**（尚未实机测试）
 
@@ -209,14 +217,15 @@ DMA 内存不够分配额外的发送环，或者走的是内核驱动路径时�
 |---|---|
 | 用户态 Intel 驱动：固件启动、监听、注入、扫描 | ✅ AX201、AX200、AX210、AX211 上可用（后三者为用户反馈） |
 | iPhone → Windows | ✅ 可用（收到的照片完整，哈希一致） |
-| Windows → iPhone | ✅ 可用（AX201 实测；AX200、AX210、AX211 用户反馈可用） |
+| Windows → iPhone | ✅ 可用（AX201 实测；AX200、AX210、AX211 用户反馈可用）；打开 A-MPDU 后最高 30.8 MB/s |
 | 联网同时 AirDrop | ✅ 可用（WPA2、DHCP、DNS 都走“nekodrop”网卡） |
 | Wi-Fi 管理、已保存网络、网页登录识别 | ✅ |
 | 服务、托盘程序、通知、右键菜单、安装包 | ✅ |
 | 纯 WPA3、OWE | 🧪 0.1.12，未实机测试 |
 | 802.1X（企业版） | ⏳ 计划中 |
 | AX200、AX210、AX211 | ✅ 用户反馈双向 AirDrop 可用 |
-| AX411、Qu/So 上的 9560、AX203 | 🧪 已照上游移植，未实机测试 |
+| AX411 / Killer AX1690 | 🧪 能识别、固件能启动（[#25](../../issues/25)）；AirDrop 待用户确认 |
+| Qu/So 上的 9560、AX203 | 🧪 已照上游移植，还没有用户反馈 |
 | Windows 10 | ✅ 用户反馈 0.1.16 及以上双向 AirDrop 可用（[#18](../../issues/18)） |
 | 内核 WiFiCx 驱动（`kdriver/`） | 🧊 已搁置：实验性，安装包**不会安装**它，见 [docs/KERNEL.md](docs/KERNEL.md) |
 
@@ -246,6 +255,8 @@ DMA 内存不够分配额外的发送环，或者走的是内核驱动路径时�
 | 现象 | 试试 |
 |---|---|
 | iPhone 搜不到电脑 | 把 iPhone 的 AirDrop 设为“所有人（10 分钟）”，关掉再打开（清掉缓存的旧记录），手机解锁并放在附近 |
+| 电脑找 iPhone 很慢 | 打开 *设置 → 实验性功能 →「蓝牙与 Wi-Fi 均衡共存」*（Intel 网卡） |
+| 发给 iPhone 很慢 | 打开 *设置 → 实验性功能 →「聚合发送（A-MPDU）」*。nekodrop 连的 5 GHz Wi-Fi 和 AirDrop（44 或 149）不在同一信道时会变慢；在 nekodrop 里断开 Wi-Fi，或者把路由器改到那个信道会好很多 |
 | iPhone 上出现两个电脑 | 之前运行留下的缓存记录，在 iPhone 上把 AirDrop 关掉再打开 |
 | 没网 | 托盘 → **Wi-Fi…**，确认已连接。网络可能需要网页登录，或者是纯 WPA3 / 企业网（见上表） |
 | Windows 的 Wi-Fi 图标没了 | 同时模式下是正常的：网卡归 nekodrop 管。用 **Wi-Fi…**，或者切到“按需” |
@@ -259,7 +270,7 @@ DMA 内存不够分配额外的发送环，或者走的是内核驱动路径时�
 git clone https://github.com/zheznanohana/nekodrop.git
 cd nekodrop
 .\scripts\fetch-deps.ps1        # 下载 winawdl、devourer、ForbiddenItlwm（固件）、MinGW、WDK NuGet 到 third_party\
-.\scripts\build-installer.ps1   # 全部构建 → build\nekodrop-0.1.8-setup.exe
+.\scripts\build-installer.ps1   # 全部构建 → build\nekodrop-<version>-setup.exe
 .\scripts\build-radio.ps1       # 只构建 Intel 用户态驱动并跑离线自检
 .\scripts\build-radio-rtl.ps1   # 只构建 Realtek RTL8852CE radio（devourer）并跑离线单测
 ```

@@ -17,7 +17,7 @@
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078d4">
   <img alt="card" src="https://img.shields.io/badge/card-Intel%20AX201%20%7C%20AX200%20%7C%20AX210%20%7C%20AX211%20(user%20reports)-6c5ce7">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--2.0-blue">
-  <img alt="status" src="https://img.shields.io/badge/status-experimental-orange">
+  <img alt="status" src="https://img.shields.io/badge/status-preview-yellow">
 </p>
 
 <p align="center">
@@ -50,14 +50,14 @@ Everything below was tested by the author on their own laptop, not just in theor
 | OS | Windows 11 Pro x64 |
 | iPhone → Windows | ✅ works: photos and files arrive intact |
 | Windows → iPhone | ✅ works: right-click → Send with nekodrop, accepted and received on the iPhone |
+| AirDrop speed | PC → iPhone **30.8 MB/s** with A-MPDU on (104.8 MB in 3.4 s; 63 frames per aggregate, 99.7% acknowledged); iPhone → PC **13.5 MB/s** average for the same file (0.1.30) |
 | Wi-Fi at the same time | ✅ works: the PC stays online through nekodrop's own WPA2 connection while AirDrop runs, including with Wi-Fi and AWDL on the same 5 GHz channel |
-| Internet speed while AirDrop runs | about **28 Mbps** download at peak (≈2,370 packets/s sustained for 20 s, 5 GHz channel 44, 80 MHz, WPA2). Estimated from the radio's packet counters assuming full-size 1,500-byte packets, during ordinary use, not a speed test, so the link's real maximum may be higher. Block Ack declined (the default since 0.1.1); with Block Ack on, the peak seen was ~22 Mbps |
 
-Other AX201 laptops should behave the same, since the chip and firmware are identical, but only this one has been tested. Reports from other machines are welcome in [Issues](../../issues).
+Users have since confirmed two-way AirDrop on the AX200, AX210 and AX211 as well (see the table below). Reports from other machines are welcome in [Issues](../../issues).
 
 ## Supported hardware
 
-nekodrop talks to the Wi-Fi chip directly through modular backends (`CardCatalog` + `radio_backend.h`). Today's built-in radios support Intel 22000/AX210-family cards (`nekodrop-radio.exe`, ported from [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)'s `hal_iwx`, concurrent Wi-Fi + AirDrop or on-demand) and **Realtek RTL8852CE** (`10EC:C852`, `nekodrop-radio-rtl.exe`, built from [winawdl](https://github.com/raph559/winawdl)/[devourer](https://github.com/raph559/devourer), on-demand mode — compiled and offline-tested in CI, awaiting real-hardware confirmation inside nekodrop). All 15 Intel cards keep 100% unchanged default concurrent and on-demand behavior.
+nekodrop talks to the Wi-Fi chip directly through modular backends (`CardCatalog` + `radio_backend.h`). Today's built-in radios support Intel 22000/AX210-family cards (`nekodrop-radio.exe`, ported from [ForbiddenItlwm](https://github.com/retropineaple/ForbiddenItlwm)'s `hal_iwx`, concurrent Wi-Fi + AirDrop or on-demand) and **Realtek RTL8852CE** (`10EC:C852`, `nekodrop-radio-rtl.exe`, built from [winawdl](https://github.com/raph559/winawdl)/[devourer](https://github.com/raph559/devourer), on-demand mode; no user has tested it inside nekodrop yet).
 
 **Full multi-vendor compatibility matrix (Intel / Realtek / MediaTek / Qualcomm): [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)** · **Release history: [CHANGELOG.md](CHANGELOG.md)** · **Driver architecture: [docs/HARDWARE.md](docs/HARDWARE.md)**
 
@@ -67,12 +67,12 @@ Quick summary of currently active cards:
 |---|---|---|---|
 | **Intel Wi-Fi 6 AX201** 160 MHz (CNVi) | `8086:` `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` (`iwx`, Concurrent & On-Demand) | ✅ **tested** (QuZ on `43F0`) |
 | Intel Wireless-AC 9560 / 9462 / 9461 on Qu/QuZ (CNVi) | same IDs as AX201 | `Qu/QuZ-jf-b0-68` (`iwx`, Concurrent & On-Demand) | ⚠️ untested |
-| Intel Wi-Fi 6 AX200 (discrete) | `8086:2723` | `cc-a0-68` (`iwx`, Concurrent & On-Demand) | ✅ two-way AirDrop in user reports ([#1](../../issues/1), [#4](../../issues/4)) |
+| Intel Wi-Fi 6 AX200 (discrete) | `8086:2723` | `cc-a0-68` (`iwx`, Concurrent & On-Demand) | ✅ two-way AirDrop in user reports ([#1](../../issues/1), [#4](../../issues/4)); 9–25 MiB/s to an iPhone with A-MPDU ([#4](../../issues/4)) |
 | Intel Wi-Fi 6E AX210 (discrete) | `8086:2725` | `ty-a0-gf-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | ✅ two-way AirDrop in user reports ([#14](../../issues/14), [#18](../../issues/18)); some machines still being fixed ([#11](../../issues/11)) |
-| Intel Wi-Fi 6E AX211 (CNVi, 12th gen+) | `8086:` `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | ✅ two-way AirDrop in a user report ([#9](../../issues/9)); discovery not yet reliable on every machine ([#16](../../issues/16)) |
-| Intel Wi-Fi 6E AX411 / Killer AX1690 (CNVi) | same IDs as AX211 | `so-a0-gf4-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | ⚠️ untested ([#7](../../issues/7)) |
+| Intel Wi-Fi 6E AX211 (CNVi, 12th gen+) | `8086:` `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | ✅ two-way AirDrop in user reports ([#9](../../issues/9), [#29](../../issues/29)); iPhones list the PC since 0.1.31 ([#24](../../issues/24)) |
+| Intel Wi-Fi 6E AX411 / Killer AX1690 (CNVi) | same IDs as AX211 | `so-a0-gf4-a0-68` + PNVM (`iwx`, Concurrent & On-Demand) | 🧪 recognized and firmware boots ([#25](../../issues/25)); has the AX211's 0.1.31 fix, awaiting confirmation |
 | Intel Wi-Fi 6 AX203 / 9560 on So | same IDs as AX211 | `so-a0-hr/jf-b0-68` (`iwx`, Concurrent & On-Demand) | ⚠️ untested |
-| **Realtek RTL8852CE** | `10EC:C852` | embedded (`devourer`, On-Demand only) | ⚠️ built-in, CI-compiled & offline-tested, untested inside nekodrop |
+| **Realtek RTL8852CE** | `10EC:C852` | embedded (`devourer`, On-Demand only) | ⚠️ built in, no user report yet |
 | Intel SnJ `2726`, QnJ `2720`, Meteor Lake `7E40`/`2729` | `8086:` | not shipped upstream | ❌ |
 | Intel BE200 / BE201 (Wi-Fi 7) | `8086:` | no upstream driver | ❌ |
 | Other Realtek, MediaTek, Qualcomm, Broadcom | | | ❌ |
@@ -81,7 +81,7 @@ To check your card: *Device Manager → Network adapters*. On a PC without a sup
 
 Cards are recognized by their PCI ID. When yours is not, *Settings > Wi-Fi card* lets you pick the card and its model by hand (for hardware IDs the driver package lists). To add a new card family to nekodrop, see [docs/ADDING-A-CARD.md](docs/ADDING-A-CARD.md).
 
-Not sure which card you have, or want another card supported? The [diagnostic report](#reporting-a-problem-the-diagnostic-report) works without nekodrop installed: download [`installer/report.ps1`](installer/report.ps1) and run `powershell -ExecutionPolicy Bypass -File report.ps1`. It lists every wireless card with its PCI ID, chip, driver and why nekodrop does or does not run on it; please post it in an [issue](../../issues). On an installed nekodrop, `NekoDropService.exe --status` prints the matched card profile, capabilities and bound driver provider, and `NekoDropService.exe --selftest` runs offline catalog and radio-launch checks across all 16 active profiles (15 Intel + Realtek RTL8852CE) without a card or administrator rights. Intel's radio logs one `backend …` line at start and runs `iwx_selftest` on every build; the Realtek radio build runs its own offline unit tests (`block_ack_test`, `reorder_buffer_test`, `outgoing_session_test`, `dma_address_test`) on every build; `install.ps1 -SelfTest`, `restore.ps1 -SelfTest` and `report.ps1 -SelfTest` likewise run offline under Windows PowerShell 5.1 on every build. Intel cards keep 100% unchanged default concurrent and on-demand behavior. What other cards would take: [docs/HARDWARE.md](docs/HARDWARE.md).
+Not sure which card you have, or want another card supported? The [diagnostic report](#reporting-a-problem-the-diagnostic-report) works without nekodrop installed: download [`installer/report.ps1`](installer/report.ps1) and run `powershell -ExecutionPolicy Bypass -File report.ps1`. It lists every wireless card with its PCI ID, chip, driver and why nekodrop does or does not run on it; please post it in an [issue](../../issues). On an installed nekodrop, `NekoDropService.exe --status` prints the matched card profile, capabilities and bound driver provider, and `NekoDropService.exe --selftest` runs offline catalog and radio-launch checks across all 16 active profiles (15 Intel + Realtek RTL8852CE) without a card or administrator rights. Intel's radio logs one `backend …` line at start and runs `iwx_selftest` on every build; the Realtek radio build runs its own offline unit tests (`block_ack_test`, `reorder_buffer_test`, `outgoing_session_test`, `dma_address_test`) on every build; `install.ps1 -SelfTest`, `restore.ps1 -SelfTest` and `report.ps1 -SelfTest` likewise run offline under Windows PowerShell 5.1 on every build. What other cards would take: [docs/HARDWARE.md](docs/HARDWARE.md).
 
 ### Something went wrong? One-click restore
 
@@ -129,7 +129,7 @@ On first start nekodrop takes the Wi-Fi card away from the Intel driver and reco
 
 ### Updates
 
-nekodrop checks GitHub for a newer release a minute after it starts and then every 6 hours. When it finds one, a notification offers **Update**. nekodrop then downloads the installer, checks it against the SHA-256 GitHub publishes for it, and runs it (Windows asks for administrator rights). It never installs anything on its own. *Settings → Updates* turns the check off, chooses whether preview releases count, and has **Check now**. All releases are previews for now.
+nekodrop checks GitHub for a newer release a minute after it starts and then every 6 hours. When it finds one, a notification offers **Update**. nekodrop then downloads the installer, checks it against the SHA-256 GitHub publishes for it, and runs it (Windows asks for administrator rights). It never installs anything on its own. *Settings → Updates* turns the check off, chooses whether preview releases count, and has **Check now**. There are two channels: **Stable** releases, and preview releases built as fixes land. Previews are included by default; untick *Include preview releases* to get only stable ones.
 
 ### Uninstall
 
@@ -172,15 +172,15 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 ### Experimental features
 
-*Settings → Experimental*. Both are **off by default**, and with them off nekodrop behaves exactly as without them. Turning either on or off restarts AirDrop for a few seconds. If sending or discovery gets worse, turn it off, and please post a diagnostic report in an [issue](../../issues) either way.
+*Settings → Experimental*. All four are **off by default**, and with them off nekodrop behaves exactly as without them. A switch stays here only until at least two different cards have tested it with nobody reporting it made things worse; then it becomes always on. Turning either on or off restarts AirDrop for a few seconds. If sending or discovery gets worse, turn it off, and please post a diagnostic report in an [issue](../../issues) either way.
 
 (*Faster sending to iPhone*, a switch from 0.1.9, is always on since 0.1.25: up to 48 AWDL frames in flight instead of 8, one doorbell per batch, and the rate ladder starting at HT MCS 4. No card reported it making things worse: about the same 1.3 MB/s on an AX200 ([#4](../../issues/4)), a little faster on an AX210 ([#14](../../issues/14)), 537 MB at 3.4 MB/s with no frames given up on an AX211 ([#9](../../issues/9)).)
 
-**Aggregated sending (A-MPDU)** (0.1.15+, **off by default**; on an AX200 and an AX211 the firmware has so far sent only single frames)
+**Aggregated sending (A-MPDU)** (0.1.15+, off by default; **works on an AX201 and an AX200**)
 
-Sending to an iPhone is slow, about 1.3 MB/s, while receiving runs at about 9 MB/s. The reason: every frame we send goes out on its own and waits for its own acknowledgement, and only while the iPhone happens to be on our channel. The iPhone aggregates its frames, so receiving is fast. This switch ports ForbiddenItlwm's way of aggregating our side too (its `-itlawdlcoexbatx`, which reaches about 22 MB/s Mac → iPhone there):
-1. When a large send to an iPhone starts (about 200 full-size frames a second), nekodrop gives that iPhone a firmware station of its own, with an aggregation queue and the firmware's rate control (VHT 80 MHz, two streams where the card has them).
-2. It asks the iPhone for a Block Ack session (ADDBA), every 200 ms while it is on our channel, up to 40 times, then rests 20 s and tries again.
+The biggest speed-up for sending to an iPhone: **30.8 MB/s on an AX201** (0.1.30) and **9–25 MiB/s on an AX200** ([#4](../../issues/4)), against 1–3 MB/s without it. Without it, every frame we send goes out on its own and waits for its own acknowledgement, and only while the iPhone happens to be on our channel. This switch ports ForbiddenItlwm's way of aggregating frames (its `-itlawdlcoexbatx`):
+1. When a large send to an iPhone starts (24 full-size frames within 250 ms), nekodrop gives that iPhone a firmware station of its own, with an aggregation queue and the firmware's rate control (VHT 80 MHz, two streams where the card has them).
+2. It asks the iPhone for a Block Ack session (ADDBA) every 100 ms, up to 20 times; without an answer it falls back to single frames and may try again after 60 s. When the send is over, the PC ends the session itself (DELBA), so the next send starts clean.
 3. Once the iPhone agrees, the transfer's frames go out as QoS data on TID 0 and the firmware sends them as A-MPDUs. Short exchanges, such as a connection being set up, keep the ordinary path with its resends.
 4. nekodrop follows the iPhone's AWDL schedule from its sync frames: which of its 16 slots it spends on our channel and when each starts. While the iPhone is away, its queue in the firmware is paused instead of burning retries, and other frames for it wait too, for at most the away time.
 5. Promiscuous receive is off while the iPhone's station exists, so the firmware acknowledges the iPhone's frames.
@@ -191,6 +191,14 @@ What to check when testing:
 - If it says `asking` for a long time, the iPhone isn't answering our ADDBA. Upstream saw that too. Please attach the report.
 
 Without enough memory for the extra ring, or on the kernel-driver path, the switch does nothing and sending stays as before.
+
+**Balanced Bluetooth coexistence (Intel)** (0.1.33+, thanks to [@XXD051030](https://github.com/XXD051030), [#26](../../pull/26))
+
+For when the PC finds iPhones and Macs slowly or not at all. To send, the PC wakes nearby Apple devices with a Bluetooth beacon from the card's own Bluetooth, but the radio has the firmware favour Wi-Fi, so while AWDL listens the beacon barely gets out. This switch balances the two (ForbiddenItlwm's `itlawdlbtcoex=1`). On an AX200, with no share sheet open, the Mac appeared within 2.3 s in 9 of 9 tries and the iPhone in 8 of 9, median about 5 s. Intel user-mode radio only.
+
+**Apple-style time sharing when Wi-Fi and AirDrop use different channels** (0.1.32+, port of [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30))
+
+Only acts when nekodrop's 5 GHz Wi-Fi is on another channel than AirDrop. As macOS does, the router goes into AirDrop's 16 advertised slots, and the PC stays silent there, so the iPhone knows when the PC is away. On an AX200 with Wi-Fi on 40 and AirDrop on 149 it made **no measurable difference** over five runs ([#4](../../issues/4)), so it stays off. Putting your router's 5 GHz on the AirDrop channel (44 or 149) helps more.
 
 **Faster unlock of a passive 5 GHz channel** (not yet tested on hardware)
 
@@ -209,14 +217,15 @@ What to check when testing: the diagnostic report's **Discovery timing** table s
 |---|---|
 | User-mode Intel driver: firmware boot, monitor, inject, scan | ✅ works on AX201, AX200, AX210, AX211 (user reports for the last three) |
 | iPhone → Windows | ✅ works (photos received intact, hash-checked) |
-| Windows → iPhone | ✅ works (AX201; AX200, AX210, AX211 in user reports) |
+| Windows → iPhone | ✅ works (AX201; AX200, AX210, AX211 in user reports); up to 30.8 MB/s with A-MPDU |
 | Wi-Fi and AirDrop at the same time | ✅ works (WPA2, DHCP, DNS through the "nekodrop" adapter) |
 | Wi-Fi manager, saved networks, captive portal | ✅ |
 | Service, tray app, notifications, context menu, installer | ✅ |
 | WPA3-only, OWE | 🧪 0.1.12, untested on hardware |
 | 802.1X (Enterprise) | ⏳ planned |
 | AX200, AX210, AX211 | ✅ two-way AirDrop in user reports |
-| AX411, 9560 on Qu/So, AX203 | 🧪 ported from upstream, untested on hardware |
+| AX411 / Killer AX1690 | 🧪 recognized and firmware boots ([#25](../../issues/25)); AirDrop awaiting confirmation |
+| 9560 on Qu/So, AX203 | 🧪 ported from upstream, no user report yet |
 | Windows 10 | ✅ two-way AirDrop confirmed in user reports on 0.1.16+ ([#18](../../issues/18)) |
 | Kernel WiFiCx driver (`kdriver/`) | 🧊 shelved: experimental and **not installed** by the setup. See [docs/KERNEL.md](docs/KERNEL.md) |
 
@@ -246,6 +255,8 @@ Design notes: [docs/DESIGN.md](docs/DESIGN.md) (driver, DMA, risks) · [docs/CLI
 | Symptom | Try |
 |---|---|
 | iPhone doesn't see the PC | Set the iPhone's AirDrop to *Everyone for 10 Minutes*, turn it off and on (this clears a cached record), and keep the phone unlocked nearby |
+| The PC takes long to find the iPhone | Turn on *Settings → Experimental → Balanced Bluetooth coexistence* (Intel cards) |
+| Sending to the iPhone is slow | Turn on *Settings → Experimental → Aggregated sending (A-MPDU)*. If nekodrop's Wi-Fi is on a different 5 GHz channel than AirDrop (44 or 149), speed drops; disconnecting Wi-Fi in nekodrop or moving the router to that channel helps |
 | The PC shows up twice on the iPhone | A cached record from an earlier run. Toggle AirDrop on the iPhone |
 | No internet | Tray → **Wi-Fi…**: check you're connected. The network may need a sign-in page or be WPA3-only/802.1X (see above) |
 | The Windows Wi-Fi icon disappeared | Expected in *together* mode: nekodrop owns the card. Use **Wi-Fi…**, or switch to *on demand* |
@@ -259,7 +270,7 @@ Needs Visual Studio 2022 Build Tools (C++, Windows SDK, CMake, vcpkg), the .NET 
 git clone https://github.com/zheznanohana/nekodrop.git
 cd nekodrop
 .\scripts\fetch-deps.ps1        # winawdl, devourer, ForbiddenItlwm (firmware), MinGW, WDK NuGet → third_party\
-.\scripts\build-installer.ps1   # everything → build\nekodrop-0.1.8-setup.exe
+.\scripts\build-installer.ps1   # everything → build\nekodrop-<version>-setup.exe
 .\scripts\build-radio.ps1       # just the Intel user-mode driver, plus its offline self-tests
 .\scripts\build-radio-rtl.ps1   # just the Realtek RTL8852CE radio (devourer), plus its offline unit tests
 ```
