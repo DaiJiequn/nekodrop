@@ -90,7 +90,7 @@ Logs are what let us fix things, especially on cards we don't have. Please attac
 
 1. Start menu → **nekodrop - diagnostic report** (or tray icon → **Diagnostic report…**, or **Diagnostic report** at the bottom of the main window). Allow the administrator prompt; the logs and driver state are readable by administrators only.
 2. Two files appear on your Desktop and the report opens in Notepad:
-   - `nekodrop-report-<time>.md`: a summary, a step-by-step check of the last radio start (driver bind → firmware → PNVM → init → ready), system, card, driver, network and Bluetooth details, a discovery timeline and the key log lines. It is also copied to the clipboard: **paste it into the issue**.
+   - `nekodrop-report-<time>.md`: a summary, a step-by-step check of the last radio start (driver bind → firmware → PNVM → init → ready), system, card, driver, network and Bluetooth details, a discovery timeline (with how many seconds each step of discovery took) and the key log lines. It is also copied to the clipboard: **paste it into the issue**.
    - `nekodrop-logs-<time>.txt`: the full logs. **Drag it into the issue** as an attachment.
 3. SSIDs, MAC and private IP addresses, your user name and the computer name are replaced by placeholders such as `<SSID-1>` and `<MAC-2>`. Nothing is uploaded. Please look the report over before posting.
 
@@ -169,7 +169,7 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 ### Experimental features
 
-*Settings → Experimental*. Off by default, and with it off nekodrop behaves exactly as without it. Turning it on or off restarts AirDrop for a few seconds. If sending gets worse, turn it off, and please post a diagnostic report in an [issue](../../issues) either way.
+*Settings → Experimental*. Both are **off by default**, and with them off nekodrop behaves exactly as without them. Turning either on or off restarts AirDrop for a few seconds. If sending or discovery gets worse, turn it off, and please post a diagnostic report in an [issue](../../issues) either way.
 
 (*Faster sending to iPhone*, a switch from 0.1.9, is always on since 0.1.25: up to 48 AWDL frames in flight instead of 8, one doorbell per batch, and the rate ladder starting at HT MCS 4. No card reported it making things worse: about the same 1.3 MB/s on an AX200 ([#4](../../issues/4)), a little faster on an AX210 ([#14](../../issues/14)), 537 MB at 3.4 MB/s with no frames given up on an AX211 ([#9](../../issues/9)).)
 
@@ -188,6 +188,17 @@ What to check when testing:
 - If it says `asking` for a long time, the iPhone isn't answering our ADDBA. Upstream saw that too. Please attach the report.
 
 Without enough memory for the extra ring, or on the kernel-driver path, the switch does nothing and sending stays as before.
+
+**Faster unlock of a passive 5 GHz channel** (not yet tested on hardware)
+
+Some cards refuse every country nekodrop asks for (an AX210 in Taiwan answered "status 4" from every source, [#11](../../issues/11)). The firmware then keeps the 5 GHz AirDrop channel *passive*: by the rules nothing may be sent there until an iPhone or a nearby router is heard on it, or until the firmware learns the country itself from routers' beacons. Until then the PC is silent, so iPhones cannot see it, and in #11 that took about a minute after every radio start. By default nekodrop runs one scan 10 s after start, over all 38 channels, to let the firmware hear routers. With this switch:
+- the scan runs at 1.5 s, and again at 12 s and 30 s while the channel is still passive (the first waits up to 4 s while the Wi-Fi beside AirDrop is joining);
+- it covers only the 11 common non-DFS channels (36–48, 149–161, 1, 6, 11), with the AirDrop channel's own block first, so a router there unlocks it straight away;
+- the radio starts from the country the firmware really holds, not the one it was asked for, so a refused country is asked for again when an iPhone names it.
+
+It never transmits on a passive channel: unlocking still waits for the firmware, a router or an iPhone. These scans don't replace the Wi-Fi list. On the kernel-driver path the switch does nothing.
+
+What to check when testing: the diagnostic report's **Discovery timing** table shows, in seconds after the radio start, when the first AWDL frame was heard, when sending was allowed, when the channel turned active and when the AirDrop engine listed the first device. Compare it with the switch off.
 
 ## Status
 

@@ -73,6 +73,7 @@ public sealed class Supervisor : IDisposable
                 ["channel"] = _channel,
                 ["country"] = _cfg.Country,
                 ["aggregate"] = _cfg.Aggregate,
+                ["fastUnlock"] = _cfg.FastUnlock,
                 ["wifi"] = _wifi,
                 ["detail"] = _detail,
                 ["ssid"] = _staSsid,
@@ -208,6 +209,21 @@ public sealed class Supervisor : IDisposable
             _cfg.Save();
         }
         Say($"experimental A-MPDU sending: {(on ? "on" : "off")}");
+        if (State is RadioState.On or RadioState.Starting)
+            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        Publish();
+    }
+
+    /// <summary>Experimental fast unlock of a passive 5 GHz channel (#11); a running radio restarts to take it.</summary>
+    public void SetFastUnlock(bool on)
+    {
+        lock (_lock)
+        {
+            if (_cfg.FastUnlock == on) return;
+            _cfg.FastUnlock = on;
+            _cfg.Save();
+        }
+        Say($"experimental fast passive-channel unlock: {(on ? "on" : "off")}");
         if (State is RadioState.On or RadioState.Starting)
             _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         Publish();
@@ -361,6 +377,9 @@ public sealed class Supervisor : IDisposable
             // at 3.4 MB/s with 0 given up #9, AX210 a little faster #14, AX200 same speed #4).
             if (!kernel && _caps.SupportsFastSend) args.AddRange(["--tx-window", "48"]);
             if (_cfg.Aggregate && !kernel && _caps.SupportsAggregate) args.Add("--aggregate");
+            // The firmware scan and country notice it needs are the user-mode Intel radio's,
+            // the radio that also runs the Wi-Fi station; not with nekodrop-wlan.sys.
+            if (_cfg.FastUnlock && !kernel && _caps.SupportsConcurrentWifi) args.Add("--fast-unlock");
             _radio = Spawn(Path.Combine(_root, "radio", "nekodrop-radio.exe"), args, OnRadioLine);
             _startedAt = DateTime.UtcNow;
             // awdld connects to the radio's pipe; give the firmware time to boot.

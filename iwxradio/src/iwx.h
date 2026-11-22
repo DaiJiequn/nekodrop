@@ -107,6 +107,11 @@ public:
    * from the main loop; true when a notice was answered, with what the
    * firmware then says in *got. */
   bool answer_country_notice(std::string *got);
+  /* The domain the firmware last answered an MCC update with ("00" for the
+   * world domain), "" before the first. At start this tells whether
+   * --country was really taken, which set_country's caller cannot see once
+   * open() returns (#11: refused with status 4, the firmware stayed "00"). */
+  const std::string &current_country() const { return _current_mcc; }
   /* IWX_NVM_CHANNEL_* flags the firmware last reported for a channel (6, 36, 44, 149). */
   uint32_t channel_flags(uint8_t channel) const { return _chan_flags[channel]; }
   /* Queues one frame (802.11 header first, no FCS). False if the ring is full
@@ -146,6 +151,9 @@ public:
   bool sta_tlc() const { return _sta_tlc; }
   unsigned sta_tx_acked() const { return _sta_tx_acked; }
   unsigned sta_tx_failed() const { return _sta_tx_failed; }
+  /* Frames queued to the station's ring; tx_stats().submitted counts the
+   * AWDL data ring only, the ring its done/failed counts come from. */
+  unsigned sta_tx_submitted() const { return _sta_tx_submitted; }
   /* `encrypt`: the station's keys are installed and the frame carries the
    * protected bit; the firmware adds the CCMP header and MIC. */
   int sta_transmit(const uint8_t *frame, size_t len, const TxRate &rate, bool encrypt);
@@ -337,7 +345,7 @@ private:
        _sta_assoc = false, _sta_tlc = false;
   uint16_t _sta_aid = 0;
   uint8_t _sta_dtim = 1, _sta_ba_tids = 0;
-  unsigned _sta_tx_acked = 0, _sta_tx_failed = 0, _sta_tx_fail_logged = 0;
+  unsigned _sta_tx_acked = 0, _sta_tx_failed = 0, _sta_tx_fail_logged = 0, _sta_tx_submitted = 0;
   bool _promisc = true;
   bool _ba_station = false;
   uint8_t _ba_peer[6] = {}, _ba_tids = 0, _ba_token[8] = {};
@@ -345,6 +353,7 @@ private:
   bool _notice_pending = false;
   uint16_t _notice_mcc = 0, _answered_mcc = 0;
   uint8_t _notice_source = 0, _answered_source = 0;
+  std::string _current_mcc;
   struct TxHist { uint16_t len; uint8_t hdrlen, fc0, fc1, a1; uint32_t rnf; uint8_t slot; };
   TxHist _tx_hist[8] = {};
   unsigned _tx_hist_at = 0;

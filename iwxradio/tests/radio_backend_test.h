@@ -76,6 +76,21 @@ inline bool contains_ci(const std::string &hay, const char *needle) {
   return h.find(n) != std::string::npos;
 }
 
+/* Words installer/report.ps1 (its error filter is case-insensitive) or
+ * Supervisor.cs (prefixes it acts on) react to in a radio line: plain
+ * information lines must contain none. The first one found, or nullptr. */
+inline const char *report_trigger(const std::string &s) {
+  static const char *const kTriggers[] = {
+      "error", "fail", "refus", "cannot", "could not", "timed out", "not supported", "exited", "restart",
+      "giving the card", "taking the card", "ready on", "pnvm", "init_complete", "nvm:", "alive",
+      "unsupported", "card 0x", "family", "rx: ", "tx: ", "aggregate: ", "event: ", "bring-up",
+      "transmitting allowed", "moving there", "stayed passive", "starting:", "stopping:", "wi-fi: joining",
+      "gateway", "lmac", "umac", "secboot", "wifi: "};
+  for (const char *t : kTriggers)
+    if (contains_ci(s, t)) return t;
+  return nullptr;
+}
+
 inline int run() {
   int failures = 0;
   const auto check = [&](bool ok, const char *what) {
@@ -189,18 +204,10 @@ inline int run() {
    * to installer/report.ps1 (its error filter is case-insensitive) or to
    * Supervisor.cs (prefixes it acts on). */
   {
-    static const char *const kTriggers[] = {
-        "error", "fail", "refus", "cannot", "could not", "timed out", "not supported", "exited", "restart",
-        "giving the card", "taking the card", "ready on", "pnvm", "init_complete", "nvm:", "alive",
-        "unsupported", "card 0x", "family", "rx: ", "tx: ", "aggregate: ", "event: ", "bring-up",
-        "transmitting allowed", "moving there", "stayed passive", "starting:", "stopping:", "wi-fi: joining",
-        "gateway", "lmac", "umac", "secboot", "wifi: "};
     const RadioCapabilities all[] = {iwx, kern, dev};
     for (const auto &c : all) {
       const std::string s = radio::format_capabilities_summary(c);
-      const char *hit = nullptr;
-      for (const char *t : kTriggers)
-        if (contains_ci(s, t)) hit = t;
+      const char *hit = report_trigger(s);
       std::printf("     %s\n", s.c_str());
       check(!hit && s.rfind(std::string("backend ") + c.backend + ": ", 0) == 0,
             hit ? hit : "summary line is plain information");
@@ -208,6 +215,71 @@ inline int run() {
     check(radio::format_capabilities_summary(iwx).find("tx-window up to 64") != std::string::npos &&
               radio::format_capabilities_summary(kern).find("station windows") != std::string::npos,
           "summary names the window and who owns the station");
+  }
+
+  /* Experimental fast passive-channel unlock (#11): off keeps the one scan
+   * at 10 s; on scans sooner, up to three times, over non-DFS channels. */
+  {
+    check(radio::passive_discovery_scan_delay_ms(false, 0, false) == 10000 &&
+              radio::passive_discovery_scan_delay_ms(false, 0, true) == 10000 &&
+              radio::passive_discovery_scan_delay_ms(false, 1, false) == 0,
+          "fast unlock off: one discovery scan at 10 s, never another (unchanged)");
+    check(radio::passive_discovery_scan_delay_ms(true, 0, false) == 1500 &&
+              radio::passive_discovery_scan_delay_ms(true, 1, false) == 12000 &&
+              radio::passive_discovery_scan_delay_ms(true, 2, false) == 30000 &&
+              radio::passive_discovery_scan_delay_ms(true, radio::kMaxPassiveDiscoveryScans, false) == 0 &&
+              radio::kMaxPassiveDiscoveryScans == 3,
+          "fast unlock on: discovery scans at 1.5, 12 and 30 s, three at most");
+    check(radio::passive_discovery_scan_delay_ms(true, 0, true) == 4000 &&
+              radio::passive_discovery_scan_delay_ms(true, 1, true) == 12000,
+          "fast unlock on: the first scan waits up to 4 s while the station joins");
+    const auto no_dfs = [](const uint8_t *c, size_t n) {
+      for (size_t i = 0; i < n; i++)
+        if (c[i] >= 52 && c[i] <= 144) return false;
+      return true;
+    };
+    const auto same_set = [](const uint8_t *a, const uint8_t *b, size_t n) {
+      for (size_t i = 0; i < n; i++) {
+        bool found = false;
+        for (size_t j = 0; j < n; j++) found |= a[i] == b[j];
+        if (!found) return false;
+      }
+      return true;
+    };
+    uint8_t c149[radio::kFastDiscoveryChannelCount] = {}, c44[radio::kFastDiscoveryChannelCount] = {},
+            c153[radio::kFastDiscoveryChannelCount] = {};
+    const size_t n149 = radio::fast_discovery_channels(149, c149), n44 = radio::fast_discovery_channels(44, c44),
+                 n153 = radio::fast_discovery_channels(153, c153);
+    check(n149 == 11 && c149[0] == 149 && c149[1] == 153 && c149[2] == 157 && c149[3] == 161 && no_dfs(c149, n149),
+          "fast discovery scan for 149: 11 non-DFS channels, 149-161 first");
+    check(n44 == 11 && c44[0] == 44 && c44[1] == 36 && c44[2] == 40 && c44[3] == 48 && no_dfs(c44, n44) &&
+              same_set(c44, c149, 11),
+          "fast discovery scan for 44: the same 11 channels, 44 then 36/40/48 first");
+    check(n153 == 11 && c153[0] == 153 && c153[1] == 149 && same_set(c153, c149, 11),
+          "fast discovery scan for 153: its own channel first, then its block");
+    check(radio::held_country("TW") == "TW" && radio::held_country("00").empty() &&
+              radio::held_country("ZZ").empty() && radio::held_country("").empty() &&
+              radio::held_country("tw").empty() && radio::held_country("TWN").empty(),
+          "held country: two letters; the world domain and anything else are none");
+    const std::string m1 = radio::format_discovery_milestone("AWDL action frame", 3249, " (channel 149, -61 dBm)"),
+                      m2 = radio::format_discovery_milestone("AWDL MIF", 0, ""),
+                      m3 = radio::format_discovery_milestone("frame addressed to us", 99950, "");
+    check(m1 == "discovery: first AWDL action frame after 3.2 s (channel 149, -61 dBm)" &&
+              m2 == "discovery: first AWDL MIF after 0.0 s" &&
+              m3 == "discovery: first frame addressed to us after 100.0 s",
+          "discovery milestone lines: tenths of a second, rounded");
+    /* The new informational lines radio_main writes, as it words them: none
+     * may look like a stage, an error or an event to report.ps1/Supervisor. */
+    const std::string lines[] = {m1, m2, m3, radio::kFastUnlockOnLine,
+                                 "channel 149 is passive: fast discovery scan 1 of 3 so the firmware can learn the country",
+                                 "fast discovery scan started (11 channels)", "fast discovery scan did not start",
+                                 "fast discovery scan done; channel 149 still passive",
+                                 "fast discovery scan done; channel 149 now allows sending"};
+    for (const auto &s : lines) {
+      const char *hit = report_trigger(s);
+      std::printf("     %s\n", s.c_str());
+      check(!hit, hit ? hit : "new discovery line is plain information");
+    }
   }
   return failures;
 }

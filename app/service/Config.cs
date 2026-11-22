@@ -30,6 +30,11 @@ public sealed class ServiceConfig
     public int PeerChannel { get; set; }
     /// <summary>Experimental A-MPDU sending to the iPhone (radio --aggregate).</summary>
     public bool Aggregate { get; set; }
+    /// <summary>
+    /// Experimental fast unlock of a passive 5 GHz AWDL channel (radio --fast-unlock, #11):
+    /// earlier, repeated discovery scans so the firmware learns the country sooner. Off by default.
+    /// </summary>
+    public bool FastUnlock { get; set; }
     /// <summary>Seconds without AirDrop use before on-demand mode gives the card back.</summary>
     public int IdleSeconds { get; set; } = 90;
     /// <summary>Intel's own INF (oemNN.inf), remembered when the card is first taken.</summary>

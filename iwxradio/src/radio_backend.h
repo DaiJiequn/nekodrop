@@ -104,7 +104,8 @@ struct RadioCapabilities {
    * per batch. Without it the backend rings for itself; a TX window above
    * the default still works, just without batching. */
   bool supports_batched_kick = false;
-  /* The firmware's own country notice (answer_country_notice). */
+  /* The firmware's own country notice (answer_country_notice), and the
+   * domain it last reported (current_country). */
   bool supports_country_notice = false;
   /* Asking the card for a regulatory domain (set_country). */
   bool supports_set_country = false;
@@ -218,6 +219,92 @@ constexpr bool should_start_passive_discovery_scan(bool may_send, bool scan_star
   return c.supports_umac_scan && c.supports_country_notice && !may_send && !scan_started && !scan_wanted;
 }
 
+/* ---- Experimental fast passive-channel unlock (--fast-unlock, #11) ----
+ * On a card that refuses every country the host asks for (#11, AX210, TW:
+ * MCC status 4 from the BIOS, Wi-Fi, ME and MCC-API sources, world domain
+ * "00", all of 5 GHz passive) the firmware's own rules leave one way to an
+ * active AWDL channel: its country notice, which it sends after a scan heard
+ * access points' Country elements (answer_country_notice). By default the
+ * radio scans once, 10 s after start, all 38 channels (DFS ones included,
+ * 149-165 last), and never again: #11 sat ~60 s on a passive 149 with every
+ * AWDL frame held. With the experimental switch the discovery scan comes at
+ * 1.5 s, again at 12 s and 30 s while the channel stays passive, and visits
+ * only the eleven non-DFS channels with the AWDL channel's 80 MHz block
+ * first. Nothing here transmits on a passive channel: may_send() still waits
+ * for the firmware, a beacon or an AWDL peer. */
+constexpr unsigned kMaxPassiveDiscoveryScans = 3;
+constexpr size_t kFastDiscoveryChannelCount = 11;
+/* Logged at start when the switch is on (report.ps1's timing table looks for it). */
+constexpr const char kFastUnlockOnLine[] =
+    "experimental fast passive-channel unlock: on (discovery scans at 1.5, 12 and 30 s while the channel is passive)";
+
+/* Milliseconds after the radio is ready that discovery scan `attempt`
+ * (0-based) is due, 0 when there is none. Off: the one scan at 10 s, as
+ * always. On: the first waits up to 4 s while the Wi-Fi station is joining
+ * (a scan takes the card off the access point's channel mid-handshake); it
+ * is asked again every tick, so it runs as soon as the join ends after 1.5 s. */
+constexpr unsigned passive_discovery_scan_delay_ms(bool fast_unlock, unsigned attempt, bool sta_joining) {
+  if (!fast_unlock) return attempt == 0 ? 10000u : 0u;
+  switch (attempt) {
+  case 0: return sta_joining ? 4000u : 1500u;
+  case 1: return 12000u;
+  case 2: return 30000u;
+  default: return 0u;
+  }
+}
+
+/* The channels of a fast discovery scan, into out[kFastDiscoveryChannelCount]:
+ * the AWDL channel, the rest of its 80 MHz block (a beacon there unlocks it
+ * at once), the other non-DFS 5 GHz block, then 1, 6 and 11 for more Country
+ * elements. Returns the count (always 11). */
+constexpr size_t fast_discovery_channels(unsigned awdl_channel, uint8_t (&out)[kFastDiscoveryChannelCount]) {
+  const uint8_t lower[4] = {36, 40, 44, 48}, upper[4] = {149, 153, 157, 161};
+  const bool high = awdl_channel >= 149;
+  const uint8_t *first = high ? upper : lower, *second = high ? lower : upper;
+  size_t n = 0;
+  /* Casts: the kernel build's /W4 /WX warns on int (a promoted uint8_t) against unsigned. */
+  for (size_t i = 0; i < 4; i++)
+    if (static_cast<unsigned>(first[i]) == awdl_channel) out[n++] = first[i];
+  for (size_t i = 0; i < 4; i++)
+    if (static_cast<unsigned>(first[i]) != awdl_channel) out[n++] = first[i];
+  for (size_t i = 0; i < 4; i++) out[n++] = second[i];
+  out[n++] = 1;
+  out[n++] = 6;
+  out[n++] = 11;
+  return n;
+}
+
+/* The country the firmware actually holds, as radio_main tracks it: two
+ * letters, "" for the world domain ("00", "ZZ") or anything else. With
+ * --fast-unlock radio_main starts from this instead of --country, so a
+ * country the firmware refused at start is asked again when a peer names it,
+ * and the firmware's own notice of it is reported as an event (#11). */
+inline std::string held_country(const std::string &firmware_says) {
+  if (firmware_says.size() != 2 || firmware_says == "ZZ") return std::string();
+  for (char c : firmware_says)
+    if (c < 'A' || c > 'Z') return std::string();
+  return firmware_says;
+}
+
+/* One line, once per radio start, for each first step of discovery (#4,
+ * #11): "discovery: first <what> after 12.3 s<detail>". Plain information
+ * for installer/report.ps1's timing table; worded to match no pattern
+ * report.ps1 or Supervisor.cs reacts to (iwx_selftest checks). */
+inline std::string format_discovery_milestone(const char *what, uint64_t elapsed_ms, const std::string &detail) {
+  /* No std::to_string: the kernel build has no CRT formatting. */
+  const uint64_t tenths = (elapsed_ms + 50) / 100;
+  char n[24] = {};
+  size_t i = sizeof(n) - 1;
+  n[--i] = static_cast<char>('0' + tenths % 10);
+  n[--i] = '.';
+  uint64_t whole = tenths / 10;
+  do {
+    n[--i] = static_cast<char>('0' + whole % 10);
+    whole /= 10;
+  } while (whole && i);
+  return std::string("discovery: first ") + what + " after " + (n + i) + " s" + detail;
+}
+
 /* A scan for the Wi-Fi list ends when the firmware says so (and at least
  * 300 ms passed), after 2 s of listening on backends without a firmware scan,
  * and after 15 s whatever happens. */
@@ -303,7 +390,9 @@ RADIO_DETECT(has_aggregate,
              (void)RADIO_CDEV.agg_seq(), (void)RADIO_CDEV.ba_epoch(),
              (void)RADIO_CDEV.agg_stats().frames);
 RADIO_DETECT(has_batched_kick, (void)RADIO_DEV.kick_data());
-RADIO_DETECT(has_country_notice, (void)RADIO_DEV.answer_country_notice(std::declval<std::string *>()));
+/* current_country(): the domain the firmware last reported, for --fast-unlock. */
+RADIO_DETECT(has_country_notice, (void)RADIO_DEV.answer_country_notice(std::declval<std::string *>()),
+             (void)RADIO_CDEV.current_country());
 RADIO_DETECT(has_set_country, (void)RADIO_DEV.set_country(std::declval<const std::string &>()));
 RADIO_DETECT(has_channel_flags, (void)RADIO_CDEV.channel_flags(uint8_t{}));
 RADIO_DETECT(has_capabilities, (void)D::kCapabilities.backend);
@@ -332,7 +421,7 @@ template <class D> constexpr bool check_backend_contract() {
   static_assert(!D::kCapabilities.supports_batched_kick || detail::has_batched_kick<D>::value,
                 "backend: supports_batched_kick without kick_data");
   static_assert(!D::kCapabilities.supports_country_notice || detail::has_country_notice<D>::value,
-                "backend: supports_country_notice without answer_country_notice");
+                "backend: supports_country_notice without answer_country_notice/current_country");
   static_assert(!D::kCapabilities.supports_set_country || detail::has_set_country<D>::value,
                 "backend: supports_set_country without set_country");
   static_assert(!D::kCapabilities.enforces_passive_channel || detail::has_channel_flags<D>::value,

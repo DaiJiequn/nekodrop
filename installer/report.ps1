@@ -145,6 +145,78 @@ function Test-KnownWifiId([string]$InstanceId) {
   return ($c.Kind -eq 'supported' -or $WifiChips.ContainsKey($c.VendorId + ':' + $c.DeviceId))
 }
 
+# ------------------------------------------------------- discovery timing
+# How long the last radio start took for each step of discovery (#4: ~99 s
+# before the PC saw the iPhone; #11: ch149 passive ~60 s with every AWDL frame
+# held, the iPhone listed after ~2 min, the PC never listed on the iPhone).
+# Until now that meant reading the whole log by hand. Pure text in, table rows
+# out, so -SelfTest checks it without logs or a card.
+#   $attemptLines: service.log from the last radio start ('yyyy-MM-dd HH:mm:ss ...')
+#   $engineLines:  engine.log ('HH:mm:ss.fff ...'; Python logging lines also carry the date)
+function Get-LogTime([string]$line) {
+  if ($line -match '^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)') {
+    return [datetime]::ParseExact($Matches[1], 'yyyy-MM-dd HH:mm:ss', [Globalization.CultureInfo]::InvariantCulture)
+  }
+  return $null
+}
+function Get-DiscoverySummary($attemptLines, $engineLines) {
+  $lines = @($attemptLines | Where-Object { $_ })
+  if (-not $lines.Count) { return @() }
+  $t0 = Get-LogTime $lines[0]
+  if (-not $t0) { return @() }
+  $rows = @()
+  # One row: when (seconds after the start) and the line that says so.
+  $row = {
+    param([string]$name, $line, [string]$detail = '')
+    if (-not $line) { return "| $name | - | $(if ($detail) { $detail } else { 'not in the log' }) |" }
+    $t = Get-LogTime $line
+    $after = if ($t) { '+{0} s' -f [int][Math]::Round(($t - $t0).TotalSeconds) } else { '?' }
+    $text = if ($detail) { $detail } else { '`' + ((($line -replace '^\S+ \S+ ', '') -replace '^radio: \S+ radio: ', '') -replace '\|', '/') + '`' }
+    return "| $name | $after | $text |"
+  }
+  $first = { param([string]$re) $lines | Where-Object { $_ -match $re } | Select-Object -First 1 }
+  $rows += & $row 'Radio ready' (& $first 'radio: ready on channel')
+  $startCh = & $first 'event: channel \d+ (active|passive)'
+  $rows += & $row 'AWDL channel at start' $startCh
+  $fast = & $first 'experimental fast passive-channel unlock: on'
+  $rows += "| Fast passive-channel unlock (experimental) | - | $(if ($fast) { 'on' } else { 'off' }) |"
+  # 0.1.25+ logs each first once; older radios only have the 5 s rx counters.
+  $awdl = & $first 'discovery: first AWDL action frame'
+  if (-not $awdl) { $awdl = $lines | Where-Object { $_ -match 'rx: \d+ frames, [1-9]\d* AWDL action frames' } | Select-Object -First 1 }
+  $rows += & $row 'First AWDL frame heard' $awdl
+  $mif = & $first 'discovery: first AWDL MIF'
+  if (-not $mif) { $mif = $lines | Where-Object { $_ -match 'PSF, [1-9]\d* MIF' } | Select-Object -First 1 }
+  $rows += & $row 'First MIF (awdld takes the peer as valid)' $mif
+  $scans = @($lines | Where-Object { $_ -match 'is passive: (scanning once|fast discovery scan)' })
+  $rows += & $row "Discovery scans on the passive channel ($($scans.Count))" ($scans | Select-Object -First 1)
+  $rows += & $row 'Transmitting allowed (beacon or AWDL peer)' (& $first 'transmitting allowed here')
+  $notice = & $first 'regulatory: firmware notice'
+  $rows += & $row 'Firmware country notice' $notice
+  $active = & $first 'event: channel \d+ active'
+  $rows += & $row 'Channel active (firmware country)' $active
+  $held = $lines | Where-Object { $_ -match '(\d+) held \(passive channel\)' } | ForEach-Object { [int]$Matches[1] } | Measure-Object -Maximum
+  $rows += "| Frames held on the passive channel | - | $(if ($held.Count) { "up to $($held.Maximum)" } else { 'none' }) |"
+  $toUs = & $first 'discovery: first frame addressed to us'
+  if (-not $toUs) { $toUs = $lines | Where-Object { $_ -match '[1-9]\d* addressed to us' } | Select-Object -First 1 }
+  $rows += & $row 'First frame addressed to us' $toUs
+  # The engine's own log: times of day only, the date from its logging lines.
+  $day = $t0.Date
+  $noAnswer = 0
+  $peerAt = $null
+  foreach ($e in @($engineLines)) {
+    if ($e -match '^\d\d:\d\d:\d\d\.\d+ (\d{4}-\d\d-\d\d) ') { $day = [datetime]::ParseExact($Matches[1], 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture) }
+    if (-not ($e -match '^(\d\d):(\d\d):(\d\d)')) { continue }
+    $t = $day.AddHours([int]$Matches[1]).AddMinutes([int]$Matches[2]).AddSeconds([int]$Matches[3])
+    if ($t -lt $t0) { continue }
+    if ($e -match 'does not answer yet') { $noAnswer++ }
+    if ($e -match '"event":"peer"') { $peerAt = $t; break }
+  }
+  $engineRow = if ($peerAt) { "| AirDrop engine: first device listed | +$([int][Math]::Round(($peerAt - $t0).TotalSeconds)) s | after $noAnswer ""does not answer yet"" timeouts |" }
+               else { "| AirDrop engine: first device listed | - | none since this start; $noAnswer ""does not answer yet"" timeouts |" }
+  $rows += $engineRow
+  return $rows
+}
+
 if ($SelfTest) {
   $fail = @()
   $cases = @(
@@ -187,8 +259,55 @@ if ($SelfTest) {
   foreach ($k in $WifiChips.Keys) {
     if (-not $WifiKinds.ContainsKey($WifiChips[$k][0])) { $fail += "$k has unknown kind $($WifiChips[$k][0])" }
   }
+  # Discovery timing: a #11-like start (passive 149, fast unlock on, held
+  # frames, a peer unlocking it, the firmware's notice) and an older radio's
+  # log with only the 5 s counters.
+  $svc11 = @(
+    '2026-11-21 10:00:00 starting: woken',
+    '2026-11-21 10:00:05 radio: 10:00:05.050 radio: event: channel 149 passive',
+    '2026-11-21 10:00:05 radio: 10:00:05.060 radio: experimental fast passive-channel unlock: on (discovery scans at 1.5, 12 and 30 s while the channel is passive)',
+    '2026-11-21 10:00:05 radio: 10:00:05.100 radio: ready on channel 149, waiting for a client',
+    '2026-11-21 10:00:07 radio: 10:00:07.000 radio: channel 149 is passive: fast discovery scan 1 of 3 so the firmware can learn the country',
+    '2026-11-21 10:00:10 radio: 10:00:10.000 radio: tx: 0 submitted, 0 done, 0 failed; unicast: 0 resent, 0 given up, 0 waiting, 0 dropped; rate step 0 (0 up, 0 down); BA answers 0; 22 held (passive channel)',
+    '2026-11-21 10:00:12 radio: 10:00:12.000 radio: discovery: first AWDL action frame after 7.0 s (channel 149, -60 dBm)',
+    '2026-11-21 10:00:12 radio: 10:00:12.000 radio: AWDL peer heard on channel 149: transmitting allowed here',
+    '2026-11-21 10:00:20 radio: 10:00:20.000 radio: regulatory: firmware notice TW (source 5)',
+    '2026-11-21 10:00:20 radio: 10:00:20.000 radio: event: channel 149 active',
+    '2026-11-21 10:00:25 radio: 10:00:25.000 radio: discovery: first AWDL MIF after 20.0 s',
+    '2026-11-21 10:00:30 radio: 10:00:30.000 radio: discovery: first frame addressed to us after 25.0 s'
+  )
+  $eng11 = @(
+    '09:59:00.000 2026-11-21 09:59:00,000 INFO engine started',
+    '09:59:30.000 {"event":"peer","id":"stale","name":"before this start"}',
+    '10:00:40.000 2026-11-21 10:00:40,000 WARNING a receiver at fe80::1 does not answer yet: timed out',
+    '10:00:50.000 2026-11-21 10:00:50,000 WARNING a receiver at fe80::1 does not answer yet: timed out',
+    '10:01:00.000 {"event":"peer","id":"x","name":"iPhone","model":null}'
+  )
+  $d11 = (Get-DiscoverySummary $svc11 $eng11) -join "`n"
+  foreach ($want in '| Radio ready | +5 s |', '| AWDL channel at start | +5 s | `event: channel 149 passive` |',
+                    '| Fast passive-channel unlock (experimental) | - | on |', '| First AWDL frame heard | +12 s |',
+                    '| First MIF (awdld takes the peer as valid) | +25 s |', '| Discovery scans on the passive channel (1) | +7 s |',
+                    '| Transmitting allowed (beacon or AWDL peer) | +12 s |', '| Firmware country notice | +20 s |',
+                    '| Channel active (firmware country) | +20 s |', '| Frames held on the passive channel | - | up to 22 |',
+                    '| First frame addressed to us | +30 s |', '| AirDrop engine: first device listed | +60 s | after 2 "does not answer yet" timeouts |') {
+    if (-not $d11.Contains($want)) { $fail += "discovery timing (#11 log): missing $want" }
+  }
+  $svcOld = @(
+    '2026-11-21 11:00:00 starting: boot (concurrent mode)',
+    '2026-11-21 11:00:06 radio: 11:00:06.000 radio: ready on channel 44, waiting for a client',
+    '2026-11-21 11:00:15 radio: 11:00:15.000 radio: rx: 100 frames, 3 AWDL action frames (3 PSF, 0 MIF; last -70 dBm), 0 addressed to us',
+    '2026-11-21 11:00:20 radio: 11:00:20.000 radio: rx: 200 frames, 9 AWDL action frames (7 PSF, 2 MIF; last -70 dBm), 4 addressed to us'
+  )
+  $dOld = (Get-DiscoverySummary $svcOld @()) -join "`n"
+  foreach ($want in '| First AWDL frame heard | +15 s |', '| First MIF (awdld takes the peer as valid) | +20 s |',
+                    '| First frame addressed to us | +20 s |', '| Fast passive-channel unlock (experimental) | - | off |',
+                    '| Transmitting allowed (beacon or AWDL peer) | - | not in the log |',
+                    '| AirDrop engine: first device listed | - | none since this start; 0 "does not answer yet" timeouts |') {
+    if (-not $dOld.Contains($want)) { $fail += "discovery timing (older log): missing $want" }
+  }
+  if (@(Get-DiscoverySummary @() @()).Count) { $fail += 'discovery timing: rows without a radio start' }
   if ($fail) { $fail | ForEach-Object { Write-Host "FAIL $_" }; exit 1 }
-  Write-Host "report.ps1 self-test: $($cases.Count) cases and the ID tables passed"
+  Write-Host "report.ps1 self-test: $($cases.Count) cases, the ID tables and the discovery timing passed"
   exit 0
 }
 
@@ -579,6 +698,8 @@ if ($card) {
 }
 if ($config) {
   W "- Settings: mode $($config.Mode), country '$($config.Country)', start channel $($config.StartChannel), peer channel $($config.PeerChannel), on-demand idle $($config.IdleSeconds) s"
+  # The experimental switches change how the radio sends and scans: say which are on.
+  W "- Faster sending: always on (0.1.25+). Experimental: A-MPDU sending $(if ($config.Aggregate) { 'on' } else { 'off' }), fast passive-channel unlock $(if ($config.FastUnlock) { 'on' } else { 'off' })"
 }
 W ''
 
@@ -624,12 +745,21 @@ W ''
 
 W '## Discovery timeline'
 W ''
+if ($start -ge 0) {
+  W "Discovery timing (last radio start, seconds after ``$(Redact (($attempt[0] -replace '^\S+ \S+ ', '') -replace '\|', '/'))``):"
+  W ''
+  W '| Step | After | Line |'
+  W '|---|---|---|'
+  Get-DiscoverySummary $attempt $engineLog | ForEach-Object { W (Redact $_) }
+  W ''
+}
 W 'Service (radio ready, AWDL channel and peers, Wi-Fi):'
 W ''
 W '```'
 $lastAwdl = -1
 $timeline = foreach ($line in ($serviceLog | Select-Object -Last 4000)) {
-  if ($line -match 'ready on channel|event: peer-channel|event: peer-country|event: channel|moving there|stayed passive|starting:|stopping:|Wi-Fi: joining|event: wifi |gateway') { $line }
+  # Also what unlocks a passive channel and the first steps of discovery (#11).
+  if ($line -match 'ready on channel|event: peer-channel|event: peer-country|event: channel|moving there|stayed passive|starting:|stopping:|Wi-Fi: joining|event: wifi |gateway|transmitting allowed here|regulatory: firmware notice|is passive: |fast discovery scan done|discovery: first |experimental fast passive-channel unlock') { $line }
   elseif ($line -match 'rx: \d+ frames, (\d+) AWDL action frames') {
     $n = [int]$Matches[1]
     if (($lastAwdl -le 0 -and $n -gt 0) -or ($n -lt $lastAwdl)) { $line }

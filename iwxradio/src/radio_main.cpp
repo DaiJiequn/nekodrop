@@ -11,6 +11,7 @@
  * Usage: winawdl_radio <channel> [--width 20|40|80] [--country XX]
  *          [--mac-type listener|ibss|sta] [--firmware DIR]
  *          [--data-rate 6|12|24|36|48|54|MCS0..MCS15] [--verbose]
+ *          [--tx-window N] [--aggregate] [--fast-unlock]
  * winawdl's own options (--retries, --capture, --no-block-ack,
  * --no-aggregate, --no-quick-submit) are accepted and ignored.
  */
@@ -88,6 +89,12 @@ struct Options {
   /* --aggregate (experimental "A-MPDU sending"): Block Ack and firmware
    * aggregation to the iPhone, with ForbiddenItlwm's peer-schedule pause. */
   bool aggregate = false;
+  /* --fast-unlock (experimental "fast passive-channel unlock", #11): on a
+   * passive 5 GHz AWDL channel, discovery scans at 1.5, 12 and 30 s over the
+   * non-DFS channels instead of the one full scan at 10 s, and the country
+   * the firmware really holds as the starting point (radio_backend.h). Off:
+   * the radio behaves exactly as before. */
+  bool fast_unlock = false;
 };
 
 bool parse_rate(const std::string &s, TxRate &rate) {
@@ -134,6 +141,7 @@ bool parse_options(int argc, char **argv, Options &o) {
     else if (a == "--retries" || a == "--capture") value();
     else if (a == "--no-block-ack") o.no_block_ack = true;
     else if (a == "--aggregate") o.aggregate = o.dev.aggregate = true;
+    else if (a == "--fast-unlock") o.fast_unlock = true;
     else if (a == "--tx-window") {
       const int n = std::atoi(value().c_str());
       if (n < 1 || n > 64) return false;
@@ -451,6 +459,13 @@ int main(int argc, char **argv) {
     unsigned peer5g = 0;
     awdl::PeerCountry peer_country;
     std::string want_country, have_country = opt.dev.country;
+    /* Experimental fast unlock: start from what the firmware holds, not from
+     * --country. Where the firmware refused it (#11: "00"), have_country ==
+     * --country hid both the firmware's later notice of that country ("event:
+     * country") and a peer naming it (no set_country retry). */
+    if constexpr (caps.supports_country_notice) {
+      if (opt.fast_unlock) have_country = radio::held_country(dev.current_country());
+    }
     uint64_t rx_all = 0, rx_awdl = 0, rx_to_us = 0;
     /* AWDL action frames by subtype: a peer turns valid in awdld only after a
      * MIF (master indication), so PSF-only traffic explains "not valid yet"
@@ -458,6 +473,13 @@ int main(int argc, char **argv) {
     uint64_t rx_psf = 0, rx_mif = 0;
     uint32_t rx_data_to_us = 0;
     int8_t awdl_dbm = -127;
+    /* Discovery timing (#4: ~99 s to see the iPhone, #11: ~2 min): one line
+     * when the first AWDL frame, the first MIF and the first frame addressed
+     * to us arrive, counted from when listening started. Diagnostic only. */
+    uint64_t listen_ms = GetTickCount64();
+    const auto milestone = [&](const char *what, const std::string &detail) {
+      log_line(radio::format_discovery_milestone(what, GetTickCount64() - listen_ms, detail));
+    };
     std::deque<awdl::AddbaRequest> addba_pending;
     std::deque<uint8_t> delba_pending;
     /* Experimental A-MPDU sending to one peer (ForbiddenItlwm's
@@ -603,7 +625,9 @@ int main(int argc, char **argv) {
         }
       }
       if (awdl::is_awdl_action(f.data, f.len)) {
-        rx_awdl++;
+        if (++rx_awdl == 1)
+          milestone("AWDL action frame",
+                    " (channel " + std::to_string(f.channel) + ", " + std::to_string(f.dbm) + " dBm)");
         /* Peer hint: an Apple device sending AWDL on our channel has the channel
          * open in its own country. Needed where the firmware refuses the
          * country (MCC status 4, "00" world domain: all of 5 GHz passive) and
@@ -614,7 +638,7 @@ int main(int argc, char **argv) {
         }
         if (f.len > 30) {
           if (f.data[30] == 0) rx_psf++;      /* periodic synchronization */
-          else if (f.data[30] == 3) rx_mif++; /* master indication */
+          else if (f.data[30] == 3 && ++rx_mif == 1) milestone("AWDL MIF", ""); /* master indication */
         }
         awdl_dbm = f.dbm;
         uint8_t seq[16];
@@ -633,7 +657,7 @@ int main(int argc, char **argv) {
         }
       }
       if (f.len >= 10 && std::memcmp(f.data + 4, dev_address, 6) == 0) {
-        rx_to_us++;
+        if (++rx_to_us == 1) milestone("frame addressed to us", "");
         if ((f.data[0] & 0x0c) == 0x08) rx_data_to_us++;
         awdl::AddbaRequest req;
         bool sender = false;
@@ -680,6 +704,7 @@ int main(int argc, char **argv) {
       dev.stop();
       return;
     }
+    listen_ms = GetTickCount64();
     std::thread tap_thread;
     if (sta) {
       std::string err;
@@ -862,9 +887,16 @@ int main(int argc, char **argv) {
     bool channel_open = radio::channel_active(dev.channel(), chan_flags(dev.channel()));
     /* One scan, 10 s after start, while the AWDL channel is passive and no
      * beacon unlocked it: access points' Country elements let the firmware
-     * learn the country and send its notice (ForbiddenItlwm's discovery scan). */
-    const uint64_t country_scan_at = GetTickCount64() + 10000;
-    bool country_scan_done = false;
+     * learn the country and send its notice (ForbiddenItlwm's discovery scan).
+     * With --fast-unlock (experimental) up to three, sooner and shorter
+     * (radio::passive_discovery_scan_delay_ms, fast_discovery_channels). */
+    const uint64_t discovery_from = GetTickCount64();
+    unsigned discovery_scans = 0;       /* discovery scans due so far */
+    bool fast_discovery_wanted = false; /* the next scan is a fast discovery scan */
+    bool fast_discovery_running = false;
+    uint8_t fast_channels[radio::kFastDiscoveryChannelCount] = {};
+    const size_t fast_channel_count = radio::fast_discovery_channels(opt.channel, fast_channels);
+    if (opt.fast_unlock) log_line(radio::kFastUnlockOnLine);
     if constexpr (caps.supports_aggregate) agg.on = opt.aggregate && dev.agg_available();
     if (opt.aggregate) log_line(agg.on ? "experimental A-MPDU sending: on" : "experimental A-MPDU sending: not available on this path");
     awdl::BaFilter ba_filter;
@@ -934,6 +966,7 @@ int main(int argc, char **argv) {
         } else if (req.type == kScanRequest) {
           scan_wanted = true;
           scan_ssid = req.payload;
+          fast_discovery_wanted = false; /* the service's full scan goes instead; it hears Country elements too */
         } else if (req.type == kStaEthernet) {
           if (sta) sta->on_ethernet(req.payload.data(), req.payload.size());
         } else if (req.type == RADIO_LINK_SET_ADDRESS && req.payload.size() == 6) {
@@ -1195,28 +1228,69 @@ int main(int argc, char **argv) {
         SwitchToThread();
       }
       const uint64_t now = GetTickCount64();
-      if (!country_scan_done && now >= country_scan_at) {
-        country_scan_done = true;
-        if (radio::should_start_passive_discovery_scan(may_send(), scan_started, scan_wanted, caps)) {
-          log_line("channel " + std::to_string(dev.channel()) + " is passive: scanning once so the firmware can learn the country");
+      bool sta_joining = false;
+      if (sta) {
+        const WifiStation::State st = sta->state();
+        sta_joining = st != WifiStation::State::Idle && st != WifiStation::State::Running &&
+                      st != WifiStation::State::Failed;
+      }
+      const unsigned discovery_due =
+          radio::passive_discovery_scan_delay_ms(opt.fast_unlock, discovery_scans, sta_joining);
+      if (discovery_due && now >= discovery_from + discovery_due) {
+        if (!opt.fast_unlock) {
+          /* The default, unchanged: due once, whatever happens. */
+          discovery_scans++;
+          if (radio::should_start_passive_discovery_scan(may_send(), scan_started, scan_wanted, caps)) {
+            log_line("channel " + std::to_string(dev.channel()) + " is passive: scanning once so the firmware can learn the country");
+            scan_wanted = true;
+            scan_ssid.clear();
+          }
+        } else if (may_send()) {
+          discovery_scans = radio::kMaxPassiveDiscoveryScans; /* unlocked: no more scans */
+        } else if (radio::should_start_passive_discovery_scan(false, scan_started, scan_wanted, caps)) {
+          discovery_scans++;
+          log_line("channel " + std::to_string(dev.channel()) + " is passive: fast discovery scan " +
+                   std::to_string(discovery_scans) + " of " + std::to_string(radio::kMaxPassiveDiscoveryScans) +
+                   " so the firmware can learn the country");
           scan_wanted = true;
           scan_ssid.clear();
+          fast_discovery_wanted = true;
         }
+        /* Otherwise a scan is on its way (it hears Country elements too) or
+         * this backend has no firmware scan: asked again next tick. */
       }
       if (scan_wanted && !scan_started) {
         scan_wanted = false;
+        fast_discovery_running = fast_discovery_wanted;
+        fast_discovery_wanted = false;
         bool started = false;
         if constexpr (caps.supports_umac_scan) {
-          started = dev.umac_scan(kScanChannels, sizeof(kScanChannels), scan_ssid.data(), scan_ssid.size(),
-                                  dev.hw_address().data());
+          if (fast_discovery_running)
+            started = dev.umac_scan(fast_channels, fast_channel_count, nullptr, 0, dev.hw_address().data());
+          else
+            started = dev.umac_scan(kScanChannels, sizeof(kScanChannels), scan_ssid.data(), scan_ssid.size(),
+                                    dev.hw_address().data());
         }
         scan_started_ms = now;
         scan_started = true;
-        log_line(started ? "event: scan-started" : "event: scan-started (beacons on this channel only)");
+        /* A fast discovery scan is not the service's Wi-Fi list: it covers 11
+         * channels, and a partial list would make a pending "connect to X"
+         * fail as not found (Supervisor.AfterScan). So no scan events for it. */
+        if (fast_discovery_running)
+          log_line(started ? "fast discovery scan started (" + std::to_string(fast_channel_count) + " channels)"
+                           : std::string("fast discovery scan did not start"));
+        else
+          log_line(started ? "event: scan-started" : "event: scan-started (beacons on this channel only)");
       }
       bool scan_running = false;
       if constexpr (caps.supports_umac_scan) scan_running = scan_started && dev.scan_running();
-      if (radio::is_scan_complete(scan_started, scan_running, now - scan_started_ms, caps)) {
+      const bool scan_complete = radio::is_scan_complete(scan_started, scan_running, now - scan_started_ms, caps);
+      if (scan_complete && fast_discovery_running) {
+        scan_started = false;
+        fast_discovery_running = false;
+        log_line("fast discovery scan done; channel " + std::to_string(dev.channel()) +
+                 (may_send() ? " now allows sending" : " still passive"));
+      } else if (scan_complete) {
         scan_started = false;
         unsigned n = 0;
         for (const auto &[bssid, b] : bss_seen) {
@@ -1285,13 +1359,17 @@ int main(int argc, char **argv) {
         }
         if (sta) {
           const auto &r = sta->rx_stats();
-          unsigned sta_acked = 0, sta_failed = 0; /* sta is only ever set with supports_station */
+          unsigned sta_acked = 0, sta_failed = 0, sta_submitted = 0; /* sta is only ever set with supports_station */
           if constexpr (caps.supports_station) {
             sta_acked = dev.sta_tx_acked();
             sta_failed = dev.sta_tx_failed();
+            sta_submitted = dev.sta_tx_submitted();
           }
+          /* "N submitted" here, no longer in the "tx:" line (#11): those
+           * frames are the station's, not AWDL's. */
           log_line(std::string("wifi: ") + sta->state_name() + ", " + std::to_string(sta->rx_packets()) +
                    " packets in, " + std::to_string(sta->tx_packets()) + " out; frames to the AP " +
+                   std::to_string(sta_submitted) + " submitted, " +
                    std::to_string(sta_acked) + " acknowledged, " + std::to_string(sta_failed) +
                    " not; from the AP " + std::to_string(r.data) + " data frames (" + std::to_string(r.unicast) + " unicast), " + std::to_string(r.amsdu) +
                    " A-MSDU, dropped " + std::to_string(r.undecrypted) + " undecrypted, " +

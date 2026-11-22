@@ -1138,6 +1138,7 @@ int IwxDevice::update_mcc(const std::string &alpha2, int source, std::string *go
   const uint16_t mcc = le16toh(r->mcc);
   const std::string domain{char(mcc >> 8), char(mcc & 0xff)};
   if (got) *got = domain;
+  _current_mcc = domain; /* what the firmware holds now, refused or not (current_country) */
   std::string summary = "regulatory: asked " + alpha2 + " (source " + std::to_string(cmd.source_id) +
                         "), firmware says " + domain + " (source " + std::to_string(r->source_id) +
                         ", status " + std::to_string(le32toh(r->status)) + "):";
@@ -1810,7 +1811,7 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
   const size_t hdrlen = hdrlen_80211(frame, len);
   if (!hdrlen || len - hdrlen > kTxPayloadSlot || hdrlen > 64) return -1;
   if (ring.queued >= ring.count - 2) {
-    _tx_stats.dropped_full++;
+    if (&ring == &_dataq) _tx_stats.dropped_full++;
     return -1;
   }
   const unsigned idx = ring.cur & (ring.count - 1);
@@ -1918,7 +1919,13 @@ int IwxDevice::transmit_on(TxRing &ring, const uint8_t *frame, size_t len, const
     plat_fence();
     wr(IWX_HBUS_TARG_WRPTR, (ring.qid << 16) | ring.cur);
   }
-  _tx_stats.submitted++;
+  /* Per ring: tx_stats' done/failed come from the AWDL data ring only
+   * (handle_tx_resp), so counting the station's and the A-MPDU ring's frames
+   * here made "tx: N submitted" run far ahead of "done + failed" under
+   * Concurrent, which read as loss (#11). The station has its own count; the
+   * A-MPDU ring has agg_stats().frames. Counting only, no change to sending. */
+  if (&ring == &_dataq) _tx_stats.submitted++;
+  else if (&ring == &_staq) _sta_tx_submitted++;
   return static_cast<int>(idx);
 }
 

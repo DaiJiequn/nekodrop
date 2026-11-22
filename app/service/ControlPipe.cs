@@ -70,6 +70,7 @@ public sealed class ControlPipe(Supervisor sup)
                         if (Enum.TryParse<NetMode>((string?)cmd?["mode"], true, out var m)) sup.SetMode(m);
                         break;
                     case "aggregate": sup.SetAggregate((bool?)cmd?["on"] ?? false); break;
+                    case "fast-unlock": sup.SetFastUnlock((bool?)cmd?["on"] ?? false); break;
                     case "wifi-scan": sup.WifiScan((string?)cmd?["ssid"]); break;
                     case "wifi-connect":
                     {

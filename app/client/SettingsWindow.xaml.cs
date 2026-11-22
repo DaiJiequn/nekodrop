@@ -24,6 +24,7 @@ public partial class SettingsWindow : Window
         ModeOnDemand.IsChecked = mode == "ondemand";
         ModeOff.IsChecked = mode == "off";
         AggregateBox.IsChecked = (bool?)A.Service.Last?["aggregate"] ?? false;
+        FastUnlockBox.IsChecked = (bool?)A.Service.Last?["fastUnlock"] ?? false;
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
         UpdateStatus.Text = "nekodrop " + Updater.Current;
@@ -107,6 +108,8 @@ public partial class SettingsWindow : Window
         if (mode != (string?)A.Service.Last?["mode"]) A.Service.SetMode(mode);
         var aggregate = AggregateBox.IsChecked == true;
         if (aggregate != ((bool?)A.Service.Last?["aggregate"] ?? false)) A.Service.SetAggregate(aggregate);
+        var fastUnlock = FastUnlockBox.IsChecked == true;
+        if (fastUnlock != ((bool?)A.Service.Last?["fastUnlock"] ?? false)) A.Service.SetFastUnlock(fastUnlock);
         A.Window?.FolderChanged();
         if (languageChanged) A.ApplyLanguage();
         Close();
