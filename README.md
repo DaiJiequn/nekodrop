@@ -172,44 +172,12 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 ### Experimental features
 
-*Settings → Experimental*. All four are **off by default**, and with them off nekodrop behaves exactly as without them. A switch stays here only until at least two different cards have tested it with nobody reporting it made things worse; then it becomes always on. Turning either on or off restarts AirDrop for a few seconds. If sending or discovery gets worse, turn it off, and please post a diagnostic report in an [issue](../../issues) either way.
+In *Settings → Experimental*, all off by default; turning one off restores the old behaviour exactly.
 
-(*Faster sending to iPhone*, a switch from 0.1.9, is always on since 0.1.25: up to 48 AWDL frames in flight instead of 8, one doorbell per batch, and the rate ladder starting at HT MCS 4. No card reported it making things worse: about the same 1.3 MB/s on an AX200 ([#4](../../issues/4)), a little faster on an AX210 ([#14](../../issues/14)), 537 MB at 3.4 MB/s with no frames given up on an AX211 ([#9](../../issues/9)).)
-
-**Aggregated sending (A-MPDU)** (0.1.15+, off by default; **works on an AX201 and an AX200**)
-
-The biggest speed-up for sending to an iPhone: **30.8 MB/s on an AX201** (0.1.30) and **9–25 MiB/s on an AX200** ([#4](../../issues/4)), against 1–3 MB/s without it. Without it, every frame we send goes out on its own and waits for its own acknowledgement, and only while the iPhone happens to be on our channel. This switch ports ForbiddenItlwm's way of aggregating frames (its `-itlawdlcoexbatx`):
-1. When a large send to an iPhone starts (24 full-size frames within 250 ms), nekodrop gives that iPhone a firmware station of its own, with an aggregation queue and the firmware's rate control (VHT 80 MHz, two streams where the card has them).
-2. It asks the iPhone for a Block Ack session (ADDBA) every 100 ms, up to 20 times; without an answer it falls back to single frames and may try again after 60 s. When the send is over, the PC ends the session itself (DELBA), so the next send starts clean.
-3. Once the iPhone agrees, the transfer's frames go out as QoS data on TID 0 and the firmware sends them as A-MPDUs. Short exchanges, such as a connection being set up, keep the ordinary path with its resends.
-4. nekodrop follows the iPhone's AWDL schedule from its sync frames: which of its 16 slots it spends on our channel and when each starts. While the iPhone is away, its queue in the firmware is paused instead of burning retries, and other frames for it wait too, for at most the away time.
-5. Promiscuous receive is off while the iPhone's station exists, so the firmware acknowledges the iPhone's frames.
-
-What to check when testing:
-- The diagnostic report gets an **A-MPDU sending** row: `agreed` means the iPhone accepted Block Ack.
-- The service log gets an `aggregate:` line every 5 s. In it, *Block Acks* and *largest* say whether the firmware really sends aggregates (several frames per Block Ack), and *pauses* say whether the schedule pause works.
-- If it says `asking` for a long time, the iPhone isn't answering our ADDBA. Upstream saw that too. Please attach the report.
-
-Without enough memory for the extra ring, or on the kernel-driver path, the switch does nothing and sending stays as before.
-
-**Balanced Bluetooth coexistence (Intel)** (0.1.33+, thanks to [@XXD051030](https://github.com/XXD051030), [#26](../../pull/26))
-
-For when the PC finds iPhones and Macs slowly or not at all. To send, the PC wakes nearby Apple devices with a Bluetooth beacon from the card's own Bluetooth, but the radio has the firmware favour Wi-Fi, so while AWDL listens the beacon barely gets out. This switch balances the two (ForbiddenItlwm's `itlawdlbtcoex=1`). On an AX200, with no share sheet open, the Mac appeared within 2.3 s in 9 of 9 tries and the iPhone in 8 of 9, median about 5 s. Intel user-mode radio only.
-
-**Apple-style time sharing when Wi-Fi and AirDrop use different channels** (0.1.32+, port of [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30))
-
-Only acts when nekodrop's 5 GHz Wi-Fi is on another channel than AirDrop. As macOS does, the router goes into AirDrop's 16 advertised slots, and the PC stays silent there, so the iPhone knows when the PC is away. On an AX200 with Wi-Fi on 40 and AirDrop on 149 it made **no measurable difference** over five runs ([#4](../../issues/4)), so it stays off. Putting your router's 5 GHz on the AirDrop channel (44 or 149) helps more.
-
-**Faster unlock of a passive 5 GHz channel** (not yet tested on hardware)
-
-Some cards refuse every country nekodrop asks for (an AX210 in Taiwan answered "status 4" from every source, [#11](../../issues/11)). The firmware then keeps the 5 GHz AirDrop channel *passive*: by the rules nothing may be sent there until an iPhone or a nearby router is heard on it, or until the firmware learns the country itself from routers' beacons. Until then the PC is silent, so iPhones cannot see it, and in #11 that took about a minute after every radio start. By default nekodrop runs one scan 10 s after start, over all 38 channels, to let the firmware hear routers. With this switch:
-- the scan runs at 1.5 s, and again at 12 s and 30 s while the channel is still passive (the first waits up to 4 s while the Wi-Fi beside AirDrop is joining);
-- it covers only the 11 common non-DFS channels (36–48, 149–161, 1, 6, 11), with the AirDrop channel's own block first, so a router there unlocks it straight away;
-- the radio starts from the country the firmware really holds, not the one it was asked for, so a refused country is asked for again when an iPhone names it.
-
-It never transmits on a passive channel: unlocking still waits for the firmware, a router or an iPhone. These scans don't replace the Wi-Fi list. On the kernel-driver path the switch does nothing.
-
-What to check when testing: the diagnostic report's **Discovery timing** table shows, in seconds after the radio start, when the first AWDL frame was heard, when sending was allowed, when the channel turned active and when the AirDrop engine listed the first device. Compare it with the switch off.
+- **Aggregated sending (A-MPDU)**: packs frames together for much faster sending to iPhone (30.8 MB/s on AX201, 9–25 MiB/s on AX200).
+- **Balanced Bluetooth coexistence (Intel)**: lets the Bluetooth beacon through so the PC finds iPhones and Macs in seconds (thanks to [@XXD051030](https://github.com/XXD051030), [#26](../../pull/26)).
+- **Time sharing when Wi-Fi and AirDrop use different channels**: tells the iPhone when the PC is away with the router; no measurable gain so far ([#4](../../issues/4)).
+- **Faster unlock of a passive 5 GHz channel**: scans sooner so cards that refuse the country code can transmit earlier ([#11](../../issues/11)).
 
 ## Status
 
