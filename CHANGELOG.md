@@ -6,6 +6,22 @@
 
 ---
 
+## v0.1.27 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **修复：传输途中被切信道打断（[#9](https://github.com/zheznanohana/nekodrop/issues/9)）**：iPhone 公告别的信道后，服务会等到 10 秒没有数据再切过去，但以前最多只等 120 秒，等满就不管有没有数据直接切。#9 里一个 537 MB 的发送在信道 44 上跑得好好的（1.8 MB/s），120 秒后被切到 149，在 37.7% 处以 TLS EOF 断开。现在只要还有数据就一直等；iPhone 又报回当前信道时取消切换；同时只保留一个切换任务。
+- **修复：更新时 `libcrypto-3.dll` 复制失败（[#22](https://github.com/zheznanohana/nekodrop/issues/22)）**：安装脚本结束 `nekodrop.exe` 时，它启动的 AirDrop 引擎（`python.exe`）还占着文件。现在会等服务真正停下，结束所有从安装目录运行的进程，复制失败会重试，最后失败时会说明是哪个进程占着。
+- **卸载不再静默留下残留（[#22](https://github.com/zheznanohana/nekodrop/issues/22)）**：每一步的失败都会记进 `%ProgramData%\nekodrop-uninstall.log`；会删除 `nekodrop` TAP 网卡（保留 TAP 驱动）和 `%LocalAppData%\nekodrop`；服务程序缺失时改用 `restore.ps1` 归还网卡。
+- 构建时会用 PowerShell 5.1 解析所有安装器脚本，语法错误会让构建失败。
+
+### English
+- **Fix: sends cut by a channel move ([#9](https://github.com/zheznanohana/nekodrop/issues/9))**: after the iPhone named another channel, the service waited for 10 s without data but gave up after 120 s and moved anyway. In #9 a 537 MB send running at 1.8 MB/s on channel 44 was moved to 149 after 120 s and died with TLS EOF at 37.7%. Now it waits as long as data flows, cancels the move when the iPhone names our channel again, and runs one mover at a time.
+- **Fix: updates failing to copy `libcrypto-3.dll` ([#22](https://github.com/zheznanohana/nekodrop/issues/22))**: the setup killed `nekodrop.exe` but not the AirDrop engine (`python.exe`) it starts, which kept the file open. Now it waits for the service to stop, stops everything running from the install folder, retries the copy and names what still holds it.
+- **Uninstall no longer fails silently ([#22](https://github.com/zheznanohana/nekodrop/issues/22))**: each failed step goes to `%ProgramData%\nekodrop-uninstall.log`; it removes the `nekodrop` TAP adapter (not the TAP driver) and `%LocalAppData%\nekodrop`, and gives the card back with `restore.ps1` when the service exe is missing.
+- The build parses every installer script under PowerShell 5.1 and fails on a syntax error.
+
+---
+
 ## v0.1.26 (Hourly / Pre-release) — 2026-11-22
 
 本版来自「nekodrop 自主进化」第 6 轮：Gemini 提案 → Claude 实现 → Codex QA 通过，风险等级 EXPERIMENTAL。 / From self-evolution round 6: proposal by Gemini, implementation by Claude, Codex QA passed, risk EXPERIMENTAL.
