@@ -6,6 +6,18 @@
 
 ---
 
+## v0.1.28 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **修复：连接 Wi-Fi 认证失败后网卡固件崩溃（[#21](https://github.com/zheznanohana/nekodrop/issues/21)）**：移除 station 前没有先取消会话保护、清空它的发送队列，结果移除命令超时，固件随之崩溃（LMAC 0x125F），#21 里连续发生了 3 次。现在按 OpenBSD/itlwm 的顺序断开：取消会话保护 → drain + TXPATH_FLUSH → 移除 station → binding → MAC → PHY。
+- **实验性 A-MPDU：会话期间改用 ForbiddenItlwm 的监听配置（[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#9](https://github.com/zheznanohana/nekodrop/issues/9)）**：发送命令、QoS 帧、station、队列和速率控制都已经和 ForbiddenItlwm 逐字节一致，只剩会话期间的监听 MAC 不同。现在在 Block Ack 会话期间（混杂模式关闭时）改用 AWDL BSSID、基础 ACK 速率和只收组播的过滤器，和 ForbiddenItlwm 在 Mac → iPhone 跑到 23 MB/s 时的配置一样。发现阶段不变。A-MPDU 仍默认关闭，**还没有真机数据**。
+
+### English
+- **Fix: firmware crash after a failed Wi-Fi authentication ([#21](https://github.com/zheznanohana/nekodrop/issues/21))**: the station was removed without cancelling its session protection or flushing its queue; REMOVE_STA timed out and the firmware asserted (LMAC 0x125F), three times in a row in #21. Teardown now follows OpenBSD/itlwm: cancel session protection, drain + TXPATH_FLUSH, then station, binding, MAC, PHY.
+- **Experimental A-MPDU: ForbiddenItlwm's listener state during the session ([#4](https://github.com/zheznanohana/nekodrop/issues/4), [#9](https://github.com/zheznanohana/nekodrop/issues/9))**: the TX command, QoS frame, peer station, queue and rate control already matched ForbiddenItlwm byte for byte; only the listener's MAC context differed. While the Block Ack session runs (promiscuous receive off) it now carries AWDL's BSSID, the basic ACK rates and a group-only filter, as ForbiddenItlwm does where Mac -> iPhone reaches 23 MB/s. Discovery is unchanged. A-MPDU stays off by default; **no hardware data yet**.
+
+---
+
 ## v0.1.27 (Hourly / Pre-release) — 2026-11-22
 
 ### 中文
