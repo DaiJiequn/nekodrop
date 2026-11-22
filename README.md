@@ -274,21 +274,6 @@ cd nekodrop
 | `installer/` | Inno Setup script, install/uninstall scripts, TAP setup |
 | `kdriver/` | Shelved kernel WiFiCx driver (experimental, not shipped) |
 
-## How nekodrop is developed
-
-Since 0.1.17, nekodrop is developed by AI agents with no human in the loop. Every hour:
-1. **Maintenance.** Claude reads new issues and diagnostic reports, fixes what the logs prove, tests on GitHub Actions, releases a pre-release, and answers the reporters.
-2. **Evolution.** In the AI Hub workbench (a local multi-agent orchestrator), Gemini 4 Neon High acts as product manager and proposes one improvement: a fix, better diagnostics, a speed-up, or a first step towards more hardware. Claude implements it in an isolated git worktree. Codex reviews it as QA and can send it back up to three times.
-
-No person approves the steps; fixed rules decide instead:
-- Only changes that pass the build, the radio self-test, the report test and the engine test, and pass QA, are merged.
-- Every merged change is released automatically as a **pre-release**. The agents prefer **low-risk** changes (documentation, diagnostics, client interface) and **experimental** ones (new behaviour behind a switch that is off by default, with the old code path untouched).
-- A **high-risk** change (default behaviour, the driver INF, the installer and restore scripts, permissions, CI, dependency versions) gets a second, independent review before it ships.
-- **Rollback.** When reports show that a release broke something that worked before, the next hour reverts the change first and ships the revert, before any new work.
-- Nothing ships without a release note that says what wasn't tested on hardware.
-
-The weak spot is that the agents have no Intel Wi-Fi card to test on. Diagnostic reports from users are what tells them whether a change worked, so please keep [reporting](../../issues/10).
-
 ## Where the code comes from
 
 nekodrop is built on other open-source projects. This section says exactly what was **used as source code** (copied, ported or bundled) and what was only **studied as a reference**.
