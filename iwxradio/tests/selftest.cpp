@@ -186,6 +186,23 @@ int main(int argc, char **argv) {
       g.back() ^= 1;
       CHECK(awdl::strip_valid_fcs(g.data(), g.size()) == g.size(), "wrong FCS kept");
     }
+    {
+      /* #4: our DELBA as the session's sender, and when an idle session ends. */
+      const uint8_t phone[6] = {2, 1, 1, 1, 1, 1}, pc[6] = {2, 2, 2, 2, 2, 2};
+      const uint8_t bss[6] = {0x00, 0x25, 0x00, 0xff, 0x94, 0x73};
+      uint8_t d[awdl::kDelbaLength];
+      CHECK(awdl::build_delba(d, phone, pc, bss, 0, true, 7) == 30, "DELBA is 30 bytes");
+      bool sender = false;
+      uint8_t tid = 9;
+      CHECK(awdl::parse_delba(d, sizeof(d), phone, &sender, &tid) && sender && tid == 0,
+            "DELBA reads back as the sender's, TID 0");
+      CHECK(!awdl::ba_tx_session_idle(true, 0, 0, 1000000, 500000, 9000000), "BA session kept during a bulk send");
+      CHECK(!awdl::ba_tx_session_idle(false, 3, 0, 1000000, 500000, 9000000), "BA session kept while frames wait");
+      CHECK(!awdl::ba_tx_session_idle(false, 0, 1, 1000000, 500000, 9000000), "BA session kept while frames are queued");
+      CHECK(!awdl::ba_tx_session_idle(false, 0, 0, 1000000, 500000, 2000000), "BA session kept 1 s after the last A-MPDU");
+      CHECK(awdl::ba_tx_session_idle(false, 0, 0, 1000000, 500000, 2600000), "BA session ended 1.6 s after the last A-MPDU");
+      CHECK(awdl::ba_tx_session_idle(false, 0, 0, 0, 500000, 2100000), "BA session with no A-MPDU ends 1.6 s after agreeing");
+    }
     uint8_t seq[16];
     CHECK(awdl::peer_sequence(f.data(), f.size(), seq), "channel sequence parsed");
     CHECK(awdl::peer_channel(seq) == 44, "iPhone in Japan: peer 5 GHz channel is 44");

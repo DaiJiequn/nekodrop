@@ -506,7 +506,8 @@ int main(int argc, char **argv) {
       uint8_t token = 0x5a;
       unsigned asks = 0, resume_failures = 0;
       uint16_t peer_window = awdl::kBaWindowMax;
-      uint64_t ask_started_us = 0, last_ask_us = 0, rest_until_us = 0, last_peer_us = 0, last_agg_us = 0, retry_us = 0;
+      uint64_t ask_started_us = 0, last_ask_us = 0, rest_until_us = 0, last_peer_us = 0, last_agg_us = 0, retry_us = 0,
+               agreed_us = 0;
       bool answered = false, refused = false, delba = false;
       std::deque<std::vector<uint8_t>> wait; /* frames for the peer, in order, for the aggregate queue */
       awdl_sched::PeerSchedule sched{};
@@ -1143,6 +1144,7 @@ int main(int argc, char **argv) {
             if (dev.agg_enable(true)) {
               const auto &a = dev.agg_stats();
               agg.step = Agg::Agreed;
+              agg.agreed_us = t;
               agg.agreements++;
               agg.resume_failures = 0;
               agg.agree_frames = a.frames;
@@ -1235,6 +1237,18 @@ int main(int argc, char **argv) {
             agg_sent = true;
           }
           if (agg_sent) dev.kick_agg(); /* one doorbell for the whole A-MPDU batch */
+          /* The bulk send is over: end the session ourselves (DELBA), so the
+           * next send asks again instead of sending A-MPDUs the peer may
+           * have stopped taking (#4). */
+          if (agg.step == Agg::Agreed && !agg.pause.paused &&
+              awdl::ba_tx_session_idle(agg.bulk.bulk, agg.wait.size(), dev.agg_queued(), agg.last_agg_us,
+                                       agg.agreed_us, t)) {
+            static const uint8_t kAwdlBssid[6] = {0x00, 0x25, 0x00, 0xff, 0x94, 0x73};
+            uint8_t delba[awdl::kDelbaLength];
+            awdl::build_delba(delba, agg.peer, dev_address, kAwdlBssid, 0, true, ++mgmt_seq);
+            stop("bulk send finished; ended our Block Ack session");
+            uq.push_front({std::vector<uint8_t>(delba, delba + sizeof(delba)), TxRate{}, false});
+          }
           const auto &a = dev.agg_stats();
           if (agg.step == Agg::Agreed &&
               awdl::ba_tx_stalled_as_singles(a.frames - agg.agree_frames, a.notifs - agg.agree_notifs,

@@ -214,6 +214,43 @@ inline bool parse_delba(const uint8_t *f, size_t length, const uint8_t *own, boo
   return true;
 }
 
+/* DELBA (category 3, action 2) to `peer`: `initiator` when we are the
+ * session's sender. Reason 39 (QSTA_TIMEOUT), as Linux sends for an idle
+ * session. */
+constexpr size_t kDelbaLength = 30;
+inline size_t build_delba(uint8_t *out, const uint8_t *peer, const uint8_t *own, const uint8_t *bssid, uint8_t tid,
+                          bool initiator, uint16_t seq) {
+  std::memset(out, 0, kDelbaLength);
+  out[0] = 0xd0;
+  std::memcpy(out + 4, peer, 6);
+  std::memcpy(out + 10, own, 6);
+  std::memcpy(out + 16, bssid, 6);
+  const uint16_t sc = uint16_t(seq << 4);
+  out[22] = uint8_t(sc);
+  out[23] = uint8_t(sc >> 8);
+  out[24] = 3;
+  out[25] = 2;
+  const uint16_t params = uint16_t((initiator ? 1U : 0U) << 11 | unsigned(tid & 15U) << 12);
+  out[26] = uint8_t(params);
+  out[27] = uint8_t(params >> 8);
+  out[28] = 39;
+  return kDelbaLength;
+}
+
+/* A TX Block Ack session is ended once a bulk send is over: nothing waits or
+ * is queued for the peer and no aggregate frame went out for this long.
+ * While agreed the listener takes group frames only, so the peer's own
+ * DELBA (sent when its side times the session out) never arrives, and the
+ * next send's frames went out as A-MPDUs the peer no longer accepted:
+ * connection refused, then the peer gone until the radio restarted (#4). */
+constexpr uint64_t kBaTxIdleEndUS = 1500000;
+inline bool ba_tx_session_idle(bool bulk, size_t waiting, unsigned queued, uint64_t last_agg_us, uint64_t agreed_us,
+                               uint64_t now_us) {
+  if (bulk || waiting || queued) return false;
+  const uint64_t since = last_agg_us > agreed_us ? last_agg_us : agreed_us;
+  return since && now_us - since >= kBaTxIdleEndUS;
+}
+
 inline size_t build_addba_response(uint8_t *out, const AddbaRequest &r, const uint8_t *own, uint16_t seq) {
   std::memset(out, 0, kAddbaResponseLength);
   out[0] = 0xd0;
