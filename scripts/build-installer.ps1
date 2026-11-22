@@ -92,6 +92,12 @@ if ($LASTEXITCODE -ne 0) { throw 'client publish failed' }
 Copy-Item "$repo\installer\install.ps1", "$repo\installer\uninstall.ps1", "$repo\installer\setup-tap.ps1",
           "$repo\installer\restore.ps1", "$repo\installer\restore.cmd",
           "$repo\installer\report.ps1", "$repo\installer\report.cmd" $stage
+# uninstall.ps1 and setup-tap.ps1 have no self-test: parse them (and the rest)
+# under Windows PowerShell 5.1 so a syntax error fails the build (#22).
+foreach ($script in 'install.ps1', 'uninstall.ps1', 'setup-tap.ps1', 'restore.ps1', 'report.ps1') {
+  & powershell.exe -NoProfile -Command "`$e = `$null; [void][Management.Automation.Language.Parser]::ParseFile('$stage\$script', [ref]`$null, [ref]`$e); if (`$e) { `$e | ForEach-Object { `$_.ToString() }; exit 1 }"
+  if ($LASTEXITCODE -ne 0) { throw "$script does not parse" }
+}
 # Offline installer/rollback/report self-tests under Windows PowerShell 5.1 (no card or admin rights needed).
 foreach ($script in 'install.ps1', 'restore.ps1', 'report.ps1') {
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$stage\$script" -SelfTest

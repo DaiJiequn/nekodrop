@@ -445,13 +445,50 @@ if (-not ($pnpAll | Where-Object { $_.InstanceId -match $SupportedCardPattern })
 }
 
 'Files'
+# Every process running from the install folder, not only ours by name: the
+# AirDrop engine is the bundled python.exe started by nekodrop.exe, and killing
+# nekodrop.exe leaves it running with python\libcrypto-3.dll open, so the copy
+# below failed with an IOException on that file and left a half-copied folder (#22).
+function Stop-FromTarget {
+  $root = [IO.Path]::GetFullPath($Target).TrimEnd('\') + '\'
+  # Never by path under a drive root or a folder that is not nekodrop's.
+  $byPath = $root.Length -gt 4 -and ((Test-Path (Join-Path $root 'NekoDropService.exe')) -or (Test-Path (Join-Path $root 'python\python.exe')))
+  $ours = @(Get-Process nekodrop, nekodrop-radio, awdld, NekoDropService -ErrorAction SilentlyContinue) +
+          @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+              try { $byPath -and $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } catch { $false } })
+  $ours = @($ours | Sort-Object Id -Unique)
+  $ours | Stop-Process -Force -ErrorAction SilentlyContinue
+  $ours | ForEach-Object { try { $_.WaitForExit(10000) | Out-Null } catch { } }
+  $ours
+}
 Step 'stop an earlier service' {
-  if (Get-Service $Service -ErrorAction SilentlyContinue) { Stop-Service $Service -Force -ErrorAction SilentlyContinue }
-  Get-Process nekodrop, nekodrop-radio, awdld -ErrorAction SilentlyContinue | Stop-Process -Force
+  if (Get-Service $Service -ErrorAction SilentlyContinue) {
+    Stop-Service $Service -Force -ErrorAction SilentlyContinue
+    # Stop-Service returns before the process is gone; wait for it.
+    $deadline = (Get-Date).AddSeconds(20)
+    while ((Get-Service $Service).Status -ne 'Stopped' -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
+  }
+  Stop-FromTarget | Out-Null
 }
 Step "copy to $Target" {
   New-Item -ItemType Directory -Force $Target | Out-Null
-  Copy-Item "$Source\*" $Target -Recurse -Force -Exclude 'install.ps1', 'tap-windows.exe'
+  # A file can stay locked a moment after its process exits (or a process may
+  # have been started again meanwhile): retry, and say who holds it.
+  for ($try = 1; ; $try++) {
+    try {
+      Copy-Item "$Source\*" $Target -Recurse -Force -Exclude 'install.ps1', 'tap-windows.exe'
+      break
+    } catch {
+      $held = Stop-FromTarget
+      if ($try -ge 5) {
+        $who = ($held | ForEach-Object { "$($_.ProcessName) ($($_.Id))" }) -join ', '
+        throw "could not copy to $Target after $try tries: $($_.Exception.Message)" +
+              $(if ($who) { " Still running from there: $who." } else { '' }) +
+              ' Close nekodrop (tray icon -> Quit) and run the setup again.'
+      }
+      Start-Sleep -Seconds 2
+    }
+  }
 }
 
 'Driver'
