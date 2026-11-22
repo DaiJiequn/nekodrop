@@ -151,6 +151,7 @@ bool IwxDevice::sta_join(const StaParams &p) {
     const int e = send_cmd(iwx_cmd_id(IWX_SESSION_PROTECTION_CMD, IWX_MAC_CONF_GROUP, 0), &sp,
                            sizeof(sp), false, nullptr);
     if (e) _log("station: session protection refused (" + std::to_string(e) + "), joining anyway");
+    else _sta_session_prot = true;
   }
   nic_unlock();
   if (err) {
@@ -409,7 +410,43 @@ void IwxDevice::sta_leave() {
      * a binding that is gone, asserts the firmware at the next join. */
     /* The TVQM queue needs no command: the firmware frees a removed
      * station's queues (iwl_mvm_disable_txq with the new TX API). */
-    if (_sta_sta_added) {
+    /* OpenBSD/itlwm's iwx_deauth starts by cancelling the session protection
+     * and flushing the station (iwx_flush_sta: drain on, TXPATH_FLUSH of all
+     * TIDs, drain off) before REMOVE_STA. Skipping both, a join whose access
+     * point never answered authentication left frames queued and the time
+     * event live: REMOVE_STA timed out and the firmware asserted (LMAC 0x125F),
+     * three joins in a row in #21. */
+    if (_sta_session_prot && _sta_mac_added && !_fw_error) {
+      iwx_session_prot_cmd sp{};
+      sp.id_and_color = htole32(IWX_FW_CMD_ID_AND_COLOR(kStaMac, 0));
+      sp.action = htole32(IWX_FW_CTXT_ACTION_REMOVE);
+      sp.conf_id = htole32(IWX_SESSION_PROTECT_CONF_ASSOC);
+      if (const int e = send_cmd(iwx_cmd_id(IWX_SESSION_PROTECTION_CMD, IWX_MAC_CONF_GROUP, 0), &sp, sizeof(sp),
+                                 false, nullptr))
+        _log("station: could not cancel session protection (" + std::to_string(e) + ")");
+    }
+    if (_sta_sta_added && !_fw_error) {
+      const auto drain = [this](bool on) {
+        iwx_add_sta_cmd d{};
+        d.sta_id = IWX_STATION_ID;
+        d.mac_id_n_color = htole32(IWX_FW_CMD_ID_AND_COLOR(kStaMac, 0));
+        d.add_modify = IWX_STA_MODE_MODIFY;
+        d.station_flags = htole32(on ? IWX_STA_FLG_DRAIN_FLOW : 0u);
+        d.station_flags_msk = htole32(IWX_STA_FLG_DRAIN_FLOW);
+        uint32_t status = IWX_ADD_STA_SUCCESS;
+        return send_cmd_status(IWX_ADD_STA, &d, sizeof(d), &status);
+      };
+      int e = drain(true);
+      if (!e && !_fw_error) {
+        iwx_tx_path_flush_cmd f{};
+        f.sta_id = htole32(IWX_STATION_ID);
+        f.tid_mask = htole16(0xffff);
+        e = send_cmd(IWX_TXPATH_FLUSH, &f, sizeof(f), false, nullptr);
+        if (!e && !_fw_error) e = drain(false);
+      }
+      if (e) _log("station: could not flush before removing it (" + std::to_string(e) + ")");
+    }
+    if (_sta_sta_added && !_fw_error) {
       iwx_rm_sta_cmd rm{};
       rm.sta_id = IWX_STATION_ID;
       send_cmd(IWX_REMOVE_STA, &rm, sizeof(rm), false, nullptr);
@@ -436,7 +473,7 @@ void IwxDevice::sta_leave() {
     nic_unlock();
   }
   _sta_phy_added = _sta_mac_added = _sta_binding_added = _sta_sta_added = false;
-  _sta_queue_enabled = _sta_assoc = _sta_tlc = false;
+  _sta_queue_enabled = _sta_assoc = _sta_tlc = _sta_session_prot = false;
   _sta_ba_tids = 0;
   _staq.queued = 0;
 }

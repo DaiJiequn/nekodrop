@@ -342,7 +342,7 @@ private:
   StaParams _sta{};
   bool _sta_phy_added = false, _sta_mac_added = false, _sta_binding_added = false,
        _sta_sta_added = false, _sta_queue_enabled = false, _sta_shared_binding = false,
-       _sta_assoc = false, _sta_tlc = false;
+       _sta_assoc = false, _sta_tlc = false, _sta_session_prot = false;
   uint16_t _sta_aid = 0;
   uint8_t _sta_dtim = 1, _sta_ba_tids = 0;
   unsigned _sta_tx_acked = 0, _sta_tx_failed = 0, _sta_tx_fail_logged = 0, _sta_tx_submitted = 0;
