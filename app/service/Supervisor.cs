@@ -36,6 +36,7 @@ public sealed class Supervisor : IDisposable
     bool _userChose, _userOff;
     string _staSsid = "", _wifiError = "";
     (string Ssid, string? Password, bool? Auto)? _pendingConnect;
+    static readonly TimeSpan StaleScan = TimeSpan.FromSeconds(20);
     string _detail = "";
     bool _wanted;
     DateTime _lastUse = DateTime.UtcNow, _lastData = DateTime.UtcNow, _startedAt;
@@ -597,6 +598,23 @@ public sealed class Supervisor : IDisposable
                     _wifi = value;
                 }
                 Publish();
+                // A failed join may be aimed at a BSSID that is gone (#27: the
+                // radio retried the old one every 5 s). If the scan it came from
+                // is old, scan for the name and rejoin with what answers now.
+                if (value == "failed")
+                {
+                    (string Ssid, string? Password, bool? Auto)? again = null;
+                    lock (_lock)
+                        if (_net is { } n && !_userOff && !_scanBusy && _pendingConnect is null &&
+                            DateTime.UtcNow - _scanAt > StaleScan)
+                            again = (n.Ssid, null, null);
+                    if (again is { } a)
+                    {
+                        Say($"Wi-Fi: joining \"{a.Ssid}\" failed; scanning for it again");
+                        lock (_lock) _pendingConnect = a;
+                        WifiScan(a.Ssid);
+                    }
+                }
                 break;
             case "bss":
             {
@@ -919,7 +937,21 @@ public sealed class Supervisor : IDisposable
         // reset discovery each time the user tried again (#11).
         if (EffectiveMode() != NetMode.Concurrent) return "needs concurrent mode";
         JsonObject? target;
-        lock (_lock) target = _scan.FirstOrDefault(n => (string?)n["ssid"] == ssid);
+        bool stale;
+        lock (_lock)
+        {
+            target = _scan.FirstOrDefault(n => (string?)n["ssid"] == ssid);
+            stale = DateTime.UtcNow - _scanAt > StaleScan;
+        }
+        // An iPhone hotspot comes back with a new BSSID: joining the address
+        // from an old scan sent every authentication into the void until a later
+        // scan happened to catch the new one (#27). Look by name again first.
+        if (target is not null && stale && !_scanBusy && State == RadioState.On)
+        {
+            lock (_lock) _pendingConnect = (ssid, password, autoConnect);
+            WifiScan(ssid);
+            return "";
+        }
         if (target is null)
         {
             if (!hidden && _scanBusy) return "still scanning; try again in a moment";

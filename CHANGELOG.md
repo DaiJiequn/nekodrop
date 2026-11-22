@@ -6,6 +6,16 @@
 
 ---
 
+## v0.1.34 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **修复连 iPhone 热点要试好几次才连上（[#27](https://github.com/zheznanohana/nekodrop/issues/27)）**：iPhone 热点重新打开后可能换一个 BSSID（无线 MAC 地址）。nekodrop 一直拿上一次扫描记下的旧地址去认证，那个地址已经没人应答：认证帧一个确认都没收到，也从没听到它的信标。直到后台下一次扫描碰巧扫到新地址才连上。现在扫描结果超过 20 秒时，连接前会先按网络名重新扫一次；连接失败、而扫描结果已经旧了时，也会自动重扫再连。认证失败时，radio 日志会注明有没有听到过这个接入点的信标。**只编译测试过，没有真机验证。**
+
+### English
+- **Fixed joining an iPhone hotspot taking several tries ([#27](https://github.com/zheznanohana/nekodrop/issues/27))**: an iPhone hotspot can come back with a new BSSID. nekodrop kept authenticating to the address from the previous scan, which nobody answered (no frame acknowledged, no beacon ever heard), until a later background scan happened to catch the new one. When the scan is more than 20 s old, nekodrop now scans for the network by name before joining, and does so again after a failed join. The radio's authentication failure line now says when no beacon was heard from the access point. **Built and tested on CI only; not verified on hardware.**
+
+---
+
 ## v0.1.33 (Stable / 稳定版) — 2026-11-22
 
 > 自 v0.1.30 稳定版以来的变化见下方 v0.1.31–v0.1.33。真机已确认：AX211 上 iPhone → 电脑接收恢复（[#9](https://github.com/zheznanohana/nekodrop/issues/9)，`FCS removed`）。其余改动和两个新实验开关（默认关闭）尚无真机数据。 / Changes since the v0.1.30 stable release are in v0.1.31–v0.1.33 below. Confirmed on hardware: iPhone → PC receiving works again on AX211 ([#9](https://github.com/zheznanohana/nekodrop/issues/9), `FCS removed`). The other changes and the two new experimental switches (off by default) have no hardware data yet.

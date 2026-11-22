@@ -1155,7 +1155,9 @@ void WifiStation::tick(uint64_t now_us) {
   case State::Associating:
     if (!_last_try || now_us - _last_try > kStepTimeoutUS) {
       if (++_tries > 6) {
-        fail(_state == State::Authenticating ? "no answer to authentication" : "no answer to association");
+        /* Say when the AP was never heard: the BSSID is likely gone (#27). */
+        fail(std::string(_state == State::Authenticating ? "no answer to authentication" : "no answer to association") +
+             (_beacon_seen ? "" : " (no beacon heard from this access point)"));
         return;
       }
       _last_try = now_us;
