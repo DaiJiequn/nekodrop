@@ -72,7 +72,6 @@ public sealed class Supervisor : IDisposable
                 ["mode"] = _cfg.Mode.ToString().ToLowerInvariant(),
                 ["channel"] = _channel,
                 ["country"] = _cfg.Country,
-                ["fastSend"] = _cfg.FastSend,
                 ["aggregate"] = _cfg.Aggregate,
                 ["wifi"] = _wifi,
                 ["detail"] = _detail,
@@ -196,24 +195,6 @@ public sealed class Supervisor : IDisposable
         // Saved as chosen; a card without a station runs Concurrent on demand.
         if (EffectiveMode() == NetMode.Concurrent) Start("mode changed");
         else Stop("mode changed", giveBack: true);
-        Publish();
-    }
-
-    /// <summary>Experimental faster sending; a running radio restarts to take it.</summary>
-    public void SetFastSend(bool on)
-    {
-        lock (_lock)
-        {
-            if (_cfg.FastSend == on && _cfg.FastSendChosen) return;
-            var changed = _cfg.FastSend != on;
-            _cfg.FastSend = on;
-            _cfg.FastSendChosen = true;
-            _cfg.Save();
-            if (!changed) return;
-        }
-        Say($"faster sending: {(on ? "on" : "off")}");
-        if (State is RadioState.On or RadioState.Starting)
-            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         Publish();
     }
 
@@ -375,7 +356,10 @@ public sealed class Supervisor : IDisposable
             if (_cfg.Country != "") args.AddRange(["--country", _cfg.Country]);
             if (staConf is not null) args.AddRange(["--sta-config", staConf]);
             // Radio options only for a card whose radio has them (all Intel cards do).
-            if (_cfg.FastSend && !kernel && _caps.SupportsFastSend) args.AddRange(["--tx-window", "48"]);
+            // Faster sending (48 frames in flight) is always on since 0.1.25: it was a
+            // switch from 0.1.9 and no card reported it making things worse (AX211 537 MB
+            // at 3.4 MB/s with 0 given up #9, AX210 a little faster #14, AX200 same speed #4).
+            if (!kernel && _caps.SupportsFastSend) args.AddRange(["--tx-window", "48"]);
             if (_cfg.Aggregate && !kernel && _caps.SupportsAggregate) args.Add("--aggregate");
             _radio = Spawn(Path.Combine(_root, "radio", "nekodrop-radio.exe"), args, OnRadioLine);
             _startedAt = DateTime.UtcNow;

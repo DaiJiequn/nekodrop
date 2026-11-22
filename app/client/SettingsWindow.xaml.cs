@@ -23,7 +23,6 @@ public partial class SettingsWindow : Window
         ModeConcurrent.IsChecked = mode == "concurrent";
         ModeOnDemand.IsChecked = mode == "ondemand";
         ModeOff.IsChecked = mode == "off";
-        FastSendBox.IsChecked = (bool?)A.Service.Last?["fastSend"] ?? true;
         AggregateBox.IsChecked = (bool?)A.Service.Last?["aggregate"] ?? false;
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
@@ -106,8 +105,6 @@ public partial class SettingsWindow : Window
         A.Engine.Apply(s);
         var mode = ModeConcurrent.IsChecked == true ? "concurrent" : ModeOnDemand.IsChecked == true ? "ondemand" : "off";
         if (mode != (string?)A.Service.Last?["mode"]) A.Service.SetMode(mode);
-        var fast = FastSendBox.IsChecked == true;
-        if (fast != ((bool?)A.Service.Last?["fastSend"] ?? true)) A.Service.SetFastSend(fast);
         var aggregate = AggregateBox.IsChecked == true;
         if (aggregate != ((bool?)A.Service.Last?["aggregate"] ?? false)) A.Service.SetAggregate(aggregate);
         A.Window?.FolderChanged();

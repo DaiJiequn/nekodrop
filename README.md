@@ -169,11 +169,9 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 ### Experimental features
 
-*Settings → Experimental*. Turning either on or off restarts AirDrop for a few seconds. If sending gets worse, turn it off, and please post a diagnostic report in an [issue](../../issues) either way.
+*Settings → Experimental*. Off by default, and with it off nekodrop behaves exactly as without it. Turning it on or off restarts AirDrop for a few seconds. If sending gets worse, turn it off, and please post a diagnostic report in an [issue](../../issues) either way.
 
-**Faster sending to iPhone** (0.1.9+, **on by default since 0.1.25**)
-- Keeps up to 48 AWDL frames in flight instead of 8, rings the card's doorbell once per batch, and starts the rate ladder one step higher (HT MCS 4).
-- Helps where the per-frame round trip was the limit. Measured so far: about the same 1.3 MB/s as the default on an AX200 ([#4](../../issues/4)), a little faster on an AX210 ([#14](../../issues/14)), 537 MB at 3.4 MB/s with no frames given up on an AX211 ([#9](../../issues/9)). No report of it making things worse, so it is now on by default; installs that never touched the switch get it on after updating, and turning it off in the settings sticks.
+(*Faster sending to iPhone*, a switch from 0.1.9, is always on since 0.1.25: up to 48 AWDL frames in flight instead of 8, one doorbell per batch, and the rate ladder starting at HT MCS 4. No card reported it making things worse: about the same 1.3 MB/s on an AX200 ([#4](../../issues/4)), a little faster on an AX210 ([#14](../../issues/14)), 537 MB at 3.4 MB/s with no frames given up on an AX211 ([#9](../../issues/9)).)
 
 **Aggregated sending (A-MPDU)** (0.1.15+, **off by default**; on an AX200 and an AX211 the firmware has so far sent only single frames)
 
