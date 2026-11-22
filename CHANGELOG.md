@@ -6,6 +6,16 @@
 
 ---
 
+## v0.1.33 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **新的实验性开关「蓝牙与 Wi-Fi 均衡共存（Intel）」（默认关闭，[#26](https://github.com/zheznanohana/nekodrop/pull/26)，感谢 [@XXD051030](https://github.com/XXD051030)）**：电脑发送时，靠网卡自带的蓝牙发出 AirDrop 信标，附近的 iPhone 和 Mac 听到后才会出现在列表里。radio 一直让固件「Wi-Fi 优先」，AWDL 监听时这个信标几乎发不出去，所以找设备经常要等一两分钟甚至找不到（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）。打开后固件均衡分配（和 ForbiddenItlwm 的 `itlawdlbtcoex=1` 相同）：在一台 AX200 上、没开分享面板的情况下，Mac 9 次都在 2.3 秒内出现，iPhone 9 次里出现 8 次，中位数约 5 秒。只作用于 Intel 用户态 radio；关闭时启动参数和发给固件的命令与之前完全一样。服务日志会写一行 `bluetooth coexistence: mode N`。
+
+### English
+- **New experimental switch "Balanced Bluetooth coexistence (Intel)" (off by default, [#26](https://github.com/zheznanohana/nekodrop/pull/26), thanks to [@XXD051030](https://github.com/XXD051030))**: to send, the PC wakes nearby iPhones and Macs with an AirDrop Bluetooth beacon from the card's own Bluetooth. The radio always set the firmware to "Wi-Fi first", so while AWDL listened that beacon barely got out and finding devices often took a minute or two, or never happened ([#4](https://github.com/zheznanohana/nekodrop/issues/4)). With the switch on the firmware balances the two (as ForbiddenItlwm's `itlawdlbtcoex=1`): on one AX200, with no share sheet open, the Mac appeared within 2.3 s in 9 of 9 tries and the iPhone in 8 of 9, median about 5 s. Intel user-mode radio only; off, the launch arguments and firmware commands are exactly as before. The service log gets a `bluetooth coexistence: mode N` line.
+
+---
+
 ## v0.1.32 (Hourly / Pre-release) — 2026-11-22
 
 ### 中文
