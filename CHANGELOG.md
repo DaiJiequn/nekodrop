@@ -6,6 +6,20 @@
 
 ---
 
+## v0.1.29 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **内置支持 Realtek RTL8852CE（`10EC:C852`）**：和 Intel 网卡一样按 PCI ID 自动识别、自动接管，不需要开关。用的是 winawdl 的 radio（基于 raph559/devourer 的 Windows PCIe 后端），打包为 `radio\nekodrop-radio-rtl.exe`。这张卡的驱动不支持同时连 Wi-Fi，所以按需模式运行。**还没有真机数据**。
+- **自动识别失败时可以手动选择网卡**：*设置 → 网卡* 会列出本机的 Intel/Realtek 网卡和可选型号（Intel AX201/9560、AX200、AX210、AX211/AX411、Realtek RTL8852CE）。手动选择只对驱动包里列出的硬件 ID 有效。
+- **网卡后端模块化**：服务端按 `IRadioBackend` 启动各个网卡的 radio；适配新网卡的接口和步骤写在 [docs/ADDING-A-CARD.md](docs/ADDING-A-CARD.md)，里面也列了下一批候选网卡和各自可以移植的驱动来源。
+
+### English
+- **Realtek RTL8852CE (`10EC:C852`) built in**: recognized and taken by its PCI ID like the Intel cards, no switch. It runs winawdl's radio on raph559/devourer's Windows PCIe backend, shipped as `radio\nekodrop-radio-rtl.exe`. Its driver has no station, so it runs on demand. **No hardware data yet**.
+- **Manual card choice when detection fails**: *Settings > Wi-Fi card* lists the PC's Intel/Realtek network controllers and the models (Intel AX201/9560, AX200, AX210, AX211/AX411, Realtek RTL8852CE). Only for hardware IDs the driver package lists.
+- **Pluggable radio backends**: the service starts each card's radio through `IRadioBackend`; the interfaces and checklist for the next card family are in [docs/ADDING-A-CARD.md](docs/ADDING-A-CARD.md), with the candidates and the drivers they could be ported from.
+
+---
+
 ## v0.1.28 (Hourly / Pre-release) — 2026-11-22
 
 ### 中文
