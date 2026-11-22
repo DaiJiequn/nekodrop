@@ -8,7 +8,7 @@
 
 ## v0.1.33 (Stable / 稳定版) — 2026-11-22
 
-> 自 v0.1.30 稳定版以来的变化见下方 v0.1.31–v0.1.33。真机已确认：AX211 上 iPhone → 电脑接收恢复（[#9](https://github.com/zheznanohana/nekodrop/issues/9)，`FCS removed`）。其余改动和三个新实验开关（默认关闭）尚无真机数据。 / Changes since the v0.1.30 stable release are in v0.1.31–v0.1.33 below. Confirmed on hardware: iPhone → PC receiving works again on AX211 ([#9](https://github.com/zheznanohana/nekodrop/issues/9), `FCS removed`). The other changes and the three new experimental switches (off by default) have no hardware data yet.
+> 自 v0.1.30 稳定版以来的变化见下方 v0.1.31–v0.1.33。真机已确认：AX211 上 iPhone → 电脑接收恢复（[#9](https://github.com/zheznanohana/nekodrop/issues/9)，`FCS removed`）。其余改动和两个新实验开关（默认关闭）尚无真机数据。 / Changes since the v0.1.30 stable release are in v0.1.31–v0.1.33 below. Confirmed on hardware: iPhone → PC receiving works again on AX211 ([#9](https://github.com/zheznanohana/nekodrop/issues/9), `FCS removed`). The other changes and the two new experimental switches (off by default) have no hardware data yet.
 
 ### 中文
 - **新的实验性开关「蓝牙与 Wi-Fi 均衡共存（Intel）」（默认关闭，[#26](https://github.com/zheznanohana/nekodrop/pull/26)，感谢 [@XXD051030](https://github.com/XXD051030)）**：电脑发送时，靠网卡自带的蓝牙发出 AirDrop 信标，附近的 iPhone 和 Mac 听到后才会出现在列表里。radio 一直让固件「Wi-Fi 优先」，AWDL 监听时这个信标几乎发不出去，所以找设备经常要等一两分钟甚至找不到（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）。打开后固件均衡分配（和 ForbiddenItlwm 的 `itlawdlbtcoex=1` 相同）：在一台 AX200 上、没开分享面板的情况下，Mac 9 次都在 2.3 秒内出现，iPhone 9 次里出现 8 次，中位数约 5 秒。只作用于 Intel 用户态 radio；关闭时启动参数和发给固件的命令与之前完全一样。服务日志会写一行 `bluetooth coexistence: mode N`。
