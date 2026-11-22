@@ -6,6 +6,24 @@
 
 ---
 
+## v0.1.26 (Hourly / Pre-release) — 2026-11-22
+
+本版来自「nekodrop 自主进化」第 6 轮：Gemini 提案 → Claude 实现 → Codex QA 通过，风险等级 EXPERIMENTAL。 / From self-evolution round 6: proposal by Gemini, implementation by Claude, Codex QA passed, risk EXPERIMENTAL.
+
+### 中文
+- **新的实验性开关「更快解锁被动 5 GHz 信道」（默认关闭，[#11](https://github.com/zheznanohana/nekodrop/issues/11)）**：网卡不接受国家码时（#11 的 AX210 + TW），5 GHz AirDrop 信道一开始是被动的，在听到 iPhone 或附近路由器之前电脑一帧都不发，#11 里每次重启要等约 60 秒。打开后会在 1.5、12、30 秒各扫一次 11 个常用信道（原来是 10 秒扫一次全部信道），让网卡按自己的规则从附近路由器学到国家码。被拒绝的国家码会在 iPhone 报出同一国家时再问一次。不会在被动信道上强行发射。关闭时扫描时机和以前完全一样。**还没有真机数据**，有用户证明没问题后会改成始终打开。
+- **发送统计改正**：`tx: N submitted` 只统计 AirDrop 的帧，发给路由器的帧移到 `wifi:` 那一行。以前在「同时联网」模式下 submitted 比 done 多出一大截，看上去像丢包，其实不是。
+- **发现耗时诊断**：radio 日志新增「第一次收到 AWDL 帧 / MIF / 发给本机的帧用了多少秒」，诊断报告里有对应的时间表（[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#11](https://github.com/zheznanohana/nekodrop/issues/11)）。
+- 诊断报告不再把「更快发送」显示成关闭（0.1.25 起它始终打开）。
+
+### English
+- **New experimental switch "Faster unlock of a passive 5 GHz channel" (off by default, [#11](https://github.com/zheznanohana/nekodrop/issues/11))**: where the card refuses the country (#11: AX210, TW), the 5 GHz AirDrop channel starts passive and the PC sends nothing until it hears an iPhone or a router; #11 waited ~60 s after each restart. With the switch on, the radio scans the eleven common channels at 1.5, 12 and 30 s (instead of all channels once at 10 s) so the card learns the country from nearby routers by its own rules, and asks again for a refused country when an iPhone names it. It never transmits on a passive channel. Off, the scan timing is exactly as before. **No hardware data yet**; it becomes always-on once users confirm it causes no problems.
+- **TX counters fixed**: `tx: N submitted` counts AirDrop frames only; frames to the access point moved to the `wifi:` line. Under Concurrent the gap between submitted and done looked like loss and was not.
+- **Discovery timing**: the radio logs how many seconds until the first AWDL frame, MIF and frame addressed to us, with a timing table in the diagnostic report ([#4](https://github.com/zheznanohana/nekodrop/issues/4), [#11](https://github.com/zheznanohana/nekodrop/issues/11)).
+- The diagnostic report no longer shows faster sending as off (it is always on since 0.1.25).
+
+---
+
 ## v0.1.25 (Hourly / Pre-release) — 2026-11-22
 
 ### 中文
