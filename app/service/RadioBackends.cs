@@ -9,8 +9,9 @@ namespace NekoDrop.Service;
 /// <param name="StaConf">the Wi-Fi station's config file (Concurrent mode), or null</param>
 /// <param name="Aggregate">experimental A-MPDU sending is on in the settings</param>
 /// <param name="FastUnlock">experimental fast passive-channel unlock is on in the settings</param>
+/// <param name="CoexPlan">experimental coexistence plan (router entries in the AWDL schedule) is on</param>
 public sealed record RadioStart(AdapterProfile Profile, int Channel, bool Kernel, string Country, string? StaConf,
-                                bool Aggregate, bool FastUnlock)
+                                bool Aggregate, bool FastUnlock, bool CoexPlan = false)
 {
     /// <summary>20 MHz on 2.4 GHz, 80 MHz on 5 GHz.</summary>
     public int Width => Channel <= 14 ? 20 : 80;
@@ -69,6 +70,8 @@ public sealed class IwxRadioBackend : IRadioBackend
         // The firmware scan and country notice it needs are the user-mode Intel radio's,
         // the radio that also runs the Wi-Fi station; not with nekodrop-wlan.sys.
         if (s.FastUnlock && !s.Kernel && caps.SupportsConcurrentWifi) args.Add("--fast-unlock");
+        // Only the user-mode Intel radio runs the station whose channel the plan names.
+        if (s.CoexPlan && !s.Kernel && caps.SupportsConcurrentWifi) args.Add("--coex-plan");
         if (!s.Kernel && s.Profile.RadioFamily is { Length: > 0 } family) args.AddRange(["--family", family]);
         return args;
     }

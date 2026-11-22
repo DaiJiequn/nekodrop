@@ -42,7 +42,8 @@ Copy-Item "$repo\third_party\winawdl\airdrop\*.py", "$repo\third_party\winawdl\a
 if ($LASTEXITCODE -ne 0) { throw 'engine patch failed' }
 # sender.py looks for the Bluetooth beacon script in ..\scripts beside its own folder.
 New-Item -ItemType Directory -Force "$stage\scripts" | Out-Null
-Copy-Item "$repo\third_party\winawdl\scripts\airdrop-beacon.ps1" "$stage\scripts\"
+# nekodrop's copy (#22): leaves the install folder and exits with the engine.
+Copy-Item "$repo\installer\airdrop-beacon.ps1" "$stage\scripts\"
 
 'driver'
 & "$repo\driver\regproxy\build.ps1" | Out-Null
@@ -100,7 +101,7 @@ Copy-Item "$repo\installer\install.ps1", "$repo\installer\uninstall.ps1", "$repo
           "$repo\installer\report.ps1", "$repo\installer\report.cmd" $stage
 # uninstall.ps1 and setup-tap.ps1 have no self-test: parse them (and the rest)
 # under Windows PowerShell 5.1 so a syntax error fails the build (#22).
-foreach ($script in 'install.ps1', 'uninstall.ps1', 'setup-tap.ps1', 'restore.ps1', 'report.ps1') {
+foreach ($script in 'install.ps1', 'uninstall.ps1', 'setup-tap.ps1', 'restore.ps1', 'report.ps1', 'scripts\airdrop-beacon.ps1') {
   & powershell.exe -NoProfile -Command "`$e = `$null; [void][Management.Automation.Language.Parser]::ParseFile('$stage\$script', [ref]`$null, [ref]`$e); if (`$e) { `$e | ForEach-Object { `$_.ToString() }; exit 1 }"
   if ($LASTEXITCODE -ne 0) { throw "$script does not parse" }
 }
@@ -156,7 +157,7 @@ if ($iscc) {
   if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
   Get-ChildItem "$repo\build\nekodrop-*-setup.exe" | Select-Object Name, Length
 } else {
-  $zip = "$repo\build\nekodrop-0.1.31-windows-x64.zip"
+  $zip = "$repo\build\nekodrop-0.1.32-windows-x64.zip"
   Compress-Archive "$stage\*" $zip -Force
   "Inno Setup not found: made $zip instead (unzip, then run install.ps1 as administrator)."
 }

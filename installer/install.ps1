@@ -452,6 +452,12 @@ function Stop-FromTarget {
   $ours = @(Get-Process nekodrop, nekodrop-radio, nekodrop-radio-rtl, awdld, NekoDropService -ErrorAction SilentlyContinue) +
           @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
               try { $byPath -and $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } catch { $false } })
+  # Processes started from elsewhere that name the folder on their command
+  # line: airdrop-beacon.ps1's powershell.exe held airdrop\ open (#22).
+  $ours += @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+      $byPath -and $_.ProcessId -ne $PID -and $_.CommandLine -and
+      $_.CommandLine.IndexOf($root.TrimEnd(''), [StringComparison]::OrdinalIgnoreCase) -ge 0 } |
+    ForEach-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue })
   $ours = @($ours | Sort-Object Id -Unique)
   $ours | Stop-Process -Force -ErrorAction SilentlyContinue
   $ours | ForEach-Object { try { $_.WaitForExit(10000) | Out-Null } catch { } }

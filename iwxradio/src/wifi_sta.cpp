@@ -811,6 +811,7 @@ void WifiStation::deliver(const uint8_t *da, const uint8_t *sa, const uint8_t *b
   eth.insert(eth.end(), body, body + len);
   if (_tap.write(eth.data(), eth.size())) {
     _rx_packets++;
+    _rx_bytes += eth.size();
   } else if (_rx.tap_failed++ < 5) {
     _log("station: writing to the TAP adapter failed");
   }
@@ -842,6 +843,7 @@ bool WifiStation::send_data(const uint8_t *da, uint16_t ethertype, const uint8_t
   }
   if (_dev.sta_transmit(f.data(), f.size(), rate, protect) < 0) return false;
   _tx_packets++;
+  _tx_bytes += f.size();
   return true;
 }
 

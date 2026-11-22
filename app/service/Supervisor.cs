@@ -78,6 +78,7 @@ public sealed class Supervisor : IDisposable
                 ["country"] = _cfg.Country,
                 ["aggregate"] = _cfg.Aggregate,
                 ["fastUnlock"] = _cfg.FastUnlock,
+                ["coexPlan"] = _cfg.CoexPlan,
                 ["card"] = _cardLabel,
                 ["manualCard"] = _cfg.ManualCard,
                 ["manualModel"] = _cfg.ManualModel,
@@ -235,6 +236,21 @@ public sealed class Supervisor : IDisposable
             _cfg.Save();
         }
         Say($"experimental fast passive-channel unlock: {(on ? "on" : "off")}");
+        if (State is RadioState.On or RadioState.Starting)
+            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
+        Publish();
+    }
+
+    /// <summary>Experimental coexistence plan (ForbiddenItlwm PR #30); a running radio restarts to take it.</summary>
+    public void SetCoexPlan(bool on)
+    {
+        lock (_lock)
+        {
+            if (_cfg.CoexPlan == on) return;
+            _cfg.CoexPlan = on;
+            _cfg.Save();
+        }
+        Say($"experimental coexistence plan: {(on ? "on" : "off")}");
         if (State is RadioState.On or RadioState.Starting)
             _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         Publish();
@@ -403,7 +419,8 @@ public sealed class Supervisor : IDisposable
             if (!kernel) TakeCard();
             else if (Card.Find() is { } kc) { _profile = kc.Profile; _caps = kc.Profile.Capabilities; }
             if (!_wanted) { lock (_lock) State = RadioState.Off; Publish(); return; }
-            var launch = CardCatalog.BuildRadioLaunch(_profile, channel, kernel, _cfg.Country, staConf, _cfg.Aggregate, _cfg.FastUnlock);
+            var launch = CardCatalog.BuildRadioLaunch(_profile, channel, kernel, _cfg.Country, staConf, _cfg.Aggregate, _cfg.FastUnlock,
+                                                      _cfg.CoexPlan);
             _radio = Spawn(Path.Combine(_root, "radio", launch.ExeName), launch.Args, OnRadioLine);
             _startedAt = DateTime.UtcNow;
             // awdld connects to the radio's pipe; give the firmware time to boot.

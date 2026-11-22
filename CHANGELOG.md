@@ -6,6 +6,18 @@
 
 ---
 
+## v0.1.32 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **新的实验性开关「Wi-Fi 和 AirDrop 不在同一信道时按苹果的方式分时」（默认关闭，[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：nekodrop 连的 5 GHz Wi-Fi 和 AirDrop 不在同一个信道时（#4 是 Wi-Fi 在 40、AirDrop 在 149），网卡固件会按自己的时钟在两个信道之间来回切，跟 iPhone 的 AWDL 时隙完全对不上。电脑不在 149 的时间和 iPhone 不在 149 的时间叠在一起，有效传输时间只剩大约三分之一，这和 #4 实测的 8.7–11.2 MiB/s 对得上（同一信道时是 30 MB/s）。打开后照 macOS 的做法：把路由器写进 AirDrop 广告的 16 个时隙里（空闲时第 6、7、14、15 个；传输时按路由器流量给 1–6 个），这些时隙里电脑不发 AirDrop 同步帧、A-MPDU 也暂停，让 iPhone 知道电脑什么时候在路由器那边。只在 awdld 的 AW 计数和 iPhone 同步时改写，否则不动。移植自 [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30)；PR #30 本身也还没测出提速效果，**这次同样没有真机数据**。服务日志每 5 秒会有一行 `coex plan:` 统计。
+- **修复卸载后安装目录删不掉、引擎重启后留下孤儿进程（[#22](https://github.com/zheznanohana/nekodrop/issues/22)，感谢 GGBond-cer 找到根因）**：AirDrop 引擎发送时启动的蓝牙信标脚本（`airdrop-beacon.ps1`，`powershell.exe`）把安装目录下的 `airdrop\` 当作工作目录占着，而且引擎重启时不会跟着退出，越积越多。卸载脚本按路径和进程名都找不到它们，`airdrop\` 就删不掉。现在：信标脚本启动后立刻离开安装目录，并在启动它的引擎退出后几秒内自己退出；安装和卸载时也会结束命令行里带安装目录的进程。
+
+### English
+- **New experimental switch "Apple-style time sharing when Wi-Fi and AirDrop use different channels" (off by default, [#4](https://github.com/zheznanohana/nekodrop/issues/4))**: with nekodrop's 5 GHz Wi-Fi on another channel than AirDrop (#4: Wi-Fi on 40, AirDrop on 149), the firmware switches between the two on its own clock, unaligned with the iPhone's AWDL entries. The PC's time away from 149 and the iPhone's add up, leaving about a third of the air for the transfer, which matches #4's 8.7–11.2 MiB/s (30 MB/s on one channel). With the switch on, as macOS does, the router goes into AirDrop's 16 advertised entries (6, 7, 14 and 15 when idle; 1 to 6 while transferring, by the router's traffic), and the PC sends no AWDL sync frames and pauses A-MPDU sending in them, so the iPhone knows when the PC is with the router. Frames are rewritten only while awdld's AW counter is in step with the iPhone's. Ported from [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30), whose speed benefit is itself not yet measured; **no hardware data for this either**. The service log gets a `coex plan:` line every 5 s.
+- **Fixed the install folder surviving an uninstall, and orphan processes after engine restarts ([#22](https://github.com/zheznanohana/nekodrop/issues/22), root cause found by GGBond-cer)**: the Bluetooth beacon script the AirDrop engine starts when sending (`airdrop-beacon.ps1`, `powershell.exe`) kept the install folder's `airdrop\` as its working directory and outlived engine restarts, piling up. The uninstaller found them neither by path nor by name, so `airdrop\` could not be removed. The beacon script now leaves the install folder at once and exits within seconds of the engine that started it; install and uninstall also end any process whose command line names the install folder.
+
+---
+
 ## v0.1.31 (Hourly / Pre-release) — 2026-11-22
 
 ### 中文

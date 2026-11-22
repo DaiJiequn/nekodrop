@@ -62,6 +62,9 @@ public:
   TapAdapter &tap() { return _tap; }
   uint64_t rx_packets() const { return _rx_packets; }
   uint64_t tx_packets() const { return _tx_packets; }
+  /* Bytes of those packets, for the router's traffic class (--coex-plan). */
+  uint64_t rx_bytes() const { return _rx_bytes; }
+  uint64_t tx_bytes() const { return _tx_bytes; }
   /* Unicast only: Windows' multicast (mDNS, SSDP, LLMNR) never gets answers. */
   uint64_t tx_unicast() const { return _tx_unicast; }
   uint64_t rx_unicast() const { return _rx.unicast; }
@@ -177,6 +180,6 @@ private:
 
   std::deque<std::vector<uint8_t>> _addba_answers;
   uint16_t _mgmt_seq = 0;
-  uint64_t _rx_packets = 0, _tx_packets = 0, _tx_unicast = 0;
+  uint64_t _rx_packets = 0, _tx_packets = 0, _tx_unicast = 0, _rx_bytes = 0, _tx_bytes = 0;
   RxStats _rx;
 };

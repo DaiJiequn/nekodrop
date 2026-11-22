@@ -156,11 +156,11 @@ public static class CardCatalog
     /// <summary>The radio daemon and its arguments for a card: its backend's (RadioBackends.cs).</summary>
     public static RadioLaunch BuildRadioLaunch(
         AdapterProfile profile, int channel, bool kernel,
-        string country, string? staConf, bool aggregate, bool fastUnlock)
+        string country, string? staConf, bool aggregate, bool fastUnlock, bool coexPlan = false)
     {
         var backend = RadioBackends.Get(profile.Backend);
         return new RadioLaunch(backend.ExeName,
-            backend.BuildArgs(new RadioStart(profile, channel, kernel, country, staConf, aggregate, fastUnlock)));
+            backend.BuildArgs(new RadioStart(profile, channel, kernel, country, staConf, aggregate, fastUnlock, coexPlan)));
     }
 
     /// <summary>One model the user can pick when a card is not recognized by its ID.</summary>
@@ -283,7 +283,11 @@ public static class CardCatalog
                          "nekodrop-radio.exe", "149", "--width", "80", "--country", "JP",
                          "--sta-config", @"C:\run\sta.conf", "--tx-window", "64", "--aggregate", "--fast-unlock"),
               "Iwx full flags launch args");
-        Check(SameLaunch(BuildRadioLaunch(iwx, 44, true, "US", null, true, true),
+        Check(SameLaunch(BuildRadioLaunch(iwx, 149, false, "", @"C:\run\sta.conf", false, false, true),
+                         "nekodrop-radio.exe", "149", "--width", "80", "--sta-config", @"C:\run\sta.conf",
+                         "--tx-window", "64", "--coex-plan"),
+              "Iwx coexistence plan launch args");
+        Check(SameLaunch(BuildRadioLaunch(iwx, 44, true, "US", null, true, true, true),
                          "nekodrop-radio.exe", "44", "--width", "80", "--kernel", "--country", "US"),
               "Iwx kernel mode must suppress the user-mode radio's options");
         if (r is not null)

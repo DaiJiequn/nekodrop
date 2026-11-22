@@ -36,6 +36,12 @@ public sealed class ServiceConfig
     /// </summary>
     public bool FastUnlock { get; set; }
     /// <summary>
+    /// Experimental coexistence plan (radio --coex-plan, ForbiddenItlwm PR #30): with the
+    /// station on another 5 GHz channel than AirDrop, the router's entries go into the AWDL
+    /// schedule and the listener stays silent in them. Off by default.
+    /// </summary>
+    public bool CoexPlan { get; set; }
+    /// <summary>
     /// The user's manual choice when the card is not recognized by its ID
     /// (Settings, "Wi-Fi card"): its PCI hardware ID ("PCI\VEN_xxxx&amp;DEV_yyyy")
     /// and a CardCatalog.ManualModels key; both "" for automatic.

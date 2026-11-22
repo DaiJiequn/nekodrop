@@ -32,6 +32,12 @@ Try-Step 'Giving the Wi-Fi card back' {
   @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
       try { $byPath -and $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } catch { $false } }) |
     Stop-Process -Force -ErrorAction SilentlyContinue
+  # Processes started from elsewhere that name the folder on their command
+  # line: airdrop-beacon.ps1's powershell.exe held airdrop\ open (#22).
+  @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+      $byPath -and $_.ProcessId -ne $PID -and $_.CommandLine -and
+      $_.CommandLine.IndexOf($root.TrimEnd(''), [StringComparison]::OrdinalIgnoreCase) -ge 0 }) |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   $svc = Join-Path $Target 'NekoDropService.exe'
   if (Test-Path $svc) { & $svc --give-back }
   else {

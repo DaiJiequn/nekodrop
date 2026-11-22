@@ -11,7 +11,7 @@
  * Usage: winawdl_radio <channel> [--width 20|40|80] [--country XX]
  *          [--mac-type listener|ibss|sta] [--firmware DIR]
  *          [--data-rate 6|12|24|36|48|54|MCS0..MCS15] [--verbose]
- *          [--tx-window N] [--aggregate] [--fast-unlock] [--family qu|ax200|ax210|so]
+ *          [--tx-window N] [--aggregate] [--fast-unlock] [--coex-plan] [--family qu|ax200|ax210|so]
  * winawdl's own options (--retries, --capture, --no-block-ack,
  * --no-aggregate, --no-quick-submit) are accepted and ignored.
  */
@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "awdl_policy.h"
+#include "coex_plan.h"
 #include "awdl_schedule.h"
 #include "iwx.h"
 #include "wifi_sta.h"
@@ -95,6 +96,10 @@ struct Options {
    * the firmware really holds as the starting point (radio_backend.h). Off:
    * the radio behaves exactly as before. */
   bool fast_unlock = false;
+  /* --coex-plan (experimental, ForbiddenItlwm PR #30): with the station on
+   * another 5 GHz channel than AWDL, name the router in some of our 16
+   * entries, stay silent and hold aggregate sending in them (coex_plan.h). */
+  bool coex_plan = false;
 };
 
 bool parse_rate(const std::string &s, TxRate &rate) {
@@ -142,6 +147,7 @@ bool parse_options(int argc, char **argv, Options &o) {
     else if (a == "--no-block-ack") o.no_block_ack = true;
     else if (a == "--aggregate") o.aggregate = o.dev.aggregate = true;
     else if (a == "--fast-unlock") o.fast_unlock = true;
+    else if (a == "--coex-plan") o.coex_plan = true;
     else if (a == "--family") {
       o.dev.family_device = cards::family_device(value());
       if (!o.dev.family_device) return false;
@@ -479,6 +485,17 @@ int main(int argc, char **argv) {
      * still reject: bytes after the last TLV it cannot trim, or no version
      * TLV (#24/#25: an AX211/AX411 peer stayed "not valid yet"). */
     uint64_t rx_fcs = 0, rx_mif_tail = 0, rx_mif_nover = 0;
+    /* --coex-plan: the peer's schedule (fed from its sync frames whether or
+     * not A-MPDU is on), our router entries, and what the plan did. */
+    struct Plan {
+      awdl_sched::PeerSchedule sched{};
+      uint8_t peer[6] = {}, away[16] = {}, router_ch = 0;
+      bool have_peer = false, active = false;
+      awdl_plan::InfraMeter meter;
+      uint64_t last_data_us = 0, tick_us = 0;
+      uint64_t rewritten = 0, silenced = 0, unaligned = 0, stale = 0;
+      uint32_t changes = 0;
+    } plan;
     uint32_t rx_data_to_us = 0;
     int8_t awdl_dbm = -127;
     /* Discovery timing (#4: ~99 s to see the iPhone, #11: ~2 min): one line
@@ -521,6 +538,7 @@ int main(int argc, char **argv) {
     } agg;
     agg.sched.reset();
     agg.sched.assumeZero = true; /* upstream's default (iface161) */
+    plan.sched.assumeZero = true;
     /* The A-MPDU queue as seen from code that runs on every backend: one
      * without supports_aggregate never turns agg.on and has no queue. */
     const auto agg_ready = [&]() -> bool {
@@ -640,6 +658,26 @@ int main(int argc, char **argv) {
           agg.sched.notePeerFrame(heard);
         }
       }
+      if (opt.coex_plan && f.len >= 16 && !(f.data[10] & 1) && std::memcmp(f.data + 10, dev_address, 6) != 0 &&
+          f.channel == dev.channel() && awdl::is_awdl_action(f.data, f.len)) {
+        const uint8_t *from = f.data + 10;
+        const uint64_t heard = now_us();
+        const bool is_peer = plan.have_peer && std::memcmp(from, plan.peer, 6) == 0;
+        if (is_peer || !plan.sched.fresh(heard)) {
+          awdl_sched::PeerSyncInfo info{};
+          if (awdl_sched::peerSyncFromAction(f.data, f.len, &info)) {
+            if (!is_peer) {
+              plan.sched.reset();
+              std::memcpy(plan.peer, from, 6);
+              plan.have_peer = true;
+            }
+            plan.sched.notePeerFrame(heard);
+            plan.sched.note(info, heard, dev.channel());
+          } else if (is_peer) {
+            plan.sched.notePeerFrame(heard);
+          }
+        }
+      }
       if (awdl::is_awdl_action(f.data, f.len)) {
         if (++rx_awdl == 1)
           milestone("AWDL action frame",
@@ -689,7 +727,10 @@ int main(int argc, char **argv) {
       }
       if (f.len >= 10 && std::memcmp(f.data + 4, dev_address, 6) == 0) {
         if (++rx_to_us == 1) milestone("frame addressed to us", "");
-        if ((f.data[0] & 0x0c) == 0x08) rx_data_to_us++;
+        if ((f.data[0] & 0x0c) == 0x08) {
+          rx_data_to_us++;
+          plan.last_data_us = now_us();
+        }
         awdl::AddbaRequest req;
         bool sender = false;
         uint8_t tid = 0;
@@ -937,6 +978,7 @@ int main(int argc, char **argv) {
     uint8_t fast_channels[radio::kFastDiscoveryChannelCount] = {};
     const size_t fast_channel_count = radio::fast_discovery_channels(opt.channel, fast_channels);
     if (opt.fast_unlock) log_line(radio::kFastUnlockOnLine);
+    if (opt.coex_plan) log_line("experimental coexistence plan: on (router entries in our schedule when the station is on another 5 GHz channel)");
     if constexpr (caps.supports_aggregate) agg.on = opt.aggregate && dev.agg_available();
     if (opt.aggregate) log_line(agg.on ? "experimental A-MPDU sending: on" : "experimental A-MPDU sending: not available on this path");
     awdl::BaFilter ba_filter;
@@ -998,6 +1040,30 @@ int main(int argc, char **argv) {
           TxRate rate;
           const bool unicast = !(frame[4] & 1);
           const bool data = (frame[0] & 0x0c) == 0x08;
+          if (opt.coex_plan) {
+            const uint64_t t = now_us();
+            if (data && unicast) {
+              plan.last_data_us = t;
+            } else if (plan.active && awdl::is_awdl_action(frame, len)) {
+              /* Our sync frame from awdld: silent in a router entry, else
+               * the router named in those entries. Only while awdld's AW
+               * counter is in step with the peer's. */
+              uint8_t *w = req.payload.data() + rt.length;
+              if (!plan.sched.fresh(t) || !plan.sched.eawUS) {
+                plan.stale++;
+              } else {
+                const uint32_t eaw = plan.sched.eawAt(t, nullptr);
+                if (!awdl_plan::in_step(awdl_plan::frame_aw_counter(w, len), eaw)) {
+                  plan.unaligned++;
+                } else if (plan.away[eaw % 16]) {
+                  plan.silenced++;
+                  continue;
+                } else if (awdl_plan::rewrite_frame(w, len, plan.away, plan.router_ch)) {
+                  plan.rewritten++;
+                }
+              }
+            }
+          }
           if (rt.has_mcs) {
             rate.kind = TxRate::Ht;
             rate.mcs = rt.mcs;
@@ -1267,6 +1333,37 @@ int main(int argc, char **argv) {
           }
         }
       }
+      if constexpr (caps.supports_station) if (opt.coex_plan) {
+        const uint64_t t = now_us();
+        if (t - plan.tick_us >= 100000) {
+          plan.tick_us = t;
+          const bool up = sta && sta->state() == WifiStation::State::Running;
+          if (up) plan.meter.note(t, sta->rx_packets() + sta->tx_packets(), sta->rx_bytes() + sta->tx_bytes());
+          const auto &sp = dev.sta_params();
+          const bool moving = plan.last_data_us && t - plan.last_data_us < awdl_plan::kDataHoldUS;
+          uint8_t away[16];
+          const bool on = awdl_plan::plan_entries(up, sp.channel, sp.width, dev.channel(), moving,
+                                                  up ? plan.meter.cls : awdl_plan::InfraClass::Idle, away);
+          const uint8_t router = on ? sp.channel : 0;
+          if (on != plan.active || router != plan.router_ch || std::memcmp(away, plan.away, 16) != 0) {
+            std::memcpy(plan.away, away, 16);
+            plan.active = on;
+            plan.router_ch = router;
+            plan.changes++;
+            std::memcpy(plan.sched.ownAway, away, 16);
+            std::memcpy(agg.sched.ownAway, away, 16);
+            std::string entries;
+            for (unsigned k = 0; k < 16; k++)
+              if (away[k]) entries += (entries.empty() ? "" : ",") + std::to_string(k);
+            log_line(on ? "coex plan: router on channel " + std::to_string(router) + " in entries " + entries +
+                              (moving ? " (AWDL data, router " : " (AWDL idle, router ") +
+                              (plan.meter.cls == awdl_plan::InfraClass::Streaming ? "streaming)"
+                               : plan.meter.cls == awdl_plan::InfraClass::Data    ? "data)"
+                                                                                  : "idle)")
+                        : std::string("coex plan: inactive (station on the AWDL channel, on 2.4 GHz, or not joined)"));
+          }
+        }
+      }
       /* Promiscuous receive:
        * - while asking for TX Block Ack: keep promiscuous + mgmt RX ON so the
        *   peer's ADDBA response is never dropped (#4);
@@ -1439,6 +1536,12 @@ int main(int argc, char **argv) {
                  (rx_fcs ? ", FCS removed " + std::to_string(rx_fcs) : "") +
                  (rx_mif_tail ? ", MIF bad tail " + std::to_string(rx_mif_tail) : "") +
                  (rx_mif_nover ? ", MIF without version " + std::to_string(rx_mif_nover) : ""));
+        if (opt.coex_plan)
+          log_line(std::string("coex plan: ") + (plan.active ? "active" : "inactive") + "; " +
+                   std::to_string(plan.rewritten) + " sync frames rewritten, " + std::to_string(plan.silenced) +
+                   " held in router entries, " + std::to_string(plan.unaligned) + " out of step, " +
+                   std::to_string(plan.stale) + " without a peer schedule; router " +
+                   std::to_string(plan.meter.pps) + " pkt/s, " + std::to_string(plan.meter.avg) + " B avg");
         log_line("tx: " + std::to_string(s.submitted) + " submitted, " + std::to_string(s.acked) +
                  " done, " + std::to_string(s.failed) + " failed; unicast: " + std::to_string(resent) +
                  " resent, " + std::to_string(gave_up) + " given up, " + std::to_string(uq.size()) +

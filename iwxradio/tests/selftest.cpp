@@ -11,6 +11,7 @@
 #include "../src/cards.h"
 #include "../src/fw.h"
 #include "../src/awdl_policy.h"
+#include "../src/coex_plan.h"
 #include "../src/crypto.h"
 #include "../src/wpa3.h"
 #include "radio_backend_test.h"
@@ -202,6 +203,55 @@ int main(int argc, char **argv) {
       CHECK(!awdl::ba_tx_session_idle(false, 0, 0, 1000000, 500000, 2000000), "BA session kept 1 s after the last A-MPDU");
       CHECK(awdl::ba_tx_session_idle(false, 0, 0, 1000000, 500000, 2600000), "BA session ended 1.6 s after the last A-MPDU");
       CHECK(awdl::ba_tx_session_idle(false, 0, 0, 0, 500000, 2100000), "BA session with no A-MPDU ends 1.6 s after agreeing");
+    }
+    {
+      /* --coex-plan (ForbiddenItlwm PR #30). */
+      using namespace awdl_plan;
+      uint8_t away[16];
+      CHECK(!plan_entries(true, 44, 80, 44, false, InfraClass::Idle, away), "plan: station on the AWDL channel, no router entries");
+      CHECK(!plan_entries(true, 6, 20, 149, false, InfraClass::Idle, away), "plan: 2.4 GHz station keeps none");
+      CHECK(!plan_entries(false, 40, 80, 149, false, InfraClass::Idle, away), "plan: no station, none");
+      CHECK(plan_entries(true, 44, 160, 44, false, InfraClass::Idle, away), "plan: 160 MHz station over the AWDL channel");
+      CHECK(plan_entries(true, 40, 80, 149, false, InfraClass::Idle, away) && away[6] && away[7] && away[14] &&
+                away[15] && !away[0] && !away[13], "plan: AWDL idle: entries 6, 7, 14, 15");
+      CHECK(plan_entries(true, 40, 80, 149, true, InfraClass::Idle, away) && away[15] && !away[6],
+            "plan: AWDL data, router idle: entry 15 only");
+      CHECK(plan_entries(true, 100, 80, 149, true, InfraClass::Data, away) && away[4] && away[12] && !away[11],
+            "plan: router on a radar channel allowed; router data: 4, 5, 12-15");
+      CHECK(plan_entries(true, 40, 80, 149, true, InfraClass::Streaming, away) && away[11],
+            "plan: router streaming adds entry 11");
+      InfraMeter m;
+      m.note(1000000, 0, 0);
+      CHECK(m.note(2000000, 200, 200 * 300) && m.cls == InfraClass::Data, "plan: 200 small packets/s is data");
+      CHECK(m.note(3000000, 260, 200 * 300 + 60 * 1500) && m.cls == InfraClass::Streaming, "plan: big packets are streaming");
+      CHECK(!m.note(3500000, 999, 0), "plan: sampled once a second");
+      /* A frame of ours: TLV 4 (33 bytes, AW counter 0x0123 at 29, then a
+       * 16-entry op-class sequence) and TLV 18 (the same sequence). */
+      std::vector<uint8_t> g(40, 0);
+      g[0] = 0xd0; g[24] = 0x7f; g[25] = 0x00; g[26] = 0x17; g[27] = 0xf2; g[28] = 0x08;
+      std::vector<uint8_t> cs = {15, 3, 0, 3, 0xff, 0xff};
+      for (int k = 0; k < 16; k++) { cs.push_back(149); cs.push_back(124); }
+      std::vector<uint8_t> t4(33, 0);
+      t4[29] = 0x23; t4[30] = 0x01;
+      t4.insert(t4.end(), cs.begin(), cs.end());
+      t4.push_back(0); t4.push_back(0);
+      g.push_back(4); g.push_back(uint8_t(t4.size())); g.push_back(0);
+      g.insert(g.end(), t4.begin(), t4.end());
+      const size_t t18 = g.size();
+      g.push_back(18); g.push_back(uint8_t(cs.size() + 3)); g.push_back(0);
+      g.insert(g.end(), cs.begin(), cs.end());
+      g.push_back(0); g.push_back(0); g.push_back(0);
+      CHECK(frame_aw_counter(g.data(), g.size()) == 0x0123, "plan: AW counter read from TLV 4");
+      CHECK(in_step(0x0123, 0x0123 / 4) && in_step(0x0123, 0x0123 / 4 + 1) && !in_step(0x0123, 0x0123 / 4 + 3),
+            "plan: in step within one extended AW");
+      plan_entries(true, 40, 80, 149, false, InfraClass::Idle, away);
+      CHECK(rewrite_frame(g.data(), g.size(), away, 40), "plan: frame rewritten");
+      const uint8_t *e18 = g.data() + t18 + 3 + 6;
+      CHECK(e18[2 * 6] == 40 && e18[2 * 6 + 1] == 115 && e18[2 * 15] == 40 && e18[0] == 149 && e18[2 * 13] == 149,
+            "plan: TLV 18 names channel 40 (class 115) in 6/15, 149 elsewhere");
+      const uint8_t *e4 = g.data() + 40 + 3 + 33 + 6;
+      CHECK(e4[2 * 7] == 40 && e4[2 * 8] == 149, "plan: TLV 4's sequence rewritten the same way");
+      CHECK(awdl::awdl_tlv_fit(g.data(), g.size()).left == 0, "plan: rewritten frame keeps its TLV layout");
     }
     uint8_t seq[16];
     CHECK(awdl::peer_sequence(f.data(), f.size(), seq), "channel sequence parsed");
