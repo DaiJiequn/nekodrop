@@ -6,6 +6,18 @@
 
 ---
 
+## v0.1.25 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **「更快发送到 iPhone」改为始终打开，设置里的开关已删除**：同时在途的 AWDL 帧从 8 个提高到 48 个。这个开关从 0.1.9 起就有，至今没有任何网卡报告它让情况变差：AX211 上 537 MB 以 3.4 MB/s 完整传完、没有放弃的帧（[#9](https://github.com/zheznanohana/nekodrop/issues/9)），AX210 略快（[#14](https://github.com/zheznanohana/nekodrop/issues/14)），AX200 速度不变（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）。之前没开过的用户升级后就会用上它。
+- 「聚合发送（A-MPDU）」仍有问题（固件只发单帧），保留开关，默认关闭。
+
+### English
+- **"Faster sending to iPhone" is always on and its switch is gone**: up to 48 AWDL frames in flight instead of 8. It was a switch since 0.1.9 and no card reported it making things worse: AX211 sent 537 MB at 3.4 MB/s with no frames given up ([#9](https://github.com/zheznanohana/nekodrop/issues/9)), AX210 a little faster ([#14](https://github.com/zheznanohana/nekodrop/issues/14)), AX200 the same speed ([#4](https://github.com/zheznanohana/nekodrop/issues/4)). Users who never turned it on get it after updating.
+- Aggregated sending (A-MPDU) still has problems (the firmware sends single frames only), so it keeps its switch, off by default.
+
+---
+
 ## v0.1.24 (Hourly / Pre-release) — 2026-11-22
 
 ### 中文
