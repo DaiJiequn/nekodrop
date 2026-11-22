@@ -169,13 +169,13 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 ### Experimental features
 
-*Settings → Experimental*. Both are **off by default**, and with them off nekodrop behaves exactly as without them. Turning either on or off restarts AirDrop for a few seconds. They are experimental because they haven't been confirmed on enough hardware yet: if sending gets worse, turn them off, and please post a diagnostic report in an [issue](../../issues) either way.
+*Settings → Experimental*. Turning either on or off restarts AirDrop for a few seconds. If sending gets worse, turn it off, and please post a diagnostic report in an [issue](../../issues) either way.
 
-**Faster sending to iPhone** (0.1.9+)
+**Faster sending to iPhone** (0.1.9+, **on by default since 0.1.25**)
 - Keeps up to 48 AWDL frames in flight instead of 8, rings the card's doorbell once per batch, and starts the rate ladder one step higher (HT MCS 4).
-- Helps where the per-frame round trip was the limit. Measured so far: about the same 1.3 MB/s as the default on an AX200 ([#4](../../issues/4)), a little faster on an AX210 ([#14](../../issues/14)).
+- Helps where the per-frame round trip was the limit. Measured so far: about the same 1.3 MB/s as the default on an AX200 ([#4](../../issues/4)), a little faster on an AX210 ([#14](../../issues/14)), 537 MB at 3.4 MB/s with no frames given up on an AX211 ([#9](../../issues/9)). No report of it making things worse, so it is now on by default; installs that never touched the switch get it on after updating, and turning it off in the settings sticks.
 
-**Aggregated sending (A-MPDU)** (0.1.15+, not yet tested on hardware)
+**Aggregated sending (A-MPDU)** (0.1.15+, **off by default**; on an AX200 and an AX211 the firmware has so far sent only single frames)
 
 Sending to an iPhone is slow, about 1.3 MB/s, while receiving runs at about 9 MB/s. The reason: every frame we send goes out on its own and waits for its own acknowledgement, and only while the iPhone happens to be on our channel. The iPhone aggregates its frames, so receiving is fast. This switch ports ForbiddenItlwm's way of aggregating our side too (its `-itlawdlcoexbatx`, which reaches about 22 MB/s Mac → iPhone there):
 1. When a large send to an iPhone starts (about 200 full-size frames a second), nekodrop gives that iPhone a firmware station of its own, with an aggregation queue and the firmware's rate control (VHT 80 MHz, two streams where the card has them).

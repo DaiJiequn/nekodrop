@@ -28,8 +28,13 @@ public sealed class ServiceConfig
     public string Country { get; set; } = "";
     /// <summary>Last 5 GHz channel a peer used (44 or 149), 0 if none.</summary>
     public int PeerChannel { get; set; }
-    /// <summary>Experimental: keep up to 48 AWDL frames in flight (radio --tx-window 48).</summary>
-    public bool FastSend { get; set; }
+    /// <summary>Faster sending: keep up to 48 AWDL frames in flight (radio --tx-window 48).
+    /// On by default since 0.1.25: AX211 sent 537 MB cleanly at 3.4 MB/s (#9), AX210
+    /// was a little faster (#14), AX200 the same speed and no failures (#4).</summary>
+    public bool FastSend { get; set; } = true;
+    /// <summary>The user set FastSend in the settings. Until then it follows the default,
+    /// so configs saved with the old default (false) turn it on.</summary>
+    public bool FastSendChosen { get; set; }
     /// <summary>Experimental A-MPDU sending to the iPhone (radio --aggregate).</summary>
     public bool Aggregate { get; set; }
     /// <summary>Seconds without AirDrop use before on-demand mode gives the card back.</summary>
@@ -90,7 +95,11 @@ public sealed class ServiceConfig
             RejectReparsePoint(Folder);
             RejectReparsePoint(FilePath);
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<ServiceConfig>(File.ReadAllText(FilePath), Options) ?? new();
+            {
+                var cfg = JsonSerializer.Deserialize<ServiceConfig>(File.ReadAllText(FilePath), Options) ?? new();
+                if (!cfg.FastSendChosen) cfg.FastSend = true;
+                return cfg;
+            }
         }
         catch (Exception) { }
         return new();

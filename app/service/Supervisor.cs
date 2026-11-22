@@ -204,11 +204,14 @@ public sealed class Supervisor : IDisposable
     {
         lock (_lock)
         {
-            if (_cfg.FastSend == on) return;
+            if (_cfg.FastSend == on && _cfg.FastSendChosen) return;
+            var changed = _cfg.FastSend != on;
             _cfg.FastSend = on;
+            _cfg.FastSendChosen = true;
             _cfg.Save();
+            if (!changed) return;
         }
-        Say($"experimental faster sending: {(on ? "on" : "off")}");
+        Say($"faster sending: {(on ? "on" : "off")}");
         if (State is RadioState.On or RadioState.Starting)
             _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         Publish();
