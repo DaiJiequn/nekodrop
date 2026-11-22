@@ -169,6 +169,23 @@ int main(int argc, char **argv) {
     const uint8_t tlv12[] = {12, 4, 0, 0, 0, 'J', 'P'};
     f.insert(f.end(), tlv12, tlv12 + sizeof(tlv12));
     CHECK(awdl::is_awdl_action(f.data(), f.size()), "AWDL action frame recognised");
+    {
+      /* FCS (#24/#25): CRC-32 check value, then a frame with its FCS. */
+      const uint8_t nine[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
+      CHECK(awdl::crc32_ieee(nine, 9) == 0xCBF43926u, "CRC-32 check value");
+      std::vector<uint8_t> g = f;
+      g.push_back(21); g.push_back(2); g.push_back(0); g.push_back(3); g.push_back(2); /* version TLV */
+      const size_t bare = g.size();
+      CHECK(awdl::strip_valid_fcs(g.data(), bare) == bare, "frame without FCS kept whole");
+      const awdl::AwdlTlvFit fit = awdl::awdl_tlv_fit(g.data(), bare);
+      CHECK(fit.left == 0 && fit.has_version, "TLVs fill the frame, version TLV found");
+      const uint32_t fcs = awdl::crc32_ieee(g.data(), bare);
+      for (int i = 0; i < 4; i++) g.push_back(static_cast<uint8_t>(fcs >> (8 * i)));
+      CHECK(awdl::strip_valid_fcs(g.data(), g.size()) == bare, "valid FCS removed");
+      CHECK(awdl::awdl_tlv_fit(g.data(), g.size()).left == 4, "FCS left on shows as 4 bytes after the TLVs");
+      g.back() ^= 1;
+      CHECK(awdl::strip_valid_fcs(g.data(), g.size()) == g.size(), "wrong FCS kept");
+    }
     uint8_t seq[16];
     CHECK(awdl::peer_sequence(f.data(), f.size(), seq), "channel sequence parsed");
     CHECK(awdl::peer_channel(seq) == 44, "iPhone in Japan: peer 5 GHz channel is 44");

@@ -6,6 +6,20 @@
 
 ---
 
+## v0.1.31 (Hourly / Pre-release) — 2026-11-22
+
+### 中文
+- **修复 AX211 / AX411 / Killer 1690 上 iPhone、Mac 看不到这台电脑（[#24](https://github.com/zheznanohana/nekodrop/issues/24)、[#25](https://github.com/zheznanohana/nekodrop/issues/25)）**：radio 让固件在每个收到的帧后面附上 FCS（校验和），而 RxFrame 约定交给 awdld 的帧不带 FCS。AX210 系列这几张卡的固件确实会附上，awdld（OWL）看到 AWDL 动作帧最后一个 TLV 后面多出 4 个字节，就在记下“收到过 MIF”之前把整帧丢掉，于是 iPhone 一直是 `not valid yet`：电脑不会跟随它的同步，也不会被它列为接收方。发送不受影响，所以“能发不能收”。现在 radio 只在帧尾 4 字节确实等于这个帧的 CRC-32 时才把它去掉（不带 FCS 的帧被误判的概率是 2⁻³²），对所有网卡都安全。
+- **诊断**：radio 的 `rx:` 统计行新增 `FCS removed`、`MIF bad tail`（awdld 仍会丢掉的 MIF）、`MIF without version`（缺少 awdld 需要的版本 TLV）三项计数，前 3 个尾部异常的 MIF 会记下最后 16 个字节。
+- **还没有在 AX211 真机上验证**，请 #24、#25 的用户帮忙测试。
+
+### English
+- **Fixed iPhone/Mac never listing the PC on AX211 / AX411 / Killer 1690 ([#24](https://github.com/zheznanohana/nekodrop/issues/24), [#25](https://github.com/zheznanohana/nekodrop/issues/25))**: the radio asks the firmware to append the FCS to received frames, while RxFrame promises awdld frames without it. These AX210-family cards do append it, and awdld (OWL) drops an AWDL action frame with 4 bytes after its last TLV before it records the MIF, so the iPhone stayed `not valid yet`: the PC never followed its sync and was never listed as a receiver. Sending was unaffected. The radio now removes the last 4 bytes only when they are the frame's valid CRC-32 (a frame without an FCS matches by chance with odds of 2^-32), which is safe on every card.
+- **Diagnostics**: the radio's `rx:` line adds `FCS removed`, `MIF bad tail` (MIFs awdld would still drop) and `MIF without version` (no version TLV, which awdld needs); the first 3 MIFs with a bad tail log their last 16 bytes.
+- **Not yet verified on an AX211**; the reporters of #24 and #25 are asked to test it.
+
+---
+
 ## v0.1.30 (Stable / 稳定版) — 2026-11-22
 
 ### 中文

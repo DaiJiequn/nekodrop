@@ -475,6 +475,10 @@ int main(int argc, char **argv) {
      * MIF (master indication), so PSF-only traffic explains "not valid yet"
      * (#16, AX211). */
     uint64_t rx_psf = 0, rx_mif = 0;
+    /* Frames that came with their FCS (stripped here), and MIFs awdld would
+     * still reject: bytes after the last TLV it cannot trim, or no version
+     * TLV (#24/#25: an AX211/AX411 peer stayed "not valid yet"). */
+    uint64_t rx_fcs = 0, rx_mif_tail = 0, rx_mif_nover = 0;
     uint32_t rx_data_to_us = 0;
     int8_t awdl_dbm = -127;
     /* Discovery timing (#4: ~99 s to see the iPhone, #11: ~2 min): one line
@@ -553,8 +557,14 @@ int main(int argc, char **argv) {
     bool scan_wanted = false, scan_started = false;
     std::vector<uint8_t> scan_ssid;
     uint64_t scan_started_ms = 0;
-    dev.set_rx_handler([&](const RxFrame &f) {
+    dev.set_rx_handler([&](const RxFrame &in) {
       rx_all++;
+      /* RxFrame promises no FCS; some firmware appends it anyway. */
+      RxFrame f = in;
+      if (const size_t n = awdl::strip_valid_fcs(f.data, f.len); n != f.len) {
+        f.len = n;
+        if (++rx_fcs == 1) log_line("rx: frames arrive with their FCS; removing it");
+      }
       if (f.len >= 36 && (f.data[0] == 0x80 || f.data[0] == 0x50)) { /* beacon, probe response */
         char key[18];
         std::snprintf(key, sizeof(key), "%02x:%02x:%02x:%02x:%02x:%02x", f.data[16], f.data[17], f.data[18],
@@ -644,6 +654,21 @@ int main(int argc, char **argv) {
         if (f.len > 30) {
           if (f.data[30] == 0) rx_psf++;      /* periodic synchronization */
           else if (f.data[30] == 3 && ++rx_mif == 1) milestone("AWDL MIF", ""); /* master indication */
+          if (f.data[30] == 3) {
+            const awdl::AwdlTlvFit fit = awdl::awdl_tlv_fit(f.data, f.len);
+            if (!fit.has_version) rx_mif_nover++;
+            if (fit.left && !fit.left_zero && ++rx_mif_tail <= 3) {
+              std::string tail;
+              const size_t from = f.len > 16 ? f.len - 16 : 0;
+              for (size_t i = from; i < f.len; i++) {
+                char h[4];
+                std::snprintf(h, sizeof(h), "%02x", f.data[i]);
+                tail += h;
+              }
+              log_line("rx: MIF of " + std::to_string(f.len) + " bytes has " + std::to_string(fit.left) +
+                       " bytes after its last TLV (awdld drops it); last bytes " + tail);
+            }
+          }
         }
         awdl_dbm = f.dbm;
         uint8_t seq[16];
@@ -1396,7 +1421,10 @@ int main(int argc, char **argv) {
         log_line("rx: " + std::to_string(rx_all) + " frames, " + std::to_string(rx_awdl) +
                  " AWDL action frames (" + std::to_string(rx_psf) + " PSF, " + std::to_string(rx_mif) +
                  " MIF; last " + std::to_string(awdl_dbm) + " dBm), " +
-                 std::to_string(rx_to_us) + " addressed to us");
+                 std::to_string(rx_to_us) + " addressed to us" +
+                 (rx_fcs ? ", FCS removed " + std::to_string(rx_fcs) : "") +
+                 (rx_mif_tail ? ", MIF bad tail " + std::to_string(rx_mif_tail) : "") +
+                 (rx_mif_nover ? ", MIF without version " + std::to_string(rx_mif_nover) : ""));
         log_line("tx: " + std::to_string(s.submitted) + " submitted, " + std::to_string(s.acked) +
                  " done, " + std::to_string(s.failed) + " failed; unicast: " + std::to_string(resent) +
                  " resent, " + std::to_string(gave_up) + " given up, " + std::to_string(uq.size()) +
