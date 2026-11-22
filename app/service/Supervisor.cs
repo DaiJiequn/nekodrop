@@ -572,16 +572,24 @@ public sealed class Supervisor : IDisposable
         }
     }
 
+    int _moveGen;
+
     async Task MoveWhenIdle(int channel)
     {
         // Upstream waits 10 s without data before a move (kChannelMoveIdleUS).
-        for (int i = 0; i < 120; i++)
+        // No time limit: it gave up waiting after 120 s and moved anyway, which
+        // restarted the radio in the middle of a send that was going fine on the
+        // old channel (#9: 1.8 MB/s on 44, cut with TLS EOF 120 s after the
+        // iPhone first named 149). One mover at a time, and none once the peer
+        // names our channel again (#9's iPhone alternated 44 and 149).
+        var gen = Interlocked.Increment(ref _moveGen);
+        while (true)
         {
-            if (!_wanted || _channel == channel) return;
+            if (!_wanted || _channel == channel || Volatile.Read(ref _moveGen) != gen || _cfg.PeerChannel != channel) return;
             if (DateTime.UtcNow - _lastData > TimeSpan.FromSeconds(10)) break;
             await Task.Delay(1000);
         }
-        if (_wanted && _channel != channel)
+        if (_wanted && _channel != channel && Volatile.Read(ref _moveGen) == gen)
         {
             Say($"peer uses channel {channel}: moving there (country {_cfg.Country})");
             Relaunch(channel);
