@@ -239,8 +239,7 @@ What to check when testing: the diagnostic report's **Discovery timing** table s
 4. **AirDrop.** A Python engine speaks AirDrop over `awdl0`: mDNS discovery, HTTPS on port 8771 (spare ports 8772-8779), the `/Discover`, `/Ask` and `/Upload` flow, and the BLE beacon used for sending.
 5. **Internet.** Frames from the station MAC are bridged to the TAP adapter "nekodrop". Windows treats it as Ethernet and gets an address by DHCP.
 
-Design notes: [docs/DESIGN.md](docs/DESIGN.md) (driver, DMA, risks) · [docs/CLIENT.md](docs/CLIENT.md) (service, client, modes)  · [docs/TESTING.md](docs/TESTING.md) (throughput test method).
-
+Design notes: [docs/DESIGN.md](docs/DESIGN.md) (driver, DMA, risks) · [docs/CLIENT.md](docs/CLIENT.md) (service, client, modes) · [docs/TESTING.md](docs/TESTING.md) (throughput test method).
 
 ## Troubleshooting
 
@@ -316,6 +315,7 @@ Thanks to everyone who sent code and careful test reports:
 
 - [@BaiBaiAi](https://github.com/BaiBaiAi): Windows → iPhone sending without a client certificate ([#13](../../pull/13)), pipelined AWDL transmit so large uploads finish ([#15](../../pull/15)), and the first AX210 test report ([#14](../../issues/14)).
 - [@XXD051030](https://github.com/XXD051030): the optional balanced Bluetooth coexistence mode for Intel cards, so the PC finds iPhones and Macs in seconds instead of minutes, with a careful before/after study on an AX200 ([#26](../../pull/26)).
+- [@GGBond-cer](https://github.com/GGBond-cer): many detailed AX200 test reports that pinned down the A-MPDU and speed problems ([#4](../../issues/4)), the root cause of the uninstaller leftovers ([#22](../../issues/22)), and the throughput testing guide ([#28](../../pull/28)).
 
 ## License
 

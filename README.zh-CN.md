@@ -239,7 +239,7 @@ DMA 内存不够分配额外的发送环，或者走的是内核驱动路径时�
 4. **AirDrop**：Python 引擎在 `awdl0` 上实现 AirDrop：mDNS 发现，8771 端口上的 HTTPS（8772-8779 备用），`/Discover`、`/Ask`、`/Upload` 流程，以及发送时用的蓝牙信标。
 5. **上网**：站点 MAC 收发的帧桥接到“nekodrop” TAP 网卡，Windows 把它当成以太网，用 DHCP 拿地址。
 
-设计细节：[docs/DESIGN.md](docs/DESIGN.md)（驱动、DMA、风险）· [docs/CLIENT.md](docs/CLIENT.md)（服务、客户端、联网模式）。
+设计细节：[docs/DESIGN.md](docs/DESIGN.md)（驱动、DMA、风险）· [docs/CLIENT.md](docs/CLIENT.md)（服务、客户端、联网模式）· [docs/TESTING.md](docs/TESTING.md)（传输速度测试方法，英文）。
 
 ## 常见问题
 
@@ -315,6 +315,7 @@ nekodrop 是在其他开源项目的基础上做的。这里写清楚哪些是**
 
 - [@BaiBaiAi](https://github.com/BaiBaiAi)：Windows → iPhone 发送不再出示客户端证书（[#13](../../pull/13)）、AWDL 发送流水线化让大文件能传完（[#15](../../pull/15)），以及第一份 AX210 实测报告（[#14](../../issues/14)）。
 - [@XXD051030](https://github.com/XXD051030)：Intel 网卡可选的蓝牙均衡共存模式，让电脑几秒内就能找到 iPhone 和 Mac，而不是等一两分钟，并附了一份 AX200 上的详细前后对照（[#26](../../pull/26)）。
+- [@GGBond-cer](https://github.com/GGBond-cer)：大量详细的 AX200 实测报告，帮我们定位了 A-MPDU 和速度问题（[#4](../../issues/4)），找到了卸载残留的根因（[#22](../../issues/22)），并写了传输速度测试指南（[#28](../../pull/28)）。
 
 ## 许可
 
