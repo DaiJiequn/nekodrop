@@ -837,6 +837,10 @@ public sealed class Supervisor : IDisposable
     /// <summary>Joins `ssid` (from the last scan). Returns "" or why not.</summary>
     public string WifiConnect(string ssid, string? password, bool? autoConnect, bool hidden)
     {
+        // Only Concurrent runs a station beside AirDrop. In On demand / Off the
+        // relaunch below joined nothing and only restarted the radio, which
+        // reset discovery each time the user tried again (#11).
+        if (EffectiveMode() != NetMode.Concurrent) return "needs concurrent mode";
         JsonObject? target;
         lock (_lock) target = _scan.FirstOrDefault(n => (string?)n["ssid"] == ssid);
         if (target is null)

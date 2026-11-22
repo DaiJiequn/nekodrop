@@ -62,6 +62,7 @@ public static class L
         ["wifi.connected"] = ("已连接（与 AirDrop 同时使用）", "connected (alongside AirDrop)"),
         ["wifi.failed"] = ("连接失败，5 秒后重试", "could not connect, retrying in 5 s"),
         ["wifi.connecting"] = ("正在连接…", "connecting…"),
+        ["wifi.needConcurrent"] = ("只有「同时联网和 AirDrop」模式能在这里连接 Wi-Fi。当前模式下请在设置里切换模式，或在 AirDrop 空闲时用 Windows 自带的 Wi-Fi 连接。", "Joining Wi-Fi here needs the \"Wi-Fi and AirDrop together\" mode. Switch the mode in Settings, or use Windows' own Wi-Fi while AirDrop is idle."),
         ["err.identity"] = ("无法创建接收证书：", "Cannot create the receiver certificate: "),
         ["err.engine"] = ("AirDrop 引擎无法启动：", "The AirDrop engine could not start: "),
         ["err.engineStopped"] = ("AirDrop 引擎停止：", "The AirDrop engine stopped: "),

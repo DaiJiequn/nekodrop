@@ -46,7 +46,7 @@ public partial class WifiWindow : Window
             if (A.Service.Last is { } last) Render(last);
             return;
         }
-        ShowError(error);
+        ShowError(error == "needs concurrent mode" ? L.T("wifi.needConcurrent") : error);
     });
 
     void ShowError(string text)
