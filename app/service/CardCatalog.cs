@@ -156,11 +156,13 @@ public static class CardCatalog
     /// <summary>The radio daemon and its arguments for a card: its backend's (RadioBackends.cs).</summary>
     public static RadioLaunch BuildRadioLaunch(
         AdapterProfile profile, int channel, bool kernel,
-        string country, string? staConf, bool aggregate, bool fastUnlock, bool coexPlan = false)
+        string country, string? staConf, bool aggregate, bool fastUnlock, bool coexPlan = false,
+        bool btCoexBalanced = false)
     {
         var backend = RadioBackends.Get(profile.Backend);
         return new RadioLaunch(backend.ExeName,
-            backend.BuildArgs(new RadioStart(profile, channel, kernel, country, staConf, aggregate, fastUnlock, coexPlan)));
+            backend.BuildArgs(new RadioStart(profile, channel, kernel, country, staConf, aggregate, fastUnlock, coexPlan,
+                                             btCoexBalanced)));
     }
 
     /// <summary>One model the user can pick when a card is not recognized by its ID.</summary>
@@ -290,11 +292,20 @@ public static class CardCatalog
         Check(SameLaunch(BuildRadioLaunch(iwx, 44, true, "US", null, true, true, true),
                          "nekodrop-radio.exe", "44", "--width", "80", "--kernel", "--country", "US"),
               "Iwx kernel mode must suppress the user-mode radio's options");
+        Check(SameLaunch(BuildRadioLaunch(iwx, 149, false, "", null, false, false, btCoexBalanced: true),
+                         "nekodrop-radio.exe", "149", "--width", "80", "--tx-window", "64", "--bt-coex", "1"),
+              "Iwx balanced Bluetooth coexistence launch args");
+        Check(SameLaunch(BuildRadioLaunch(iwx, 149, true, "", null, false, false, btCoexBalanced: true),
+                         "nekodrop-radio.exe", "149", "--width", "80", "--kernel"),
+              "Iwx kernel mode must suppress --bt-coex");
         if (r is not null)
         {
             Check(SameLaunch(BuildRadioLaunch(r, 6, true, "JP", @"C:\run\sta.conf", true, true),
                              "nekodrop-radio-rtl.exe", "6", "--width", "20"),
                   "Devourer ch 6 must strip all Intel flags");
+            Check(SameLaunch(BuildRadioLaunch(r, 149, false, "", null, false, false, btCoexBalanced: true),
+                             "nekodrop-radio-rtl.exe", "149", "--width", "80"),
+                  "Devourer must not get --bt-coex");
             Check(SameLaunch(BuildRadioLaunch(r, 149, false, "", null, false, false),
                              "nekodrop-radio-rtl.exe", "149", "--width", "80"),
                   "Devourer ch 149 default launch args");

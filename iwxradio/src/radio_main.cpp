@@ -12,6 +12,7 @@
  *          [--mac-type listener|ibss|sta] [--firmware DIR]
  *          [--data-rate 6|12|24|36|48|54|MCS0..MCS15] [--verbose]
  *          [--tx-window N] [--aggregate] [--fast-unlock] [--coex-plan] [--family qu|ax200|ax210|so]
+ *          [--bt-coex 1|2|3]
  * winawdl's own options (--retries, --capture, --no-block-ack,
  * --no-aggregate, --no-quick-submit) are accepted and ignored.
  */
@@ -156,6 +157,11 @@ bool parse_options(int argc, char **argv, Options &o) {
       const int n = std::atoi(value().c_str());
       if (n < 1 || n > 64) return false;
       o.tx_window = static_cast<unsigned>(n);
+    }
+    else if (a == "--bt-coex") {
+      const int n = std::atoi(value().c_str());
+      if (n < 1 || n > 3) return false;
+      o.dev.bt_coex = static_cast<uint32_t>(n);
     }
     else if (a == "--no-aggregate" || a == "--no-quick-submit") {}
     else if (!a.empty() && std::isdigit(static_cast<unsigned char>(a[0])) && !o.channel)
