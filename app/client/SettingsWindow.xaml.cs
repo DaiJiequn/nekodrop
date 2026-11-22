@@ -28,6 +28,8 @@ public partial class SettingsWindow : Window
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
         UpdateStatus.Text = "nekodrop " + Updater.Current;
+        /* Always visible, also after "Check now" replaces the status line (#11). */
+        Title = L.T("set.title") + " · nekodrop " + Updater.Current;
     }
 
     string _releasesUrl = Updater.ReleasesPage;

@@ -1565,29 +1565,21 @@ int IwxDevice::mac_ctxt_cmd(uint32_t action) {
   cmd.mac_type = htole32(type);
   cmd.tsf_id = htole32(IWX_TSF_ID_A);
   std::memcpy(cmd.node_addr, _address.data(), 6);
-  std::memcpy(cmd.bssid_addr,
-              (_opt.mac_type == MacType::Listener && !_opt.aggregate) ? kBroadcast : kAwdlBssid, 6);
-  if (_opt.mac_type != MacType::Listener || _opt.aggregate) {
-    /* ACK rates: the OFDM basics on 5 GHz, CCK and OFDM on 2.4 GHz.
-     * ForbiddenItlwm's coex listener sets AWDL's BSSID and these rates so
-     * dropping promiscuous receive for A-MPDU keeps AWDL PSF/sync frames and
-     * gives the firmware valid ACK rates; the default non-aggregate listener
-     * stays unchanged (#4). */
+  /* The listener keeps the broadcast BSSID even with experimental A-MPDU
+   * sending: 0.1.22 gave it AWDL's BSSID and ACK rates there, and on an AX200
+   * discovery stopped (PSF count frozen, 0 frames addressed to us, no peer for
+   * minutes) while 0.1.20 with the broadcast BSSID still found the iPhone (#4). */
+  std::memcpy(cmd.bssid_addr, _opt.mac_type == MacType::Listener ? kBroadcast : kAwdlBssid, 6);
+  if (_opt.mac_type != MacType::Listener) {
+    /* ACK rates: the OFDM basics on 5 GHz, CCK and OFDM on 2.4 GHz. */
     cmd.cck_rates = htole32(_channel <= 14 ? 0x0f : 0);
     cmd.ofdm_rates = htole32(0x15); /* 6, 12, 24 */
-    if (_opt.mac_type != MacType::Listener) cmd.qos_flags = htole32(IWX_MAC_QOS_FLG_TGN);
+    cmd.qos_flags = htole32(IWX_MAC_QOS_FLG_TGN);
   }
-  /* When experimental A-MPDU sending drops promiscuous receive, narrow the
-   * listener filter to ACCEPT_GRP only (matching ForbiddenItlwm's coex
-   * listener) so firmware Block Ack tracking is not disrupted (#4). */
-  if (_opt.aggregate && !_promisc && _opt.mac_type == MacType::Listener) {
-    cmd.filter_flags = htole32(IWX_MAC_FILTER_ACCEPT_GRP);
-  } else {
-    cmd.filter_flags = htole32((_promisc ? IWX_MAC_FILTER_IN_PROMISC : 0u) |
-                               IWX_MAC_FILTER_IN_CONTROL_AND_MGMT | IWX_MAC_FILTER_ACCEPT_GRP |
-                               IWX_MAC_FILTER_IN_BEACON | IWX_MAC_FILTER_IN_PROBE_REQUEST |
-                               IWX_MAC_FILTER_IN_CRC32);
-  }
+  cmd.filter_flags = htole32((_promisc ? IWX_MAC_FILTER_IN_PROMISC : 0u) |
+                             IWX_MAC_FILTER_IN_CONTROL_AND_MGMT | IWX_MAC_FILTER_ACCEPT_GRP |
+                             IWX_MAC_FILTER_IN_BEACON | IWX_MAC_FILTER_IN_PROBE_REQUEST |
+                             IWX_MAC_FILTER_IN_CRC32);
   if (_opt.mac_type == MacType::Ibss) {
     cmd.ibss.bi = htole32(100);
     cmd.ibss.bi_reciprocal = htole32(iwx_reciprocal(100));
