@@ -68,7 +68,7 @@ nekodrop 通过模块化底层驱动后端（`CardCatalog` + `radio_backend.h`�
 | **Intel Wi-Fi 6 AX201** 160 MHz（CNVi） | `8086:` `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ✅ **已实测**（`43F0` 上的 QuZ） |
 | Qu/QuZ 上的 Intel Wireless-AC 9560 / 9462 / 9461（CNVi） | 与 AX201 相同 | `Qu/QuZ-jf-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试 |
 | Intel Wi-Fi 6 AX200（独立网卡） | `8086:2723` | `cc-a0-68`（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#1](../../issues/1)、[#4](../../issues/4)）；打开 A-MPDU 后发给 iPhone 9–25 MiB/s（[#4](../../issues/4)） |
-| Intel Wi-Fi 6E AX210（独立网卡） | `8086:2725` | `ty-a0-gf-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#14](../../issues/14)、[#18](../../issues/18)）；部分机器仍在修（[#11](../../issues/11)） |
+| Intel Wi-Fi 6E AX210（独立网卡） | `8086:2725` | `ty-a0-gf-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#14](../../issues/14)、[#18](../../issues/18)、[#11](../../issues/11)） |
 | Intel Wi-Fi 6E AX211（CNVi，第 12 代及以后） | `8086:` `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | ✅ 用户反馈双向 AirDrop 可用（[#9](../../issues/9)、[#29](../../issues/29)）；0.1.31 起 iPhone 能看到电脑（[#24](../../issues/24)） |
 | Intel Wi-Fi 6E AX411 / Killer AX1690（CNVi） | 与 AX211 相同 | `so-a0-gf4-a0-68` + PNVM（`iwx`，同时连 Wi-Fi / 按需） | 🧪 能识别、固件能启动（[#25](../../issues/25)）；已包含 AX211 的 0.1.31 修复，待用户确认 |
 | So 平台上的 Intel Wi-Fi 6 AX203 / 9560 | 与 AX211 相同 | `so-a0-hr/jf-b0-68`（`iwx`，同时连 Wi-Fi / 按需） | ⚠️ 未测试 |

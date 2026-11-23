@@ -23,7 +23,7 @@ nekodrop drives the Wi-Fi chip directly from user mode so Windows can speak Appl
 |---|---|---|---|---|
 | **Intel Wi-Fi 6 AX201** 160 MHz (CNVi) | `02F0` `06F0` `34F0` `3DF0` `4DF0` `43F0` `A0F0` | `Qu/QuZ-hr-b0-68` | Concurrent & On-Demand | ✅ **Author-tested** (`43F0` QuZ) |
 | **Intel Wi-Fi 6 AX200** (discrete) | `2723` | `cc-a0-68` | Concurrent & On-Demand | ✅ **User-reported working** ([#1](../../../issues/1), [#4](../../../issues/4)) |
-| **Intel Wi-Fi 6E AX210** (discrete) | `2725` | `ty-a0-gf-a0-68` + PNVM | Concurrent & On-Demand | ✅ **User-reported working** ([#14](../../../issues/14), [#18](../../../issues/18)); ongoing tuning ([#11](../../../issues/11)) |
+| **Intel Wi-Fi 6E AX210** (discrete) | `2725` | `ty-a0-gf-a0-68` + PNVM | Concurrent & On-Demand | ✅ **User-reported working** ([#14](../../../issues/14), [#18](../../../issues/18), [#11](../../../issues/11)) |
 | **Intel Wi-Fi 6E AX211** (CNVi, 12th gen+) | `7AF0` `7A70` `51F0` `51F1` `54F0` `7F70` | `so-a0-gf-a0-68` + PNVM | Concurrent & On-Demand | ✅ **User-reported working** ([#9](../../../issues/9)); discovery tuning ([#16](../../../issues/16)) |
 | Intel Wireless-AC 9560 / 9462 / 9461 (Qu/QuZ CNVi) | same as AX201 | `Qu/QuZ-jf-b0-68` | Concurrent & On-Demand | ⚠️ Built-in, untested |
 | Intel Wi-Fi 6E AX411 / Killer AX1690 (CNVi) | same as AX211 | `so-a0-gf4-a0-68` + PNVM | Concurrent & On-Demand | ⚠️ Built-in, untested ([#7](../../../issues/7)) |
