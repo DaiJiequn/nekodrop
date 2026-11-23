@@ -46,7 +46,7 @@ Windows 11 风格的自绘窗口：附近的 iPhone 和 Mac 显示在雷达上�
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/main-radar.png" width="280" alt="主窗口：雷达"><br><sub>雷达：等待、发送中、已发送、被拒绝</sub></td>
+    <td align="center"><img src="docs/screenshots/main-radar.png" width="280" alt="主窗口：雷达"><br><sub>雷达：待接受的请求、发送中、已发送、被拒绝</sub></td>
     <td align="center"><img src="docs/screenshots/main-list-dark.png" width="280" alt="主窗口：列表（深色）"><br><sub>列表（深色）</sub></td>
     <td align="center"><img src="docs/screenshots/send.png" width="230" alt="发送窗口"><br><sub>文件右键 →「用 nekodrop 发送」</sub></td>
   </tr>

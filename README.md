@@ -46,7 +46,7 @@ A Windows 11 window with its own title bar: nearby iPhones and Macs on a radar (
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/main-radar.png" width="280" alt="Main window: radar"><br><sub>Radar: waiting, sending, sent, declined</sub></td>
+    <td align="center"><img src="docs/screenshots/main-radar.png" width="280" alt="Main window: radar"><br><sub>Radar: a request to answer, sending, sent, declined</sub></td>
     <td align="center"><img src="docs/screenshots/main-list-dark.png" width="280" alt="Main window: list, dark"><br><sub>List, dark</sub></td>
     <td align="center"><img src="docs/screenshots/send.png" width="230" alt="Send window"><br><sub>Right-click a file → Send with nekodrop</sub></td>
   </tr>
