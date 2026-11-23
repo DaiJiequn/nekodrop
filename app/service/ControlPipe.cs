@@ -71,7 +71,6 @@ public sealed class ControlPipe(Supervisor sup)
                         break;
                     case "fast-unlock": sup.SetFastUnlock((bool?)cmd?["on"] ?? false); break;
                     case "coex-plan": sup.SetCoexPlan((bool?)cmd?["on"] ?? false); break;
-                    case "bt-coex": sup.SetBtCoex((bool?)cmd?["on"] ?? false); break;
                     case "cards":
                     {
                         // For the manual choice: the PCI network controllers and the models a card can be run as.

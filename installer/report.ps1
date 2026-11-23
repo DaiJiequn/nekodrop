@@ -704,7 +704,7 @@ if ($config) {
   W "- Settings: mode $($config.Mode), country '$($config.Country)', start channel $($config.StartChannel), peer channel $($config.PeerChannel), on-demand idle $($config.IdleSeconds) s"
   # The experimental switches change how the radio sends and scans: say which are on.
   # A-MPDU has no switch since 0.1.35 (an old config's "Aggregate" field is stale, so ignore it).
-  W "- Faster sending: always on (0.1.25+). A-MPDU sending: always on (0.1.35+). Experimental: fast passive-channel unlock $(if ($config.FastUnlock) { 'on' } else { 'off' })"
+  W "- Faster sending: always on (0.1.25+). A-MPDU sending: always on (0.1.35+). Balanced Bluetooth coexistence: always on, Intel (0.1.37+). Experimental: fast passive-channel unlock $(if ($config.FastUnlock) { 'on' } else { 'off' })"
 }
 W ''
 

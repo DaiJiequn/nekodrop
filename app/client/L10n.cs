@@ -185,12 +185,14 @@ public static class L
         ["set.card.recognized"] = ("已识别", "detected"),
         ["set.card.unrecognized"] = ("未识别", "not detected"),
         ["set.experimental"] = ("实验性功能", "Experimental"),
+        // Restored in 0.1.37: removed by mistake with the A-MPDU switch in 0.1.35, so the
+        // checkbox showed its key (#35).
+        ["set.coexPlan"] = ("Wi-Fi 和 AirDrop 不在同一信道时按苹果的方式分时", "Apple-style time sharing when Wi-Fi and AirDrop use different channels"),
+        ["set.coexPlan.hint"] = ("只在 nekodrop 连着 5 GHz Wi-Fi、而且和 AirDrop 不在同一个信道时起作用。照 macOS 的做法，把路由器写进 AirDrop 的 16 个时隙里（平时 4 个，传输时 1–6 个，按路由器流量决定），这些时隙里电脑不发 AirDrop 帧，让 iPhone 知道电脑什么时候在路由器那边。移植自 ForbiddenItlwm PR #30。一台 AX211 上，Wi-Fi 在 56、AirDrop 在 149 时，不开它电脑一个 AirDrop 帧都收不到，开了就正常；一台 AX200 上传输速度时快时慢。传输变差请关掉。切换时 AirDrop 会重启几秒。",
+                                 "Only when nekodrop is on 5 GHz Wi-Fi on another channel than AirDrop. As macOS does, the router goes into some of AirDrop's 16 schedule entries (4 when idle, 1 to 6 while transferring, by the router's traffic), and the PC sends no AirDrop frames in them, so the iPhone knows when the PC is with the router. Ported from ForbiddenItlwm PR #30. On one AX211 with Wi-Fi on 56 and AirDrop on 149, the PC heard no AirDrop frame at all without it and worked with it; on one AX200 speeds went both up and down. Turn it off if transfers get worse. AirDrop restarts for a few seconds when this changes."),
         ["set.fastUnlock"] = ("更快解锁被动 5 GHz 信道", "Faster unlock of a passive 5 GHz channel"),
         ["set.fastUnlock.hint"] = ("网卡不接受国家码时，5 GHz AirDrop 信道开头是被动的，听到 iPhone 或附近路由器之前电脑一帧都不发，iPhone 也就看不到这台电脑。打开后会更早、更频繁（1.5、12、30 秒）地只扫 11 个常用信道，让网卡按自己的规则从附近路由器学到国家码。不会在被动信道上强行发射。还在测试；切换时 AirDrop 会重启几秒。",
                                    "Where the card refuses the country, the 5 GHz AirDrop channel starts passive: the PC sends nothing until it hears an iPhone or a nearby router, so iPhones cannot see it. This scans sooner and more often (at 1.5, 12 and 30 s), only the 11 common channels, so the card learns the country from nearby routers by its own rules. It never transmits on a passive channel. Still being tested. AirDrop restarts for a few seconds when this changes."),
-        ["set.btCoex"] = ("蓝牙与 Wi-Fi 均衡共存（Intel）", "Balanced Bluetooth coexistence (Intel)"),
-        ["set.btCoex.hint"] = ("发送时，电脑用网卡自带的蓝牙发出唤醒信号，附近的 iPhone 和 Mac 才会出现。默认固件让 Wi-Fi 一直优先，AirDrop 监听时蓝牙几乎发不出去，可能要等很久甚至找不到设备。打开后固件均衡分配，在一台 AX200 上设备几秒内就出现了。和 ForbiddenItlwm 的 itlawdlbtcoex=1 相同。还在测试；切换时 AirDrop 会重启几秒。",
-                                "To send, the PC wakes nearby iPhones and Macs with a Bluetooth beacon from the card's own Bluetooth. By default the firmware always favours Wi-Fi, so while AirDrop listens that beacon barely gets out and devices can take long to appear, or never do. This balances the two; on one AX200 devices then appeared within seconds. Same as ForbiddenItlwm's itlawdlbtcoex=1. Still being tested. AirDrop restarts for a few seconds when this changes."),
         ["set.updates"] = ("更新", "Updates"),
         ["set.checkUpdates"] = ("自动检查新版本", "Check for new versions automatically"),
         ["set.previewUpdates"] = ("包括预览版", "Include preview releases"),

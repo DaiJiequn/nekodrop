@@ -172,10 +172,9 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 ### Experimental features
 
-In *Settings → Experimental*, all off by default; turning one off restores the old behaviour exactly. (Aggregated sending, A-MPDU, graduated from here in 0.1.35 and is always on: 30.8 MB/s to an iPhone on AX201, 9–25 MiB/s on AX200.)
+In *Settings → Experimental*, all off by default; turning one off restores the old behaviour exactly. (Graduated from here and always on: aggregated sending, A-MPDU, in 0.1.35: 30.8 MB/s to an iPhone on AX201, 9–25 MiB/s on AX200; balanced Bluetooth coexistence on Intel cards in 0.1.37, which lets the Bluetooth beacon through so the PC finds iPhones and Macs in seconds, measured on AX200 and AX211: thanks to [@XXD051030](https://github.com/XXD051030), [#26](../../pull/26).)
 
-- **Balanced Bluetooth coexistence (Intel)**: lets the Bluetooth beacon through so the PC finds iPhones and Macs in seconds (thanks to [@XXD051030](https://github.com/XXD051030), [#26](../../pull/26)).
-- **Time sharing when Wi-Fi and AirDrop use different channels**: tells the iPhone when the PC is away with the router; no measurable gain so far ([#4](../../issues/4)).
+- **Time sharing when Wi-Fi and AirDrop use different channels**: tells the iPhone when the PC is away with the router. With nekodrop's Wi-Fi on another 5 GHz channel, one AX211 heard no AirDrop frame without it ([#35](../../issues/35)); on one AX200 speeds went both up and down ([#4](../../issues/4)).
 - **Faster unlock of a passive 5 GHz channel**: scans sooner so cards that refuse the country code can transmit earlier ([#11](../../issues/11)).
 
 ## Status
@@ -222,8 +221,9 @@ Design notes: [docs/DESIGN.md](docs/DESIGN.md) (driver, DMA, risks) · [docs/CLI
 | Symptom | Try |
 |---|---|
 | iPhone doesn't see the PC | Set the iPhone's AirDrop to *Everyone for 10 Minutes*, turn it off and on (this clears a cached record), and keep the phone unlocked nearby |
-| The PC takes long to find the iPhone | Turn on *Settings → Experimental → Balanced Bluetooth coexistence* (Intel cards) |
+| The PC takes long to find the iPhone | Check that Bluetooth is on: the PC wakes iPhones with a Bluetooth beacon. The diagnostic report's engine lines say `beacon: false` and why when it cannot send one |
 | Sending to the iPhone is slow | If nekodrop's Wi-Fi is on a different 5 GHz channel than AirDrop (44 or 149), speed drops; disconnecting Wi-Fi in nekodrop or moving the router to that channel helps |
+| AirDrop stops working once nekodrop joins Wi-Fi | The router's 5 GHz channel differs from AirDrop's (44 or 149): turn on *Settings → Experimental → Time sharing when Wi-Fi and AirDrop use different channels*, or disconnect Wi-Fi in nekodrop if the PC is wired ([#35](../../issues/35)) |
 | The PC shows up twice on the iPhone | A cached record from an earlier run. Toggle AirDrop on the iPhone |
 | No internet | Tray → **Wi-Fi…**: check you're connected. The network may need a sign-in page or be WPA3-only/802.1X (see above) |
 | The Windows Wi-Fi icon disappeared | Expected in *together* mode: nekodrop owns the card. Use **Wi-Fi…**, or switch to *on demand* |

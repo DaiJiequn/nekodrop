@@ -84,7 +84,6 @@ public sealed class Supervisor : IDisposable
                 ["country"] = _cfg.Country,
                 ["fastUnlock"] = _cfg.FastUnlock,
                 ["coexPlan"] = _cfg.CoexPlan,
-                ["btCoex"] = _cfg.BtCoexBalanced,
                 ["card"] = _cardLabel,
                 ["manualCard"] = _cfg.ManualCard,
                 ["manualModel"] = _cfg.ManualModel,
@@ -242,24 +241,6 @@ public sealed class Supervisor : IDisposable
             _cfg.Save();
         }
         Say($"experimental coexistence plan: {(on ? "on" : "off")}");
-        if (State is RadioState.On or RadioState.Starting)
-            _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
-        Publish();
-    }
-
-    /// <summary>
-    /// Experimental balanced Bluetooth coexistence (radio --bt-coex 1): the Bluetooth beacon
-    /// that wakes Apple devices is no longer starved by AWDL; a running radio restarts to take it.
-    /// </summary>
-    public void SetBtCoex(bool on)
-    {
-        lock (_lock)
-        {
-            if (_cfg.BtCoexBalanced == on) return;
-            _cfg.BtCoexBalanced = on;
-            _cfg.Save();
-        }
-        Say($"experimental balanced Bluetooth coexistence: {(on ? "on" : "off")}");
         if (State is RadioState.On or RadioState.Starting)
             _ = Task.Run(() => Relaunch(_channel == 0 ? _cfg.StartChannel : _channel));
         Publish();
@@ -430,7 +411,7 @@ public sealed class Supervisor : IDisposable
             else if (Card.Find() is { } kc) { _profile = kc.Profile; _caps = kc.Profile.Capabilities; }
             if (!_wanted) { lock (_lock) State = RadioState.Off; Publish(); return; }
             var launch = CardCatalog.BuildRadioLaunch(_profile, channel, kernel, _cfg.Country, staConf, true, _cfg.FastUnlock,
-                                                      _cfg.CoexPlan, _cfg.BtCoexBalanced);
+                                                      _cfg.CoexPlan, btCoexBalanced: true);
             _radio = Spawn(Path.Combine(_root, "radio", launch.ExeName), launch.Args, OnRadioLine);
             _startedAt = DateTime.UtcNow;
             // awdld connects to the radio's pipe; give the firmware time to boot.

@@ -67,7 +67,6 @@ public sealed class ServiceLink : IDisposable
     public void SetMode(string mode) => Send(new JsonObject { ["do"] = "mode", ["mode"] = mode });
     public void SetFastUnlock(bool on) => Send(new JsonObject { ["do"] = "fast-unlock", ["on"] = on });
     public void SetCoexPlan(bool on) => Send(new JsonObject { ["do"] = "coex-plan", ["on"] = on });
-    public void SetBtCoex(bool on) => Send(new JsonObject { ["do"] = "bt-coex", ["on"] = on });
     /// <summary>Asks for the card list and models (answered with a "cards" event).</summary>
     public void RequestCards() => Send(new JsonObject { ["do"] = "cards" });
     /// <summary>Runs `hardwareId` as `model`; "" and "" go back to automatic.</summary>

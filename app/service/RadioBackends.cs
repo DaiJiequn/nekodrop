@@ -11,7 +11,8 @@ namespace NekoDrop.Service;
 /// skips it by itself without DMA room for the extra ring)</param>
 /// <param name="FastUnlock">experimental fast passive-channel unlock is on in the settings</param>
 /// <param name="CoexPlan">experimental coexistence plan (router entries in the AWDL schedule) is on</param>
-/// <param name="BtCoexBalanced">experimental balanced Bluetooth coexistence is on in the settings</param>
+/// <param name="BtCoexBalanced">balanced Bluetooth coexistence (always true from the service since
+/// 0.1.37: AX200 and AX211 data, nobody worse; Intel only, not on the kernel path)</param>
 public sealed record RadioStart(AdapterProfile Profile, int Channel, bool Kernel, string Country, string? StaConf,
                                 bool Aggregate, bool FastUnlock, bool CoexPlan = false, bool BtCoexBalanced = false)
 {

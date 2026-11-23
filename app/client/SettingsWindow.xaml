@@ -127,8 +127,6 @@
           <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.fastUnlock.hint}"/>
           <CheckBox x:Name="CoexPlanBox" Content="{local:T set.coexPlan}" Margin="0,8,0,0"/>
           <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.coexPlan.hint}"/>
-          <CheckBox x:Name="BtCoexBox" Content="{local:T set.btCoex}" Margin="0,8,0,0"/>
-          <TextBlock Style="{StaticResource Caption}" Margin="20,0,0,0" Text="{local:T set.btCoex.hint}"/>
         </StackPanel>
       </Border>
 
