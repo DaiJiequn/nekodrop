@@ -123,8 +123,8 @@ public sealed class RadarPanel : Panel
         {
             var move = child.RenderTransform as TranslateTransform ?? new TranslateTransform();
             child.RenderTransform = move;
-            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-            var t = TimeSpan.FromMilliseconds(380);
+            var ease = new FluentEase();
+            var t = TimeSpan.FromMilliseconds(420);
             move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(from.X - at.X + move.X, 0, t) { EasingFunction = ease });
             move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(from.Y - at.Y + move.Y, 0, t) { EasingFunction = ease });
         }
@@ -285,13 +285,45 @@ public sealed class IsSet : System.Windows.Data.IValueConverter
 }
 
 /// <summary>Windows' "Animation effects" setting: off means no looping motion.</summary>
+/// <summary>
+/// The cubic Bézier curves of Windows' Fluent motion: by default "decelerate"
+/// (0.1, 0.9, 0.2, 1), quick out of the gate and settling softly; "standard"
+/// is (0.8, 0, 0.2, 1). Usable from XAML as an easing function.
+/// </summary>
+public sealed class FluentEase : EasingFunctionBase
+{
+    public double X1 { get; set; } = 0.1;
+    public double Y1 { get; set; } = 0.9;
+    public double X2 { get; set; } = 0.2;
+    public double Y2 { get; set; } = 1;
+
+    public FluentEase() => EasingMode = EasingMode.EaseIn; // the curve as given, not mirrored
+
+    static double Bezier(double t, double a, double b) => 3 * a * (1 - t) * (1 - t) * t + 3 * b * (1 - t) * t * t + t * t * t;
+
+    protected override double EaseInCore(double x)
+    {
+        // Find t with Bx(t) = x by bisection (monotonic for these curves), then return By(t).
+        double lo = 0, hi = 1, t = x;
+        for (var i = 0; i < 24; i++)
+        {
+            t = (lo + hi) / 2;
+            if (Bezier(t, X1, X2) < x) lo = t; else hi = t;
+        }
+        return Bezier(t, Y1, Y2);
+    }
+
+    protected override Freezable CreateInstanceCore() => new FluentEase { X1 = X1, Y1 = Y1, X2 = X2, Y2 = Y2 };
+}
+
 public static class Motion
 {
     /// <summary>Set by --snapshot: the build machine has animations off, and the pictures should show the ripple.</summary>
     public static bool ForceOn { get; set; }
     public static bool Reduced => !ForceOn && !SystemParameters.ClientAreaAnimation;
 
-    static readonly IEasingFunction Out = new CubicEase { EasingMode = EasingMode.EaseOut };
+    static readonly IEasingFunction Out = new FluentEase();
+    static readonly IEasingFunction In = new FluentEase { X1 = 0.7, Y1 = 0, X2 = 1, Y2 = 0.5 }; // Fluent "accelerate"
 
     /// <summary>Fades in while sliding up by <paramref name="rise"/> pixels (a panel opening, a view switching).</summary>
     public static void FadeIn(UIElement e, double rise, double ms = 220)
@@ -311,14 +343,14 @@ public static class Motion
         var t = TimeSpan.FromMilliseconds(ms);
         var move = e.RenderTransform as TranslateTransform ?? new TranslateTransform();
         e.RenderTransform = move;
-        var fade = new DoubleAnimation(1, 0, t) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+        var fade = new DoubleAnimation(1, 0, t) { EasingFunction = In };
         fade.Completed += (_, _) =>
         {
             done();
             e.BeginAnimation(UIElement.OpacityProperty, null);
             move.BeginAnimation(TranslateTransform.YProperty, null);
         };
-        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, fall, t));
+        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, fall, t) { EasingFunction = In });
         e.BeginAnimation(UIElement.OpacityProperty, fade);
     }
 
@@ -331,7 +363,7 @@ public static class Motion
         e.RenderTransformOrigin = new Point(0.5, 0.5);
         var a = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(420) };
         a.KeyFrames.Add(new EasingDoubleKeyFrame(1.15, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(160)), Out));
-        a.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 }));
+        a.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), Out));
         s.BeginAnimation(ScaleTransform.ScaleXProperty, a);
         s.BeginAnimation(ScaleTransform.ScaleYProperty, a);
     }

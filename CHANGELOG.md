@@ -16,7 +16,8 @@
 - 修复窗口比屏幕高时底部显示不全；设备名和状态不再被裁切
 - 雷达放大，设备不再压住「本机」；删除雷达上的箭头
 - 接收时「本机」外圈显示进度，保存完成后变绿打勾；接受 / 拒绝气泡保留，接受后收起
-- 新增动效：面板滑入滑出、设备出现时淡入放大、设备增减时平滑移位、请求气泡弹出、雷达 / 列表切换过渡，进度环匀速（线性）过渡不再跳变
+- 新增动效（Windows Fluent 原生缓动曲线）：面板滑入滑出、设备出现时淡入放大、设备增减时平滑移位、请求气泡弹出、雷达 / 列表切换过渡；发送时蓝色波纹送出，进度环匀速（线性）走满，完成时蓝环渐变为绿环、对号一笔画出、图标轻弹并送出绿色波纹；接收完成时「本机」同样变绿弹出对号
+- 修复雷达上的发送进度环没有跟随真实进度（一直是转圈的等待弧）
 - 新增自定义全局快捷键：设置 → 常规里点一下快捷键再按下新的组合键（Esc 取消，可恢复默认 Win+Shift+D）；被其他程序占用时会提示
 
 ### English
@@ -25,7 +26,8 @@
 - Fixed windows taller than the screen being cut off; device names and states are no longer clipped
 - A larger radar, devices no longer cover "This PC"; the arrows on the radar are gone
 - While receiving, a progress ring around "This PC", then green with a check mark once saved; the accept / decline bubble stays and closes after accepting
-- New motion: the panel slides in and out, devices fade and grow in, move smoothly when one comes or goes, the request bubble pops open, radar / list cross-fade, and progress rings move at a steady (linear) pace instead of jumping
+- New motion on Windows' Fluent curves: the panel slides in and out, devices fade and grow in and glide when one comes or goes, the request bubble pops open, radar / list cross-fade; sending sends a blue wave off, the ring fills at a steady (linear) pace, and on arrival it turns green, a check is drawn in one stroke, the icon pops and a green wave leaves it; "This PC" does the same when files arrive
+- Fixed the send ring on the radar not following the real progress (it kept turning as if waiting)
 - New: record your own global shortcut in Settings → General (click it, press the keys; Esc cancels; Default restores Win+Shift+D); you are told when another program holds it
 
 ---

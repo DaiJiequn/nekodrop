@@ -361,7 +361,93 @@ public sealed class App : Application
             using (var fs = File.Create(Path.Combine(dir, name + ".png"))) png.Save(fs);
             w.Close();
         }
+        MotionStrips(dir);
         Shutdown();
+    }
+
+    /// <summary>
+    /// For --snapshot: the send and receive animations as strips of frames (the
+    /// radar only, every ~80 ms), so a build shows the motion without a screen.
+    /// </summary>
+    void MotionStrips(string dir)
+    {
+        Settings.DeviceView = "radar";
+        Model.Requests.Clear();
+        Model.Devices.Clear();
+        var mac = new Device { Id = "m", Name = "MacBook Air", Model = "Mac14,2", State = "sending", Busy = true, Progress = 0.3, Status = L.F("send.sending", 0.3) };
+        var phone = new Device { Id = "p", Name = "iPhone", Model = "iPhone15,2" };
+        Model.Devices.Add(phone);
+        Model.Devices.Add(mac);
+        var ask = new Request { Id = "q", Sender = "iPhone", Model = "iPhone15,2", What = L.F("what.photos", 3), Receiving = true, Progress = 0.4 };
+        Model.Requests.Add(ask);
+        phone.Ask = ask;
+        Model.Air = "ready";
+
+        Strip(dir, "motion-send", () => { mac.Progress = 1; },
+              (360, () => { mac.State = "sent"; mac.Status = L.T("send.sent"); }),
+              [0, 120, 240, 360, 440, 520, 600, 700, 820, 1000]);
+        Strip(dir, "motion-receive", () => { ask.Progress = 1; },
+              (360, () => { Model.Requests.Remove(ask); phone.Ask = null; Model.RaiseStored(); }),
+              [0, 120, 240, 360, 440, 520, 600, 700, 820, 1000]);
+    }
+
+    void Strip(string dir, string name, Action start, (int At, Action Do) then, int[] times)
+    {
+        var w = new MainWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000, ShowActivated = false, ShowInTaskbar = false };
+        w.Show();
+        w.UpdateLayout();
+        Pump(TimeSpan.FromMilliseconds(1200));
+        var radar = FindChild<RadarView>(w);
+        if (radar is null) { w.Close(); return; }
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        start();
+        var done = false;
+        var frames = new List<System.Windows.Media.Imaging.RenderTargetBitmap>();
+        foreach (var t in times)
+        {
+            if (!done && t >= then.At) { while (clock.ElapsedMilliseconds < then.At) Pump(TimeSpan.FromMilliseconds(5)); then.Do(); done = true; }
+            while (clock.ElapsedMilliseconds < t) Pump(TimeSpan.FromMilliseconds(5));
+            int fw = (int)radar.ActualWidth, fh = (int)radar.ActualHeight;
+            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(fw, fh, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            var back = new System.Windows.Media.DrawingVisual();
+            using (var dc = back.RenderOpen())
+                dc.DrawRectangle((System.Windows.Media.Brush)Resources["MicaSolid"], null, new Rect(0, 0, fw, fh));
+            bmp.Render(back);
+            bmp.Render(radar);
+            frames.Add(bmp);
+        }
+        w.Close();
+        // Side by side, with each frame's time on top.
+        double fwd = frames[0].Width, fht = frames[0].Height;
+        var sheet = new System.Windows.Media.DrawingVisual();
+        using (var dc = sheet.RenderOpen())
+        {
+            dc.DrawRectangle((System.Windows.Media.Brush)Resources["MicaSolid"], null, new Rect(0, 0, fwd * frames.Count, fht + 22));
+            for (var i = 0; i < frames.Count; i++)
+            {
+                dc.DrawImage(frames[i], new Rect(i * fwd, 22, fwd, fht));
+                var label = new System.Windows.Media.FormattedText($"{times[i]} ms", System.Globalization.CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, new System.Windows.Media.Typeface("Segoe UI"), 13, (System.Windows.Media.Brush)Resources["Text2"], 1);
+                dc.DrawText(label, new Point(i * fwd + 8, 3));
+            }
+        }
+        var out_ = new System.Windows.Media.Imaging.RenderTargetBitmap((int)(fwd * frames.Count), (int)(fht + 22), 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        out_.Render(sheet);
+        var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(out_));
+        using var fs = File.Create(Path.Combine(dir, name + ".png"));
+        png.Save(fs);
+    }
+
+    static T? FindChild<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var c = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (c is T t) return t;
+            if (FindChild<T>(c) is { } found) return found;
+        }
+        return null;
     }
 
     /// <summary>Runs the dispatcher (animations, layout) for a while, for --snapshot.</summary>

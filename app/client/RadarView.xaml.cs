@@ -33,7 +33,9 @@ public partial class RadarView : UserControl
     readonly ProgressRing _hubRing = new() { Thickness = 3, Margin = new Thickness(-5), Visibility = Visibility.Collapsed, IsHitTestVisible = false };
     readonly HashSet<Request> _watched = [];
     readonly Ellipse _hubDisc = new() { StrokeThickness = 1.5 };
-    readonly TextBlock _hubIcon = new();
+    readonly TextBlock _hubIcon = new() { RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1) };
+    // A green ring that leaves this PC once when files arrive.
+    readonly Ellipse _hubWave = new() { StrokeThickness = 2, Opacity = 0, IsHitTestVisible = false, RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1) };
     System.Windows.Threading.DispatcherTimer? _doneTimer;
     // A soft light behind the hub that breathes while AirDrop listens.
     readonly Ellipse _halo = new() { RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1), Opacity = 0 };
@@ -110,6 +112,8 @@ public partial class RadarView : UserControl
         _hubRing.SetResourceReference(ProgressRing.StrokeProperty, "Accent");
         _hubRing.SetResourceReference(ProgressRing.TrackProperty, "Border");
         _hub.Children.Add(_hubRing);
+        _hubWave.SetResourceReference(Shape.StrokeProperty, "Success");
+        _hub.Children.Add(_hubWave);
         _hub.Children.Add(icon);
         _hubLabel.Text = L.T("radar.thisPc");
         _hubLabel.FontSize = 11;
@@ -156,11 +160,24 @@ public partial class RadarView : UserControl
     }
 
     /// <summary>Files sent to this PC are saved: green with a check mark for three seconds.</summary>
-    void OnStored(object? s, EventArgs e) => Dispatcher.BeginInvoke(() =>
+    void OnStored(object? s, EventArgs e) => Dispatcher.Invoke(() =>
     {
         _hubRing.Visibility = Visibility.Collapsed;
         HubLook(true);
         Motion.Pop(_hub);
+        if (!Motion.Reduced)
+        {
+            var ease = new FluentEase();
+            var icon = (ScaleTransform)_hubIcon.RenderTransform;
+            _hubIcon.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(200)));
+            icon.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(0.5, 1, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
+            icon.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.5, 1, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
+            var wave = (ScaleTransform)_hubWave.RenderTransform;
+            var t = TimeSpan.FromMilliseconds(700);
+            wave.BeginAnimation(ScaleTransform.ScaleXProperty, new DoubleAnimation(1, 1.8, t) { EasingFunction = ease });
+            wave.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(1, 1.8, t) { EasingFunction = ease });
+            _hubWave.BeginAnimation(OpacityProperty, new DoubleAnimation(0.7, 0, t));
+        }
         _doneTimer?.Stop();
         _doneTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _doneTimer.Tick += (_, _) => { _doneTimer!.Stop(); HubLook(false); HubReceiving(); };

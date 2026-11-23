@@ -101,11 +101,6 @@
       <Setter Property="Foreground" Value="{DynamicResource Text}"/>
       <Setter Property="HorizontalAlignment" Value="Center"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
-      <Style.Triggers>
-        <DataTrigger Binding="{Binding State}" Value="sent">
-          <Setter Property="Text" Value="&#xE73E;"/><Setter Property="Foreground" Value="{DynamicResource Success}"/>
-        </DataTrigger>
-      </Style.Triggers>
     </Style>
 
     <!-- The bubble a sender's request opens under (or, low on the radar, above) its icon -->
@@ -139,6 +134,7 @@
             <TransformGroup>
               <ScaleTransform x:Name="grow"/>
               <ScaleTransform x:Name="enter"/>
+              <ScaleTransform x:Name="pop"/>
               <TranslateTransform x:Name="shake"/>
             </TransformGroup>
           </Button.RenderTransform>
@@ -150,13 +146,21 @@
               </Ellipse>
               <Ellipse x:Name="Glow" Margin="-6" Fill="{DynamicResource AccentSubtle}" Visibility="Hidden"/>
               <Ellipse x:Name="Disc" Fill="{DynamicResource CardHover}" Stroke="{DynamicResource BorderStrong}" StrokeThickness="1"/>
-              <Ellipse Style="{StaticResource OutcomeRing}" Margin="1"/>
+              <Ellipse x:Name="outcome" Style="{StaticResource OutcomeRing}" Margin="1"/>
               <!-- Its own transform, not the style's: a style's is frozen and cannot turn -->
               <Ellipse Style="{StaticResource WaitRing}" Margin="1" RenderTransformOrigin="0.5,0.5">
                 <Ellipse.RenderTransform><RotateTransform/></Ellipse.RenderTransform>
               </Ellipse>
-              <local:ProgressRing Style="{StaticResource SendRing}" Margin="1"/>
-              <TextBlock Style="{StaticResource NodeGlyph}" FontSize="19"/>
+              <local:ProgressRing x:Name="sendRing" Style="{StaticResource SendRing}" Progress="{Binding Progress}" Margin="1"/>
+              <TextBlock x:Name="nodeGlyph" Style="{StaticResource NodeGlyph}" FontSize="19"/>
+              <!-- Sent: a check drawn stroke by stroke -->
+              <Path x:Name="check" Data="M16,25.5 L22,31.5 L34.5,19" Stroke="{DynamicResource Success}" StrokeThickness="2.6"
+                    StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" StrokeDashArray="12 12" StrokeDashOffset="12"
+                    Visibility="Collapsed" IsHitTestVisible="False"/>
+              <!-- A ring that leaves the icon once: blue when the files set off, green when they arrive -->
+              <Ellipse x:Name="wave" StrokeThickness="2" Opacity="0" IsHitTestVisible="False" RenderTransformOrigin="0.5,0.5" Stroke="{DynamicResource Accent}">
+                <Ellipse.RenderTransform><ScaleTransform x:Name="waveScale"/></Ellipse.RenderTransform>
+              </Ellipse>
             </Grid>
             <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" TextAlignment="Center"
                        TextTrimming="CharacterEllipsis" Margin="2,4,2,0" ToolTip="{Binding Name}"/>
@@ -193,11 +197,11 @@
           <BeginStoryboard>
             <Storyboard>
               <DoubleAnimation Storyboard.TargetName="node" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25"/>
-              <DoubleAnimation Storyboard.TargetName="enter" Storyboard.TargetProperty="ScaleX" From="0.6" To="1" Duration="0:0:0.38">
-                <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.35"/></DoubleAnimation.EasingFunction>
+              <DoubleAnimation Storyboard.TargetName="enter" Storyboard.TargetProperty="ScaleX" From="0.8" To="1" Duration="0:0:0.4">
+                <DoubleAnimation.EasingFunction><local:FluentEase/></DoubleAnimation.EasingFunction>
               </DoubleAnimation>
-              <DoubleAnimation Storyboard.TargetName="enter" Storyboard.TargetProperty="ScaleY" From="0.6" To="1" Duration="0:0:0.38">
-                <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.35"/></DoubleAnimation.EasingFunction>
+              <DoubleAnimation Storyboard.TargetName="enter" Storyboard.TargetProperty="ScaleY" From="0.8" To="1" Duration="0:0:0.4">
+                <DoubleAnimation.EasingFunction><local:FluentEase/></DoubleAnimation.EasingFunction>
               </DoubleAnimation>
             </Storyboard>
           </BeginStoryboard>
@@ -220,6 +224,65 @@
             </BeginStoryboard>
           </Trigger.ExitActions>
         </Trigger>
+        <!-- Off they go: a blue ring leaves the icon once -->
+        <DataTrigger Binding="{Binding State}" Value="sending">
+          <DataTrigger.EnterActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="waveScale" Storyboard.TargetProperty="ScaleX" From="1" To="1.7" Duration="0:0:0.6">
+                  <DoubleAnimation.EasingFunction><local:FluentEase/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="waveScale" Storyboard.TargetProperty="ScaleY" From="1" To="1.7" Duration="0:0:0.6">
+                  <DoubleAnimation.EasingFunction><local:FluentEase/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="wave" Storyboard.TargetProperty="Opacity" From="0.6" To="0" Duration="0:0:0.6"/>
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+        </DataTrigger>
+        <!-- Sent: the ring closes into green, the icon gives way to a check drawn in one stroke,
+             the circle swells a little and settles, and a green ring leaves it once -->
+        <DataTrigger Binding="{Binding State}" Value="sent">
+          <Setter TargetName="check" Property="Visibility" Value="Visible"/>
+          <Setter TargetName="wave" Property="Stroke" Value="{DynamicResource Success}"/>
+          <!-- The full blue ring stays a moment and fades as the green one comes -->
+          <Setter TargetName="sendRing" Property="Visibility" Value="Visible"/>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="nodeGlyph" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.12"/>
+                <DoubleAnimation Storyboard.TargetName="sendRing" Storyboard.TargetProperty="Opacity" From="1" To="0" Duration="0:0:0.24"/>
+                <DoubleAnimation Storyboard.TargetName="outcome" Storyboard.TargetProperty="Opacity" From="0.4" To="1" Duration="0:0:0.16"/>
+                <DoubleAnimation Storyboard.TargetName="check" Storyboard.TargetProperty="StrokeDashOffset" From="12" To="0" BeginTime="0:0:0.06" Duration="0:0:0.26">
+                  <DoubleAnimation.EasingFunction><local:FluentEase X1="0.3" Y1="0.6" X2="0.2" Y2="1"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimationUsingKeyFrames Storyboard.TargetName="pop" Storyboard.TargetProperty="ScaleX">
+                  <EasingDoubleKeyFrame KeyTime="0:0:0.14" Value="1.1"><EasingDoubleKeyFrame.EasingFunction><local:FluentEase/></EasingDoubleKeyFrame.EasingFunction></EasingDoubleKeyFrame>
+                  <EasingDoubleKeyFrame KeyTime="0:0:0.46" Value="1"><EasingDoubleKeyFrame.EasingFunction><local:FluentEase/></EasingDoubleKeyFrame.EasingFunction></EasingDoubleKeyFrame>
+                </DoubleAnimationUsingKeyFrames>
+                <DoubleAnimationUsingKeyFrames Storyboard.TargetName="pop" Storyboard.TargetProperty="ScaleY">
+                  <EasingDoubleKeyFrame KeyTime="0:0:0.14" Value="1.1"><EasingDoubleKeyFrame.EasingFunction><local:FluentEase/></EasingDoubleKeyFrame.EasingFunction></EasingDoubleKeyFrame>
+                  <EasingDoubleKeyFrame KeyTime="0:0:0.46" Value="1"><EasingDoubleKeyFrame.EasingFunction><local:FluentEase/></EasingDoubleKeyFrame.EasingFunction></EasingDoubleKeyFrame>
+                </DoubleAnimationUsingKeyFrames>
+                <DoubleAnimation Storyboard.TargetName="waveScale" Storyboard.TargetProperty="ScaleX" From="1" To="1.8" BeginTime="0:0:0.08" Duration="0:0:0.7">
+                  <DoubleAnimation.EasingFunction><local:FluentEase/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="waveScale" Storyboard.TargetProperty="ScaleY" From="1" To="1.8" BeginTime="0:0:0.08" Duration="0:0:0.7">
+                  <DoubleAnimation.EasingFunction><local:FluentEase/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="wave" Storyboard.TargetProperty="Opacity" From="0.7" To="0" BeginTime="0:0:0.08" Duration="0:0:0.7"/>
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="nodeGlyph" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.15"/>
+                <DoubleAnimation Storyboard.TargetName="sendRing" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0"/>
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.ExitActions>
+        </DataTrigger>
         <!-- Declined: a short shake, once -->
         <DataTrigger Binding="{Binding State}" Value="declined">
           <DataTrigger.EnterActions>
@@ -244,10 +307,10 @@
               <Storyboard>
                 <DoubleAnimation Storyboard.TargetName="bubble" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.2"/>
                 <DoubleAnimation Storyboard.TargetName="bubbleScale" Storyboard.TargetProperty="ScaleX" From="0.85" To="1" Duration="0:0:0.26">
-                  <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                  <DoubleAnimation.EasingFunction><local:FluentEase/></DoubleAnimation.EasingFunction>
                 </DoubleAnimation>
                 <DoubleAnimation Storyboard.TargetName="bubbleScale" Storyboard.TargetProperty="ScaleY" From="0.85" To="1" Duration="0:0:0.26">
-                  <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                  <DoubleAnimation.EasingFunction><local:FluentEase/></DoubleAnimation.EasingFunction>
                 </DoubleAnimation>
               </Storyboard>
             </BeginStoryboard>
