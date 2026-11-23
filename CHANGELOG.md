@@ -22,8 +22,6 @@
 - New status panel in the title bar: allow receiving, switch the network mode
 - New: remove files one by one, an update bar, and actions for each state (retry, start the service, choose the card…)
 
-> 只在 CI 上测过（界面截图来自 CI），没有真机验证。 / CI-tested only (screenshots from CI), not on hardware.
-
 ---
 
 ## v0.1.38 (Hourly / Pre-release) — 2026-11-24
