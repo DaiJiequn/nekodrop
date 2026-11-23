@@ -31,7 +31,9 @@ public sealed class Settings
     public bool Hotkey { get; set; } = true;
     /// <summary>The global shortcut's keys, as the user recorded them ("Ctrl+Alt+K").</summary>
     public string HotkeyKeys { get; set; } = NekoDrop.Hotkey.Default;
-    /// <summary>Who may send to this PC: "everyone", or "contacts" (needs an Apple ID identity, see AppleId).</summary>
+    /// <summary>Experimental: use the Apple ID identity (AppleId) at all. Off, the engine stays anonymous (Everyone).</summary>
+    public bool AppleIdOn { get; set; }
+    /// <summary>Who may send to this PC: "everyone", or "contacts" (needs AppleIdOn and an identity, see AppleId).</summary>
     public string Receive { get; set; } = "everyone";
     /// <summary>Nearby devices as a "radar" or a "list".</summary>
     public string DeviceView { get; set; } = "radar";

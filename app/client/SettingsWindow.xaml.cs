@@ -31,7 +31,9 @@ public partial class SettingsWindow : Window
         AskBox.IsChecked = s.Ask;
         StartupBox.IsChecked = s.StartWithWindows;
         HotkeyBox.IsChecked = s.Hotkey;
-        (s.Receive == "contacts" ? ReceiveContacts : ReceiveEveryone).IsChecked = true;
+        AppleIdOnBox.IsChecked = s.AppleIdOn;
+        AppleIdOn_Changed(AppleIdOnBox, new RoutedEventArgs());
+        ShowReceive();
         ShowIdentity();
         _hotkeyKeys = Hotkey.TryParse(s.HotkeyKeys, out _, out _) ? s.HotkeyKeys : Hotkey.Default;
         ShowHotkey();
@@ -272,8 +274,10 @@ public partial class SettingsWindow : Window
         s.SaveFolder = _folder;
         s.Ask = AskBox.IsChecked == true;
         s.StartWithWindows = StartupBox.IsChecked == true;
-        var receive = ReceiveContacts.IsChecked == true && AppleId.Present ? "contacts" : "everyone";
-        var receiveChanged = receive != s.Receive;
+        var appleIdOn = AppleIdOnBox.IsChecked == true;
+        var receive = appleIdOn && ReceiveContacts.IsChecked == true && AppleId.Present ? "contacts" : "everyone";
+        var receiveChanged = receive != s.Receive || appleIdOn != s.AppleIdOn;
+        s.AppleIdOn = appleIdOn;
         s.Receive = receive;
         var hotkeyChanged = (HotkeyBox.IsChecked == true) != s.Hotkey || _hotkeyKeys != s.HotkeyKeys;
         s.Hotkey = HotkeyBox.IsChecked == true;
@@ -300,6 +304,7 @@ public partial class SettingsWindow : Window
         A.Window?.FolderChanged();
         var hotkeyTaken = hotkeyChanged && !A.ApplyHotkey();
         if (receiveChanged) A.RestartEngine();
+        A.Window?.ShowMark();
         if (accentChanged) A.ApplyTheme();
         if (languageChanged) { A.ApplyLanguage(); Close(); return; }
         SavedText.Text = hotkeyTaken ? L.F("set.hotkeyTaken", Hotkey.Show(_hotkeyKeys)) : "✓ " + L.T("set.saved");
@@ -310,6 +315,20 @@ public partial class SettingsWindow : Window
     void Cancel_Click(object sender, RoutedEventArgs e) => Close();
 
     // ------------------------------------------------ Apple ID, Contacts Only
+
+    /// <summary>Who can send, as saved (also when the AirDrop mark changed it while this window is open).</summary>
+    public void ShowReceive()
+    {
+        (A.Settings.Receive == "contacts" && AppleId.Present ? ReceiveContacts : ReceiveEveryone).IsChecked = true;
+    }
+
+    /// <summary>The page below the experimental switch works only while it is on.</summary>
+    void AppleIdOn_Changed(object sender, RoutedEventArgs e)
+    {
+        if (AppleIdBody is null) return; // still loading
+        AppleIdBody.IsEnabled = AppleIdOnBox.IsChecked == true;
+        AppleIdBody.Opacity = AppleIdBody.IsEnabled ? 1 : 0.5;
+    }
 
     /// <summary>What identity there is, and which buttons make sense with it.</summary>
     void ShowIdentity()

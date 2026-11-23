@@ -190,7 +190,7 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 
 ### 仅限联系人（Apple ID，实验性）
 
-设置 →「Apple ID」里选择谁可以给这台电脑发送：「所有人」或「仅限联系人」。「仅限联系人」需要一个和 Mac 一样的 AirDrop 身份，有两种方式获得：
+设置 →「Apple ID」里先打开顶部的实验性开关，再选择谁可以给这台电脑发送：「所有人」或「仅限联系人」。「仅限联系人」需要一个和 Mac 一样的 AirDrop 身份，有两种方式获得：
 
 - **用 Apple ID 登录**：nekodrop 像 Mac 一样向 Apple 申请 AirDrop 证书（WirDrop 的 `appleid`，MIT），自动续期并读取 iCloud 通讯录。第一次登录会从 Apple 下载 iCloud for Windows 的一个组件（约 160 MB，不安装 iCloud）。密码只用一次、不保存。
 - **从 Mac 导入**：在登录了你 Apple ID 的 Mac 上用 [airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) 导出 `certificate.pem`、`key.pem`、`validation_record.cms`（需要临时部分关闭 SIP），在设置里选中它们所在的文件夹，再导入一个 `.vcf` 通讯录。

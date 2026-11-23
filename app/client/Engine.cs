@@ -87,7 +87,7 @@ public sealed class Engine : IDisposable
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
         psi.Environment["NEKODROP_SERVICE_ID"] = s.ServiceId; /* one device on the iPhone across restarts */
         // Contacts Only: the Apple ID identity for installer\nekodrop_identity.py.
-        if (AppleId.Present)
+        if (s.AppleIdOn && AppleId.Present)
         {
             psi.Environment["NEKODROP_IDENTITY"] = AppleId.Dir;
             psi.Environment["NEKODROP_RECEIVE"] = s.Receive == "contacts" ? "contacts" : "everyone";

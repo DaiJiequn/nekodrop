@@ -99,27 +99,31 @@ public partial class MainWindow : Window
 
     void Mark_Click(object sender, RoutedEventArgs e)
     {
-        var mode = !A.Model.Allow ? "off" : A.Settings.Receive == "contacts" && AppleId.Present ? "contacts" : "everyone";
+        var mode = AppleId.Receiving;
         ReceiveList.Children.Clear();
-        foreach (var (key, text) in new[] { ("off", L.T("recv.off")), ("contacts", L.T("aid.contacts")), ("everyone", L.T("recv.everyone")) })
+        // Contacts Only shows once the experimental Apple ID switch is on.
+        var choices = A.Settings.AppleIdOn
+            ? new[] { ("off", L.T("recv.off")), ("contacts", L.T("aid.contacts")), ("everyone", L.T("recv.everyone")) }
+            : new[] { ("off", L.T("recv.off")), ("everyone", L.T("recv.everyone")) };
+        foreach (var (key, text) in choices)
             ReceiveList.Children.Add(Choice(text, mode == key, () =>
             {
                 ReceivePopup.IsOpen = false;
                 if (key == "contacts" && !AppleId.Present) { A.ShowSettings("appleid"); return; }
                 A.SetReceive(key);
             }));
-        ReceiveTip.Text = AppleId.Present ? "" : L.T("recv.needIdentity");
-        ReceiveTip.Visibility = AppleId.Present ? Visibility.Collapsed : Visibility.Visible;
+        ReceiveTip.Text = !A.Settings.AppleIdOn ? L.T("recv.enableHint") : AppleId.Present ? "" : L.T("recv.needIdentity");
+        ReceiveTip.Visibility = ReceiveTip.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         ReceivePopup.IsOpen = true;
     }
 
     /// <summary>The mark in the accent while receiving, grey while not, and what it means on hover.</summary>
     public void ShowMark()
     {
-        var off = !A.Model.Allow;
-        Mark.SetResourceReference(AirDropMark.BrushProperty, off ? "Text3" : "Accent");
+        var mode = AppleId.Receiving;
+        Mark.SetResourceReference(AirDropMark.BrushProperty, mode == "off" ? "Text3" : "Accent");
         MarkButton.ToolTip = L.T("recv.title") + ": " +
-            (off ? L.T("recv.off") : A.Settings.Receive == "contacts" && AppleId.Present ? L.T("aid.contacts") : L.T("recv.everyone"));
+            (mode == "off" ? L.T("recv.off") : mode == "contacts" ? L.T("aid.contacts") : L.T("recv.everyone"));
     }
 
     /// <summary>A row with a radio dot: the chosen one in the accent.</summary>

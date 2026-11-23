@@ -33,6 +33,13 @@ public static partial class AppleId
     /// <summary>appleid.exe is installed (it needs Rust at build time).</summary>
     public static bool CanSignIn => File.Exists(Exe);
 
+    /// <summary>The experimental switch is on and there is an identity: the engine uses it.</summary>
+    public static bool InUse => App.Instance.Settings.AppleIdOn && Present;
+
+    /// <summary>Who can send to this PC right now: "off", "contacts" or "everyone".</summary>
+    public static string Receiving =>
+        !App.Instance.Model.Allow ? "off" : App.Instance.Settings.Receive == "contacts" && InUse ? "contacts" : "everyone";
+
     public static bool Present =>
         File.Exists(Path.Combine(Dir, "certificate.der")) && File.Exists(Path.Combine(Dir, "key.pk8.der")) &&
         File.Exists(Path.Combine(Dir, "validation_record.cms"));

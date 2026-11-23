@@ -190,7 +190,7 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 ### Contacts Only (Apple ID, experimental)
 
-Settings → **Apple ID**: choose who can send to this PC, **Everyone** or **Contacts Only**. Contacts Only needs an AirDrop identity like a Mac's, which you get one of two ways:
+Settings → **Apple ID**: turn on the experimental switch at the top, then choose who can send to this PC, **Everyone** or **Contacts Only**. Contacts Only needs an AirDrop identity like a Mac's, which you get one of two ways:
 
 - **Sign in with Apple ID** on this PC. nekodrop asks Apple for an AirDrop certificate the way a Mac does (WirDrop's `appleid`, MIT), keeps it renewed and reads your iCloud contacts. The first sign-in downloads a component of iCloud for Windows from Apple (about 160 MB; iCloud isn't installed). The password is used once and never stored.
 - **Import from a Mac** signed in to your Apple ID: export `certificate.pem`, `key.pem` and `validation_record.cms` with [airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) (it needs SIP partly off), pick their folder, then import your contacts as a `.vcf`.

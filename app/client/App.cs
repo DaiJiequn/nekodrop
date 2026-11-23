@@ -575,7 +575,7 @@ public sealed class App : Application
         _appleIdTimer.Tick += async (_, _) =>
         {
             _appleIdTimer.Interval = TimeSpan.FromHours(12);
-            if (AppleId.Source != "appleid") return;
+            if (!Settings.AppleIdOn || AppleId.Source != "appleid") return;
             var before = AppleId.CertificateUntil;
             var result = await AppleId.Refresh();
             if (result == 0 && AppleId.CertificateUntil != before) RestartEngine();
@@ -593,6 +593,7 @@ public sealed class App : Application
         if (!Model.Allow) SetDiscoverable(true); // starts the engine, which reads the mode
         else if (changed) RestartEngine();
         _window?.ShowMark();
+        _settings?.ShowReceive();
     }
 
     public void SetDiscoverable(bool on)

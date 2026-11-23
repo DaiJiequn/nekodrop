@@ -163,6 +163,22 @@
         <!-- Apple ID and Contacts Only -->
         <StackPanel x:Name="PageAppleId" Visibility="Collapsed">
           <Border Style="{StaticResource CardPad}">
+            <DockPanel>
+              <CheckBox x:Name="AppleIdOnBox" DockPanel.Dock="Right" Style="{StaticResource WinToggle}" Margin="12,0,0,0"
+                        Checked="AppleIdOn_Changed" Unchecked="AppleIdOn_Changed"/>
+              <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{local:T aid.on}" Style="{StaticResource T13S}"/>
+                  <Border Background="{DynamicResource WarnBg}" CornerRadius="4" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="{local:T aid.experimental}" FontSize="11" Foreground="{DynamicResource Warn}"/>
+                  </Border>
+                </StackPanel>
+                <TextBlock Text="{local:T aid.onHint}" Style="{StaticResource Sub12}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <StackPanel x:Name="AppleIdBody">
+          <Border Style="{StaticResource CardPad}">
             <StackPanel>
               <TextBlock Text="{local:T aid.who}" Style="{StaticResource T13S}" Margin="0,0,0,2"/>
               <RadioButton x:Name="ReceiveEveryone" Style="{StaticResource ModeCard}" GroupName="receive"
@@ -194,6 +210,7 @@
               <TextBlock Text="{local:T aid.howNote}" Style="{StaticResource Sub12}" TextWrapping="Wrap" Margin="0,6,0,0"/>
             </StackPanel>
           </Border>
+          </StackPanel>
         </StackPanel>
 
         <!-- Card and advanced -->
