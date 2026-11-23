@@ -7,14 +7,23 @@ namespace NekoDrop;
 /// <summary>
 /// Colors after the Windows 11 design (Fluent): follow the system light/dark
 /// setting, with the user's accent color as the only accent; Segoe UI
-/// Variable for text and Segoe Fluent Icons for glyphs.
+/// Variable for text and Segoe Fluent Icons for glyphs. The accent can also
+/// be one the user picked in the settings.
 /// </summary>
 public static class Theme
 {
-    public static ResourceDictionary Build()
+    /// <summary>The colours offered in the settings, besides following Windows.</summary>
+    public static readonly string[] Accents = ["#0067C0", "#8764B8", "#038387", "#107C10", "#CA5010", "#C239B3", "#C42B1C"];
+
+    public static ResourceDictionary Build(string chosen = "", bool? forceDark = null)
     {
-        var dark = Native.AppsUseDarkTheme();
+        var dark = forceDark ?? Native.AppsUseDarkTheme();
         var accent = Native.Accent();
+        try
+        {
+            if (chosen.Length == 7 && chosen[0] == '#' && ColorConverter.ConvertFromString(chosen) is Color picked) accent = picked;
+        }
+        catch (FormatException) { }
         Color C(uint argb) => Color.FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
         SolidColorBrush B(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
         var d = new ResourceDictionary
@@ -30,6 +39,13 @@ public static class Theme
             ["CardStroke"] = B(dark ? C(0x19000000) : C(0x0F000000)),
             ["Divider"] = B(dark ? C(0x15FFFFFF) : C(0x0F000000)),
             ["DropWell"] = B(dark ? C(0x08FFFFFF) : C(0x06000000)),
+            ["AccentSubtle"] = B(Color.FromArgb(dark ? (byte)0x33 : (byte)0x1F, accent.R, accent.G, accent.B)),
+            ["RadarBg"] = B(dark ? C(0x08FFFFFF) : C(0x80FFFFFF)),
+            ["RingStroke"] = B(dark ? C(0x1FFFFFFF) : C(0x17000000)),
+            ["NodeFill"] = B(dark ? C(0xFF2D2D2D) : C(0xFFFFFFFF)),
+            ["Success"] = B(dark ? C(0xFF6CCB5F) : C(0xFF0F7B0F)),
+            ["Caution"] = B(dark ? C(0xFFFCE100) : C(0xFF9D5D00)),
+            ["Critical"] = B(dark ? C(0xFFFF99A4) : C(0xFFC42B1C)),
             ["UiFont"] = new FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"),
             ["IconFont"] = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),
         };

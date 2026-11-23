@@ -28,6 +28,26 @@
       <Setter Property="Foreground" Value="{DynamicResource Text}"/>
       <Setter Property="Margin" Value="0,6,0,0"/>
     </Style>
+    <!-- An accent colour to pick: a dot, ringed when chosen -->
+    <Style x:Key="Swatch" TargetType="RadioButton">
+      <Setter Property="Margin" Value="0,0,10,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="GroupName" Value="accent"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Grid Width="30" Height="30">
+              <Ellipse x:Name="ring" Stroke="{DynamicResource Text}" StrokeThickness="2" Visibility="Hidden"/>
+              <Ellipse Margin="4" Fill="{TemplateBinding Background}"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True"><Setter TargetName="ring" Property="Visibility" Value="Visible"/></Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="ring" Property="Visibility" Value="Visible"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
   </Window.Resources>
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel Margin="24,16,24,20">
@@ -82,6 +102,17 @@
             <ComboBoxItem Tag="zh" Content="简体中文"/>
             <ComboBoxItem Tag="en" Content="English"/>
           </ComboBox>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource CardBox}">
+        <StackPanel>
+          <TextBlock Text="{local:T set.accent}" FontWeight="SemiBold"/>
+          <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <RadioButton x:Name="AccentSystem" Content="{local:T set.accent.system}" GroupName="accent"
+                         VerticalAlignment="Center" Margin="0,0,16,0"/>
+            <StackPanel x:Name="AccentPanel" Orientation="Horizontal"/>
+          </StackPanel>
         </StackPanel>
       </Border>
 

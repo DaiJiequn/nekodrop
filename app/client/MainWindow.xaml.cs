@@ -21,13 +21,11 @@ public partial class MainWindow : Window
         {
             if (Native.ApplyMica(this)) Background = Brushes.Transparent;
         };
-        A.Model.Devices.CollectionChanged += Refresh;
         A.Model.Files.CollectionChanged += Refresh;
         Drop += OnDrop;
         DragOver += (_, e) => { e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
         Closed += (_, _) =>
         {
-            A.Model.Devices.CollectionChanged -= Refresh;
             A.Model.Files.CollectionChanged -= Refresh;
             A.WindowClosed();
         };
@@ -49,7 +47,6 @@ public partial class MainWindow : Window
 
     void Refresh(object? s, NotifyCollectionChangedEventArgs? e)
     {
-        NoDevices.Visibility = A.Model.Devices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         DropHint.Visibility = A.Model.Files.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -57,13 +54,6 @@ public partial class MainWindow : Window
     {
         if (e.Data.GetData(DataFormats.FileDrop) is string[] paths)
             foreach (var p in paths) if (!A.Model.Files.Contains(p)) A.Model.Files.Add(p);
-    }
-
-    void Device_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as Button)?.Tag is not Device d) return;
-        if (A.Model.Files.Count == 0) { Add_Click(sender, e); if (A.Model.Files.Count == 0) return; }
-        A.SendTo(d);
     }
 
     void Add_Click(object sender, RoutedEventArgs e)

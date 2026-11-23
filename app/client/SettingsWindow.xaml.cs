@@ -18,6 +18,19 @@ public partial class SettingsWindow : Window
         AskBox.IsChecked = s.Ask;
         StartupBox.IsChecked = s.StartWithWindows;
         LanguageBox.SelectedIndex = s.Language switch { "zh" => 1, "en" => 2, _ => 0 };
+        foreach (var hex in Theme.Accents)
+        {
+            var dot = new System.Windows.Controls.RadioButton
+            {
+                Style = (Style)FindResource("Swatch"),
+                Tag = hex,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!),
+                ToolTip = hex,
+                IsChecked = string.Equals(hex, s.Accent, StringComparison.OrdinalIgnoreCase),
+            };
+            AccentPanel.Children.Add(dot);
+        }
+        AccentSystem.IsChecked = !Theme.Accents.Contains(s.Accent, StringComparer.OrdinalIgnoreCase);
         foreach (var t in s.AlwaysAccept) TrustedList.Items.Add(t.Replace("|", " · "));
         var mode = (string?)A.Service.Last?["mode"] ?? "concurrent";
         ModeConcurrent.IsChecked = mode == "concurrent";
@@ -163,6 +176,10 @@ public partial class SettingsWindow : Window
         var languageChanged = language != s.Language;
         s.Language = language;
         s.AlwaysAccept = TrustedList.Items.Cast<string>().Select(x => x.Replace(" · ", "|")).ToList();
+        var accent = AccentPanel.Children.OfType<System.Windows.Controls.RadioButton>()
+            .FirstOrDefault(r => r.IsChecked == true)?.Tag as string ?? "";
+        var accentChanged = accent != s.Accent;
+        s.Accent = accent;
         s.Save();
         try { Shell.Register(s.StartWithWindows); } catch (Exception) { }
         A.Engine.Apply(s);
@@ -173,6 +190,7 @@ public partial class SettingsWindow : Window
         var coexPlan = CoexPlanBox.IsChecked == true;
         if (coexPlan != ((bool?)A.Service.Last?["coexPlan"] ?? false)) A.Service.SetCoexPlan(coexPlan);
         A.Window?.FolderChanged();
+        if (accentChanged) A.ApplyTheme();
         if (languageChanged) A.ApplyLanguage();
         Close();
     }

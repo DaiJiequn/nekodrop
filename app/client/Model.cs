@@ -41,6 +41,9 @@ public sealed class Device : Observable
     public string Status { get => _status; set => Set(ref _status, value); }
     public double Progress { get => _progress; set => Set(ref _progress, value); }
     public bool Busy { get => _busy; set => Set(ref _busy, value); }
+    string _state = "";
+    /// <summary>What became of the last send: "", asking, sending, sent, declined or failed (colours the radar).</summary>
+    public string State { get => _state; set => Set(ref _state, value); }
 }
 
 /// <summary>Someone asking to send.</summary>
@@ -71,8 +74,10 @@ public sealed class AppModel : Observable
     public ObservableCollection<string> Files { get; } = [];
     public ObservableCollection<Received> ReceivedFiles { get; } = [];
     string _status = L.T("status.connecting"), _detail = "";
-    bool _looking;
+    bool _looking, _radioOn;
     public string Status { get => _status; set => Set(ref _status, value); }
     public string Detail { get => _detail; set => Set(ref _detail, value); }
     public bool Looking { get => _looking; set => Set(ref _looking, value); }
+    /// <summary>The radio is on and AirDrop listens (the radar's ripples run).</summary>
+    public bool RadioOn { get => _radioOn; set => Set(ref _radioOn, value); }
 }

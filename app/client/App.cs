@@ -59,7 +59,7 @@ public sealed class App : Application
         if (snap >= 0 && snap + 1 < _startArgs.Length) { Snapshot(_startArgs[snap + 1]); return; }
         Shell.SetIdentity();
         try { Shell.Register(Settings.StartWithWindows); } catch (Exception) { }
-        Resources.MergedDictionaries.Add(Theme.Build());
+        ApplyTheme();
         CreateTray();
         Service.State += o => Dispatcher.BeginInvoke(() => OnServiceState(o));
         Service.Connected += up => Dispatcher.BeginInvoke(() =>
@@ -261,25 +261,39 @@ public sealed class App : Application
     {
         var lang = Array.IndexOf(_startArgs, "--lang");
         if (lang >= 0 && lang + 1 < _startArgs.Length) L.Use(_startArgs[lang + 1]);
-        Resources.MergedDictionaries.Add(Theme.Build());
+        _theme = Theme.Build(Settings.Accent, _startArgs.Contains("--dark") ? true : _startArgs.Contains("--light") ? false : null);
+        Resources.MergedDictionaries.Add(_theme);
         Directory.CreateDirectory(dir);
         Model.Status = L.F("status.on", 44);
         Model.Detail = "Wi-Fi: " + L.T("wifi.connected");
+        Model.RadioOn = true;
         Model.Devices.Add(new Device { Id = "a", Name = "iPhone", Model = "iPhone15,2" });
-        Model.Devices.Add(new Device { Id = "b", Name = "MacBook Air", Model = "Mac14,2", Busy = true, Progress = 0.42, Status = L.F("send.sending", 0.42) });
+        Model.Devices.Add(new Device { Id = "b", Name = "MacBook Air", Model = "Mac14,2", Busy = true, Progress = 0.42, State = "sending", Status = L.F("send.sending", 0.42) });
+        Model.Devices.Add(new Device { Id = "c", Name = "iPad Pro", Model = "iPad14,5", State = "sent", Status = L.T("send.sent") });
+        Model.Devices.Add(new Device { Id = "d", Name = "iPhone 15 Pro Max", Model = "iPhone16,2", State = "declined", Status = L.T("send.declined") });
         Model.Requests.Add(new Request { Id = "r", Sender = "iPhone", Model = "iPhone15,2", What = L.F("what.photos", 2) });
         Model.ReceivedFiles.Add(new Received { Name = "IMG_0042.HEIC", Path = "", From = "iPhone" });
         foreach (var f in _startArgs.SkipWhile(a => a != "--send").Skip(1).TakeWhile(a => !a.StartsWith("--")))
             Model.Files.Add(f);
-        var windows = new (string Name, Window W)[] { ("send", new SendWindow()), ("main", new MainWindow()), ("settings", new SettingsWindow()) };
+        // Each window is built just before it is drawn, so a variant (the list, no
+        // devices) can change the settings and the model first.
+        var windows = new (string Name, Func<Window> Make)[]
+        {
+            ("send", () => new SendWindow()),
+            ("main", () => new MainWindow()),
+            ("main-list", () => { Settings.DeviceView = "list"; return new MainWindow(); }),
+            ("main-empty", () => { Settings.DeviceView = "radar"; Model.Devices.Clear(); return new MainWindow(); }),
+            ("settings", () => new SettingsWindow()),
+        };
         if (_startArgs.Contains("--live"))
         {
             // On screen, captured from the screen: shows the real backdrop (Mica).
-            _ = LiveSnapshot(dir, windows);
+            _ = LiveSnapshot(dir, windows.Select(x => (x.Name, x.Make())).ToArray());
             return;
         }
-        foreach (var (name, w) in windows)
+        foreach (var (name, make) in windows)
         {
+            var w = make();
             w.WindowStartupLocation = WindowStartupLocation.Manual;
             w.Left = -20000; w.Top = -20000; w.ShowActivated = false; w.ShowInTaskbar = false;
             w.Show();
@@ -321,6 +335,17 @@ public sealed class App : Application
         if (_send.WindowState == WindowState.Minimized) _send.WindowState = WindowState.Normal;
         _send.Activate();
         Engine.Look(true);
+    }
+
+    ResourceDictionary? _theme;
+
+    /// <summary>The colours, again after the accent setting changes: every window follows (DynamicResource).</summary>
+    public void ApplyTheme()
+    {
+        var fresh = Theme.Build(Settings.Accent);
+        if (_theme is not null) Resources.MergedDictionaries.Remove(_theme);
+        Resources.MergedDictionaries.Add(fresh);
+        _theme = fresh;
     }
 
     /// <summary>After the language setting changes: menus, Explorer verb and open windows follow.</summary>
@@ -480,6 +505,7 @@ public sealed class App : Application
         var id = Guid.NewGuid().ToString("N")[..12];
         _sendTarget[id] = d.Id;
         d.Busy = true;
+        d.State = "asking";
         d.Status = L.T("send.asking");
         d.Progress = 0;
         Service.Touch();
@@ -537,6 +563,7 @@ public sealed class App : Application
             StartEngine();
         }
         _lastRadio = radio ?? "";
+        Model.RadioOn = radio == "on";
         var wifiNow = (string?)o["wifi"] ?? "";
         if (wifiNow == "connected" && _lastWifi != "connected") _ = CheckPortal((string?)o["ssid"] ?? "");
         _lastWifi = wifiNow;
@@ -643,6 +670,7 @@ public sealed class App : Application
                 var d = Model.Devices.FirstOrDefault(x => x.Id == target);
                 if (d is null) break;
                 var state = (string?)o["state"];
+                d.State = state is "done" ? "sent" : state ?? "";
                 var total = (double?)o["total"] ?? 0;
                 var done = (double?)o["done"] ?? (double?)o["sent"] ?? 0;
                 d.Progress = total > 0 ? done / total : d.Progress;

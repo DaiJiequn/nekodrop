@@ -25,6 +25,10 @@ public sealed class Settings
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Count pre-releases as updates (every nekodrop release is one for now).</summary>
     public bool PreviewUpdates { get; set; } = true;
+    /// <summary>Nearby devices as a "radar" or a "list".</summary>
+    public string DeviceView { get; set; } = "radar";
+    /// <summary>The accent colour: "" follows Windows, otherwise "#RRGGBB".</summary>
+    public string Accent { get; set; } = "";
     /// <summary>A version the user chose to skip.</summary>
     public string SkipVersion { get; set; } = "";
 
