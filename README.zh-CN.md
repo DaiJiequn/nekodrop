@@ -15,7 +15,7 @@
 
 <p align="center">
   <img alt="platform" src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011%20x64-0078d4">
-  <img alt="card" src="https://img.shields.io/badge/card-Intel%20AX201%20%7C%20AX200%20%7C%20AX210%20%7C%20AX211%20(user%20reports)-6c5ce7">
+  <img alt="card" src="https://img.shields.io/badge/card-Intel%20AX201%20%7C%20AX200%20%7C%20AX210%20%7C%20AX211%20%C2%B7%20Realtek%20RTL8852CE%20%C2%B7%20MediaTek%20MT7902-6c5ce7">
   <img alt="license" src="https://img.shields.io/badge/license-GPL--2.0-blue">
   <img alt="status" src="https://img.shields.io/badge/status-preview-yellow">
 </p>
