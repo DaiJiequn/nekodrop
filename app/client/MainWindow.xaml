@@ -101,31 +101,6 @@
     <!-- Content -->
     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
       <StackPanel Margin="20,16,20,16">
-        <!-- Someone wants to send -->
-        <ItemsControl ItemsSource="{Binding Requests}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <Border Style="{StaticResource WinCard}" Padding="14,12" Margin="0,0,0,12">
-                <DockPanel>
-                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                    <Button Content="{local:T accept}" Style="{StaticResource WinPrimary}" Click="Accept_Click" Tag="{Binding Id}" Padding="14,7"/>
-                    <Button Content="{local:T decline}" Style="{StaticResource WinButton}" Click="Decline_Click" Tag="{Binding Id}" Padding="12,7" Margin="8,0,0,0"/>
-                  </StackPanel>
-                  <StackPanel VerticalAlignment="Center">
-                    <TextBlock FontSize="13" TextWrapping="Wrap">
-                      <Run Text="{Binding Sender, Mode=OneWay}" FontWeight="SemiBold"/><Run Text="{local:T main.wants}"/><Run Text="{Binding What, Mode=OneWay}"/>
-                    </TextBlock>
-                    <TextBlock Text="{Binding Status}" Style="{StaticResource Sub12}" Margin="0,2,0,0"/>
-                    <Border Height="4" CornerRadius="2" Background="{DynamicResource Border}" Margin="0,8,0,0">
-                      <local:Bar Progress="{Binding Progress}" Fill="{DynamicResource Accent}"/>
-                    </Border>
-                  </StackPanel>
-                </DockPanel>
-              </Border>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
         <!-- Nearby devices -->
         <local:RadarView Height="400"/>
 

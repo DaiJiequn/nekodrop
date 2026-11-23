@@ -33,6 +33,7 @@ public partial class SettingsWindow : Window
         HotkeyBox.IsChecked = s.Hotkey;
         LanguageBox.SelectedIndex = s.Language switch { "zh" => 1, "en" => 2, _ => 0 };
         BuildAccents(s.Accent);
+        (s.HubIcon switch { "desktop" => HubDesktop, "laptop" => HubLaptop, _ => HubAuto }).IsChecked = true;
         _trusted = [.. s.AlwaysAccept];
         ShowTrusted();
         var mode = (string?)A.Service.Last?["mode"] ?? "concurrent";
@@ -274,6 +275,7 @@ public partial class SettingsWindow : Window
         var languageChanged = language != s.Language;
         s.Language = language;
         s.AlwaysAccept = [.. _trusted];
+        s.HubIcon = HubDesktop.IsChecked == true ? "desktop" : HubLaptop.IsChecked == true ? "laptop" : "auto";
         var accent = ChosenAccent();
         var accentChanged = accent != s.Accent;
         s.Accent = accent;

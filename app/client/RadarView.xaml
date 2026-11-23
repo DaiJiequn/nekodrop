@@ -98,35 +98,91 @@
       </Style.Triggers>
     </Style>
 
+    <!-- The bubble a sender's request opens under (or, low on the radar, above) its icon -->
+    <Style x:Key="AskBubble" TargetType="Border">
+      <Setter Property="Width" Value="140"/>
+      <Setter Property="Height" Value="70"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="8,7"/>
+      <Setter Property="Background" Value="{DynamicResource MicaSolid}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.16"/></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="SmallPrimary" TargetType="Button" BasedOn="{StaticResource WinPrimary}">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="0,4"/>
+    </Style>
+    <Style x:Key="SmallButton" TargetType="Button" BasedOn="{StaticResource WinButton}">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="0,4"/>
+    </Style>
+
     <!-- A device on the radar: a 50 px circle on the orbit, name and status below -->
     <DataTemplate x:Key="RadarNode" DataType="local:Device">
-      <Button x:Name="node" Style="{StaticResource Bare}" Tag="{Binding}" Click="Node_Click"
-              DragEnter="Node_DragEnter" DragOver="Node_DragOver" DragLeave="Node_DragLeave" Drop="Node_Drop"
-              Width="112" RenderTransformOrigin="0.5,0.27"
-              AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding Status}">
-        <Button.RenderTransform>
-          <TransformGroup>
-            <ScaleTransform x:Name="grow"/>
-            <TranslateTransform x:Name="shake"/>
-          </TransformGroup>
-        </Button.RenderTransform>
-        <StackPanel Margin="0,4">
-          <Grid Width="50" Height="50" HorizontalAlignment="Center">
-            <Ellipse x:Name="Glow" Margin="-6" Fill="{DynamicResource AccentSubtle}" Visibility="Hidden"/>
-            <Ellipse x:Name="Disc" Fill="{DynamicResource CardHover}" Stroke="{DynamicResource BorderStrong}" StrokeThickness="1"/>
-            <Ellipse Style="{StaticResource OutcomeRing}" Margin="1"/>
-            <!-- Its own transform, not the style's: a style's is frozen and cannot turn -->
-            <Ellipse Style="{StaticResource WaitRing}" Margin="1" RenderTransformOrigin="0.5,0.5">
-              <Ellipse.RenderTransform><RotateTransform/></Ellipse.RenderTransform>
-            </Ellipse>
-            <local:ProgressRing Style="{StaticResource SendRing}" Margin="1"/>
-            <TextBlock Style="{StaticResource NodeGlyph}" FontSize="19"/>
+      <Grid Width="112">
+        <Button x:Name="node" Style="{StaticResource Bare}" Tag="{Binding}" Click="Node_Click"
+                DragEnter="Node_DragEnter" DragOver="Node_DragOver" DragLeave="Node_DragLeave" Drop="Node_Drop"
+                RenderTransformOrigin="0.5,0.27" VerticalAlignment="Top"
+                AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding Status}">
+          <Button.RenderTransform>
+            <TransformGroup>
+              <ScaleTransform x:Name="grow"/>
+              <TranslateTransform x:Name="shake"/>
+            </TransformGroup>
+          </Button.RenderTransform>
+          <StackPanel Margin="0,4">
+            <Grid Width="50" Height="50" HorizontalAlignment="Center">
+              <!-- A request: a soft accent halo that breathes -->
+              <Ellipse x:Name="AskGlow" Margin="-9" Fill="{DynamicResource AccentSubtle}" Visibility="Hidden" RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform><ScaleTransform x:Name="askBreath"/></Ellipse.RenderTransform>
+              </Ellipse>
+              <Ellipse x:Name="Glow" Margin="-6" Fill="{DynamicResource AccentSubtle}" Visibility="Hidden"/>
+              <Ellipse x:Name="Disc" Fill="{DynamicResource CardHover}" Stroke="{DynamicResource BorderStrong}" StrokeThickness="1"/>
+              <Ellipse Style="{StaticResource OutcomeRing}" Margin="1"/>
+              <!-- Its own transform, not the style's: a style's is frozen and cannot turn -->
+              <Ellipse Style="{StaticResource WaitRing}" Margin="1" RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform><RotateTransform/></Ellipse.RenderTransform>
+              </Ellipse>
+              <local:ProgressRing Style="{StaticResource SendRing}" Margin="1"/>
+              <TextBlock Style="{StaticResource NodeGlyph}" FontSize="19"/>
+            </Grid>
+            <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis" Margin="2,4,2,0" ToolTip="{Binding Name}"/>
+            <TextBlock x:Name="status" Text="{Binding Status}" Style="{StaticResource StateText}" TextAlignment="Center" Margin="2,1,2,0"/>
+          </StackPanel>
+        </Button>
+
+        <!-- The request: wants to send…, accept / decline; then receiving with a bar -->
+        <Canvas x:Name="bubbleHost" Visibility="Collapsed" Panel.ZIndex="5">
+          <Grid x:Name="bubble" Canvas.Left="-14" Canvas.Top="92">
+            <Path x:Name="notchUp" Data="M0,6 L6,0 L12,6" Fill="{DynamicResource MicaSolid}" Stroke="{DynamicResource Accent}" StrokeThickness="1"
+                  HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-5,0,0" Panel.ZIndex="1"/>
+            <Path x:Name="notchDown" Data="M0,0 L6,6 L12,0" Fill="{DynamicResource MicaSolid}" Stroke="{DynamicResource Accent}" StrokeThickness="1"
+                  HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-5" Panel.ZIndex="1" Visibility="Collapsed"/>
+            <Border Style="{StaticResource AskBubble}" DataContext="{Binding Ask}">
+              <Grid>
+                <StackPanel x:Name="asking" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Wants}" FontSize="11" FontWeight="SemiBold" TextAlignment="Center"
+                             TextTrimming="CharacterEllipsis" ToolTip="{Binding Wants}"/>
+                  <UniformGrid Columns="2" Margin="0,6,0,0">
+                    <Button Style="{StaticResource SmallPrimary}" Content="{local:T accept}" Tag="{Binding Id}" Click="Accept_Click" Margin="0,0,3,0"/>
+                    <Button Style="{StaticResource SmallButton}" Content="{local:T decline}" Tag="{Binding Id}" Click="Decline_Click" Margin="3,0,0,0"/>
+                  </UniformGrid>
+                </StackPanel>
+                <StackPanel x:Name="receiving" VerticalAlignment="Center" Visibility="Collapsed">
+                  <TextBlock FontSize="11" FontWeight="SemiBold" TextAlignment="Center" Foreground="{DynamicResource Accent}"
+                             Text="{Binding Progress, StringFormat={}{0:P0}}"/>
+                  <Border Height="4" CornerRadius="2" Background="{DynamicResource Border}" Margin="6,7,6,0">
+                    <local:Bar Progress="{Binding Progress}" Fill="{DynamicResource Accent}"/>
+                  </Border>
+                  <TextBlock Text="{local:T req.receiving}" Style="{StaticResource Dim11}" TextAlignment="Center" Margin="0,5,0,0"/>
+                </StackPanel>
+              </Grid>
+            </Border>
           </Grid>
-          <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" TextAlignment="Center"
-                     TextTrimming="CharacterEllipsis" Margin="2,4,2,0" ToolTip="{Binding Name}"/>
-          <TextBlock Text="{Binding Status}" Style="{StaticResource StateText}" TextAlignment="Center" Margin="2,1,2,0"/>
-        </StackPanel>
-      </Button>
+        </Canvas>
+      </Grid>
       <DataTemplate.Triggers>
         <Trigger SourceName="node" Property="IsMouseOver" Value="True">
           <Trigger.EnterActions>
@@ -160,6 +216,35 @@
             </BeginStoryboard>
           </DataTrigger.EnterActions>
         </DataTrigger>
+        <!-- Someone asks: the halo breathes and the bubble opens; the status line gives way to it -->
+        <DataTrigger Binding="{Binding Ask, Converter={x:Static local:IsSet.Instance}}" Value="True">
+          <Setter TargetName="bubbleHost" Property="Visibility" Value="Visible"/>
+          <Setter TargetName="AskGlow" Property="Visibility" Value="Visible"/>
+          <Setter TargetName="status" Property="Visibility" Value="Hidden"/>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard x:Name="askPulse">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <DoubleAnimation Storyboard.TargetName="askBreath" Storyboard.TargetProperty="ScaleX" From="0.86" To="1.12" Duration="0:0:1.2">
+                  <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="askBreath" Storyboard.TargetProperty="ScaleY" From="0.86" To="1.12" Duration="0:0:1.2">
+                  <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions><StopStoryboard BeginStoryboardName="askPulse"/></DataTrigger.ExitActions>
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Ask.Receiving}" Value="True">
+          <Setter TargetName="asking" Property="Visibility" Value="Collapsed"/>
+          <Setter TargetName="receiving" Property="Visibility" Value="Visible"/>
+        </DataTrigger>
+        <!-- Low on the radar: the bubble opens above the icon, its notch pointing down -->
+        <DataTrigger Binding="{Binding (local:RadarPanel.Lower), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" Value="True">
+          <Setter TargetName="bubble" Property="Canvas.Top" Value="-74"/>
+          <Setter TargetName="notchUp" Property="Visibility" Value="Collapsed"/>
+          <Setter TargetName="notchDown" Property="Visibility" Value="Visible"/>
+        </DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
 
@@ -170,9 +255,16 @@
         <DockPanel>
           <Grid DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0,0,0">
             <Button x:Name="send" Style="{StaticResource WinButton}" Content="{local:T dev.send}" Tag="{Binding}" Click="Node_Click" Padding="12,6"/>
+            <StackPanel x:Name="answer" Orientation="Horizontal" Visibility="Collapsed" DataContext="{Binding Ask}">
+              <Button Style="{StaticResource WinPrimary}" Content="{local:T accept}" Tag="{Binding Id}" Click="Accept_Click" Padding="12,6"/>
+              <Button Style="{StaticResource WinButton}" Content="{local:T decline}" Tag="{Binding Id}" Click="Decline_Click" Padding="12,6" Margin="6,0,0,0"/>
+            </StackPanel>
             <TextBlock x:Name="waiting" Text="{local:T dev.waiting}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Visibility="Collapsed"/>
             <Border x:Name="bar" Width="96" Height="6" CornerRadius="3" Background="{DynamicResource Border}" Visibility="Collapsed" ClipToBounds="True">
               <local:Bar Progress="{Binding Progress}" Fill="{DynamicResource Accent}"/>
+            </Border>
+            <Border x:Name="inbar" Width="96" Height="6" CornerRadius="3" Background="{DynamicResource Border}" Visibility="Collapsed" ClipToBounds="True">
+              <local:Bar Progress="{Binding Ask.Progress}" Fill="{DynamicResource Accent}"/>
             </Border>
             <StackPanel x:Name="done" Orientation="Horizontal" Visibility="Collapsed">
               <TextBlock FontFamily="{DynamicResource IconFont}" Text="&#xE73E;" FontSize="12" Foreground="{DynamicResource Success}" VerticalAlignment="Center" Margin="0,1,4,0"/>
@@ -204,6 +296,14 @@
         <DataTrigger Binding="{Binding State}" Value="sent">
           <Setter TargetName="send" Property="Visibility" Value="Collapsed"/><Setter TargetName="done" Property="Visibility" Value="Visible"/>
         </DataTrigger>
+        <DataTrigger Binding="{Binding Ask, Converter={x:Static local:IsSet.Instance}}" Value="True">
+          <Setter TargetName="send" Property="Visibility" Value="Collapsed"/><Setter TargetName="answer" Property="Visibility" Value="Visible"/>
+          <Setter TargetName="row" Property="BorderBrush" Value="{DynamicResource Accent}"/>
+          <Setter TargetName="row" Property="Background" Value="{DynamicResource AccentSubtle}"/>
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Ask.Receiving}" Value="True">
+          <Setter TargetName="answer" Property="Visibility" Value="Collapsed"/><Setter TargetName="inbar" Property="Visibility" Value="Visible"/>
+        </DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
   </UserControl.Resources>
@@ -229,8 +329,20 @@
         <!-- Radar -->
         <Grid x:Name="RadarLayer" SizeChanged="RadarLayer_SizeChanged">
           <Canvas x:Name="Rings" IsHitTestVisible="False"/>
+          <!-- Arrows between this PC and the devices it sends to or hears from (drawn by code) -->
+          <Canvas x:Name="Arrows" IsHitTestVisible="False"/>
           <ItemsControl x:Name="RadarItems" ItemTemplate="{StaticResource RadarNode}" Focusable="False">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><local:RadarPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemContainerStyle>
+              <!-- A device with an open request bubble stays above its neighbours -->
+              <Style TargetType="ContentPresenter">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Ask, Converter={x:Static local:IsSet.Instance}}" Value="True">
+                    <Setter Property="Panel.ZIndex" Value="10"/>
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ItemsControl.ItemContainerStyle>
           </ItemsControl>
           <!-- Below the hub: looking, standby, starting -->
           <StackPanel x:Name="Hint" VerticalAlignment="Bottom" Margin="20,0,20,16">

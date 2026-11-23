@@ -57,6 +57,15 @@ public readonly record struct RadarGeometry(Point Center, double Orbit, double I
 /// <summary>Puts its children (device boxes) on the radar's orbit.</summary>
 public sealed class RadarPanel : Panel
 {
+    /// <summary>
+    /// Set on each child: it sits in the lower half, so its request bubble
+    /// opens above the icon instead of below the name (it would leave the stage).
+    /// </summary>
+    public static readonly DependencyProperty LowerProperty = DependencyProperty.RegisterAttached(
+        "Lower", typeof(bool), typeof(RadarPanel), new FrameworkPropertyMetadata(false));
+    public static bool GetLower(DependencyObject d) => (bool)d.GetValue(LowerProperty);
+    public static void SetLower(DependencyObject d, bool value) => d.SetValue(LowerProperty, value);
+
     protected override Size MeasureOverride(Size available)
     {
         foreach (UIElement c in InternalChildren)
@@ -72,6 +81,7 @@ public sealed class RadarPanel : Panel
         for (var i = 0; i < n; i++)
         {
             var p = g.IconCenter(i, n);
+            SetLower(InternalChildren[i], p.Y > g.Center.Y + 1);
             // The icon is at the top of the box: its center is padding and half an icon down.
             InternalChildren[i].Arrange(new Rect(p.X - RadarGeometry.NodeWidth / 2, p.Y - 4 - RadarGeometry.Node / 2,
                                                  RadarGeometry.NodeWidth, RadarGeometry.NodeHeight));
@@ -208,6 +218,15 @@ public sealed class AirDropMark : FrameworkElement
         }
         dc.DrawEllipse(Brush, null, c, 2.4 * k, 2.4 * k);
     }
+}
+
+/// <summary>True when the value is not null (a request is open).</summary>
+public sealed class IsSet : System.Windows.Data.IValueConverter
+{
+    public static readonly IsSet Instance = new();
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => value is not null;
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) =>
+        throw new NotSupportedException();
 }
 
 /// <summary>Windows' "Animation effects" setting: off means no looping motion.</summary>

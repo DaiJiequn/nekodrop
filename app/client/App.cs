@@ -17,6 +17,8 @@ public sealed class App : Application
     public static int Main(string[] args)
     {
         if (args.Contains("--unregister")) { Shell.Unregister(); return 0; }
+        // Chosen in the Share sheet: send what was shared, like Explorer's verb.
+        if (args.Length == 0 && Shell.SharedFiles() is { Length: > 0 } shared) args = ["--send", .. shared];
         var pipeName = "nekodrop-ui-" + WindowsIdentity.GetCurrent().User?.Value;
         using var single = new Mutex(true, @"Local\nekodrop-ui", out var first);
         if (!first && !args.Contains("--snapshot"))
@@ -269,7 +271,9 @@ public sealed class App : Application
         Model.Devices.Add(new Device { Id = "b", Name = "MacBook Air", Model = "Mac14,2", Busy = true, Progress = 0.42, State = "sending", Status = L.F("send.sending", 0.42) });
         Model.Devices.Add(new Device { Id = "c", Name = "iPad Pro", Model = "iPad14,5", State = "sent", Status = L.T("send.sent") });
         Model.Devices.Add(new Device { Id = "d", Name = "iPhone 15 Pro Max", Model = "iPhone16,2", State = "declined", Status = L.T("send.declined") });
-        Model.Requests.Add(new Request { Id = "r", Sender = "iPhone", Model = "iPhone15,2", What = L.F("what.photos", 2) });
+        var asking = new Request { Id = "r", Sender = "iPhone", Model = "iPhone15,2", What = L.F("what.photos", 3) };
+        Model.Requests.Add(asking);
+        Model.Devices[0].Ask = asking; // the bubble under its icon and the arrow towards this PC
         Model.ReceivedFiles.Add(new Received { Name = "IMG_0042.HEIC", Path = "", From = "iPhone" });
         Model.ReceivedFiles.Add(new Received { Name = L.F("what.videos", 1), Path = "", From = "MacBook Air", Failed = true });
         Model.Files.Add(@"C:\Users\me\Pictures\IMG_2048.HEIC");
@@ -601,8 +605,31 @@ public sealed class App : Application
     public void Answer(string id, bool accept)
     {
         Engine.Answer(id, accept);
-        if (_requests.TryGetValue(id, out var r)) r.Status = accept ? L.T("req.receiving") : L.T("req.declined");
-        if (!accept && _requests.Remove(id, out var gone)) Model.Requests.Remove(gone);
+        if (_requests.TryGetValue(id, out var r))
+        {
+            r.Status = accept ? L.T("req.receiving") : L.T("req.declined");
+            r.Receiving = accept;
+        }
+        if (!accept && _requests.Remove(id, out var gone)) { Model.Requests.Remove(gone); DetachAsk(gone); }
+    }
+
+    /// <summary>
+    /// A request goes under its sender's icon on the radar: the device of the
+    /// same name, or one put there for it (the sender was not among the devices found).
+    /// </summary>
+    void AttachAsk(Request r)
+    {
+        var d = Model.Devices.FirstOrDefault(x => string.Equals(x.Name, r.Sender, StringComparison.OrdinalIgnoreCase) && x.Ask is null);
+        if (d is null) Model.Devices.Add(d = new Device { Id = "ask:" + r.Id, Name = r.Sender, Model = r.Model, ForAsk = true });
+        d.Ask = r;
+    }
+
+    void DetachAsk(Request r)
+    {
+        var d = Model.Devices.FirstOrDefault(x => x.Ask == r);
+        if (d is null) return;
+        d.Ask = null;
+        if (d.ForAsk) Model.Devices.Remove(d);
     }
 
     public void SendTo(Device d)
@@ -750,6 +777,7 @@ public sealed class App : Application
                 var r = new Request { Id = id, Sender = sender, Model = model, What = what };
                 _requests[id] = r;
                 Model.Requests.Insert(0, r);
+                AttachAsk(r);
                 Shell.AskToast(id, sender, what);
                 break;
             }
@@ -759,6 +787,7 @@ public sealed class App : Application
                     var total = (double?)o["total"] ?? 0;
                     inc.Progress = total > 0 ? ((double?)o["done"] ?? 0) / total : 0;
                     inc.Status = L.T("req.receiving");
+                    inc.Receiving = true;
                 }
                 Service.Touch();
                 break;
@@ -766,7 +795,7 @@ public sealed class App : Application
             {
                 var folder = (string?)o["folder"] ?? Settings.SaveFolder;
                 var from = _requests.TryGetValue(id, out var st) ? st.Sender : "AirDrop";
-                if (st is not null) { _requests.Remove(id); Model.Requests.Remove(st); }
+                if (st is not null) { _requests.Remove(id); Model.Requests.Remove(st); DetachAsk(st); }
                 if (o["files"] is JsonArray stored)
                     foreach (var f in stored)
                     {
@@ -780,6 +809,7 @@ public sealed class App : Application
                 if (_requests.Remove(id, out var lost))
                 {
                     Model.Requests.Remove(lost);
+                    DetachAsk(lost);
                     Model.ReceivedFiles.Insert(0, new Received { Name = lost.What, Path = "", From = lost.Sender, Failed = true });
                     Shell.DoneToast(id, L.F("done.lost", lost.Sender), (string?)o["reason"] ?? "", null);
                 }

@@ -89,6 +89,18 @@
           </Border>
 
           <Border Style="{StaticResource CardPad}">
+            <DockPanel>
+              <Border DockPanel.Dock="Right" Style="{StaticResource SegmentBox}" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                  <RadioButton x:Name="HubAuto" Style="{StaticResource Segment}" Content="{local:T set.hubIcon.auto}" GroupName="hub"/>
+                  <RadioButton x:Name="HubDesktop" Style="{StaticResource Segment}" Content="{local:T set.hubIcon.desktop}" Tag="&#xE7F4;" GroupName="hub"/>
+                  <RadioButton x:Name="HubLaptop" Style="{StaticResource Segment}" Content="{local:T set.hubIcon.laptop}" Tag="&#xE7F8;" GroupName="hub"/>
+                </StackPanel>
+              </Border>
+              <TextBlock Text="{local:T set.hubIcon}" Style="{StaticResource T13S}" VerticalAlignment="Center"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource CardPad}">
             <StackPanel>
               <DockPanel>
                 <CheckBox x:Name="StartupBox" DockPanel.Dock="Right" Style="{StaticResource WinToggle}"/>

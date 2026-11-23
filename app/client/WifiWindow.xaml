@@ -68,7 +68,6 @@
         <TextBlock Text="{local:T wifi.current}" Style="{StaticResource Caption}"/>
         <Border x:Name="CurrentCard" Style="{StaticResource WinCard}" Padding="0" Margin="0,0,0,16">
           <Grid>
-            <Border x:Name="CurrentStripe" Width="3" HorizontalAlignment="Left" CornerRadius="8,0,0,8" Background="{DynamicResource Accent}"/>
             <StackPanel Margin="14,12">
               <DockPanel>
                 <Button x:Name="DisconnectButton" DockPanel.Dock="Right" Style="{StaticResource WinButton}" Content="{local:T wifi.disconnect}"

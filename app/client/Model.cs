@@ -44,6 +44,11 @@ public sealed class Device : Observable
     string _state = "";
     /// <summary>What became of the last send: "", asking, sending, sent, declined or failed (colours the radar).</summary>
     public string State { get => _state; set => Set(ref _state, value); }
+    Request? _ask;
+    /// <summary>This device asks to send to us: answered right under its icon on the radar.</summary>
+    public Request? Ask { get => _ask; set => Set(ref _ask, value); }
+    /// <summary>Put on the radar only for its request (it was not among the devices found).</summary>
+    public bool ForAsk { get; init; }
 }
 
 /// <summary>Someone asking to send.</summary>
@@ -55,8 +60,13 @@ public sealed class Request : Observable
     public required string What { get; init; }
     string _status = L.T("req.waiting");
     double _progress;
+    bool _receiving;
     public string Status { get => _status; set => Set(ref _status, value); }
     public double Progress { get => _progress; set => Set(ref _progress, value); }
+    /// <summary>Accepted, and the files are coming in.</summary>
+    public bool Receiving { get => _receiving; set => Set(ref _receiving, value); }
+    /// <summary>"wants to send 3 photos", for the bubble under the sender's icon.</summary>
+    public string Wants => L.F("ask.wants", What);
 }
 
 public sealed class Received

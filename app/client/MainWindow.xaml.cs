@@ -160,8 +160,6 @@ public partial class MainWindow : Window
 
     // ------------------------------------------------------------ the rest
 
-    void Accept_Click(object sender, RoutedEventArgs e) => A.Answer((string)((Button)sender).Tag, true);
-    void Decline_Click(object sender, RoutedEventArgs e) => A.Answer((string)((Button)sender).Tag, false);
     void Settings_Click(object sender, RoutedEventArgs e) => A.ShowSettings("general");
     void Wifi_Click(object sender, RoutedEventArgs e) => A.ShowWifi();
     void Report_Click(object sender, RoutedEventArgs e) { StatusPopup.IsOpen = false; App.RunReport(); }

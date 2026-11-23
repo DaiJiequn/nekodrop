@@ -104,7 +104,8 @@ public static class Shell
             var dir = Path.GetDirectoryName(Exe)!;
             var msix = Path.Combine(dir, "shell", "nekodrop-shell.msix");
             if (!File.Exists(msix) || !File.Exists(Path.Combine(dir, "nekodrop-shell.dll"))) return;
-            if (MenuPackages().Any()) return;
+            // Registered already, unless with an older manifest (0.2: the Share sheet).
+            if (MenuPackages().Any(p => p.Id.Version.Major > 0 || p.Id.Version.Minor >= 2)) return;
             var options = new Windows.Management.Deployment.AddPackageOptions
             {
                 ExternalLocationUri = new Uri(dir + Path.DirectorySeparatorChar),
@@ -242,5 +243,25 @@ public static class Shell
         }
         catch (Exception) { }
         return [];
+    }
+
+    /// <summary>
+    /// When Windows started nekodrop from the Share sheet (the sparse package's
+    /// share target): the shared files' paths, and the sheet is told it is done.
+    /// None for an ordinary start.
+    /// </summary>
+    public static string[] SharedFiles()
+    {
+        try
+        {
+            if (Windows.ApplicationModel.AppInstance.GetActivatedEventArgs() is not
+                Windows.ApplicationModel.Activation.ShareTargetActivatedEventArgs share) return [];
+            var op = share.ShareOperation;
+            var items = op.Data.GetStorageItemsAsync().AsTask().GetAwaiter().GetResult();
+            var paths = items.Select(i => i.Path).Where(p => !string.IsNullOrEmpty(p)).ToArray();
+            op.ReportCompleted();
+            return paths;
+        }
+        catch (Exception) { return []; /* not packaged, or not a share */ }
     }
 }

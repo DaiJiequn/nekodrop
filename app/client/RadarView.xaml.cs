@@ -29,12 +29,16 @@ public partial class RadarView : UserControl
     readonly Grid _hub = new();
     readonly Ellipse _hubSpinner = new() { StrokeThickness = 2.5, StrokeDashArray = [2.4, 2.4], Visibility = Visibility.Collapsed };
     readonly TextBlock _hubLabel = new();
-    bool _rippling, _hintShown;
+    // A soft light behind the hub that breathes while AirDrop listens.
+    readonly Ellipse _halo = new() { RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1), Opacity = 0 };
+    readonly HashSet<INotifyPropertyChanged> _watched = [];
+    bool _rippling, _breathing, _hintShown;
 
     public RadarView()
     {
         InitializeComponent();
         foreach (var r in _ripples) Rings.Children.Add(r);
+        Rings.Children.Add(_halo);
         Rings.Children.Add(_orbit);
         Rings.Children.Add(_inner);
         BuildHub();
@@ -55,7 +59,10 @@ public partial class RadarView : UserControl
         {
             A.Model.Devices.CollectionChanged -= OnDevices;
             A.Model.PropertyChanged -= OnModel;
+            foreach (var w in _watched) w.PropertyChanged -= OnDevice;
+            _watched.Clear();
             Ripple(false);
+            Breathe(false);
             Spin(false);
         };
         IsVisibleChanged += (_, _) => Update();
@@ -82,7 +89,7 @@ public partial class RadarView : UserControl
         disc.SetResourceReference(Shape.StrokeProperty, "Accent");
         var icon = new TextBlock
         {
-            Text = "\uE7F4", // a monitor, as in the design
+            Text = HubLaptop() ? "\uE7F8" : "\uE7F4", // a laptop or a desktop monitor
             FontSize = 20,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -90,6 +97,7 @@ public partial class RadarView : UserControl
         icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
         icon.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
         _hubSpinner.SetResourceReference(Shape.StrokeProperty, "Accent");
+        _halo.SetResourceReference(Shape.FillProperty, "AccentSubtle");
         _hubSpinner.RenderTransformOrigin = new Point(0.5, 0.5);
         _hubSpinner.RenderTransform = new RotateTransform();
         _hub.Children.Add(disc);
@@ -107,7 +115,21 @@ public partial class RadarView : UserControl
         foreach (var r in _ripples) r.SetResourceReference(Shape.StrokeProperty, "Accent");
     }
 
+    /// <summary>This PC's icon: as set in the settings, or a laptop when Windows reports a battery.</summary>
+    static bool HubLaptop() => A.Settings.HubIcon switch
+    {
+        "laptop" => true,
+        "desktop" => false,
+        _ => !System.Windows.Forms.SystemInformation.PowerStatus.BatteryChargeStatus.HasFlag(System.Windows.Forms.BatteryChargeStatus.NoSystemBattery),
+    };
+
     void OnDevices(object? s, NotifyCollectionChangedEventArgs e) => Update();
+
+    void OnDevice(object? s, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(Device.State) or nameof(Device.Ask) or nameof(Request.Receiving))
+            Dispatcher.BeginInvoke(DrawArrows);
+    }
 
     void OnModel(object? s, PropertyChangedEventArgs e)
     {
@@ -162,7 +184,9 @@ public partial class RadarView : UserControl
         foreach (var ring in new[] { _inner, _orbit }) ring.StrokeDashArray = dash;
         var visible = IsVisible && !blocked && !list;
         Ripple(air == "ready" && visible && !Motion.Reduced);
+        Breathe(air == "ready" && visible && !Motion.Reduced);
         Spin(air == "starting" && visible);
+        DrawArrows();
     }
 
     void ShowBlocked(string air)
@@ -195,6 +219,8 @@ public partial class RadarView : UserControl
     }
 
     void HintButton_Click(object sender, RoutedEventArgs e) => A.Service.Wake();
+    void Accept_Click(object sender, RoutedEventArgs e) { if ((sender as FrameworkElement)?.Tag is string id) A.Answer(id, true); }
+    void Decline_Click(object sender, RoutedEventArgs e) { if ((sender as FrameworkElement)?.Tag is string id) A.Answer(id, false); }
     void Report_Click(object sender, RoutedEventArgs e) => App.RunReport();
 
     void RadarLayer_SizeChanged(object sender, SizeChangedEventArgs e) => Place(e.NewSize);
@@ -217,6 +243,108 @@ public partial class RadarView : UserControl
         Circle(_hub, RadarGeometry.Hub / 2);
         Canvas.SetLeft(_hubLabel, center.X - _hubLabel.Width / 2);
         Canvas.SetTop(_hubLabel, center.Y + RadarGeometry.Hub / 2 + 4);
+        Circle(_halo, RadarGeometry.Hub / 2 + 14);
+        DrawArrows();
+    }
+
+    /// <summary>
+    /// The hub's halo swells and fades, and the guide rings brighten with it:
+    /// a slow breath (1.8 s each way) while AirDrop listens.
+    /// </summary>
+    void Breathe(bool on)
+    {
+        if (on == _breathing) return;
+        _breathing = on;
+        var scale = (ScaleTransform)_halo.RenderTransform;
+        if (!on)
+        {
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            _halo.BeginAnimation(OpacityProperty, null);
+            foreach (var ring in new[] { _inner, _orbit }) ring.BeginAnimation(OpacityProperty, null);
+            _halo.Opacity = 0;
+            return;
+        }
+        var half = TimeSpan.FromSeconds(1.8);
+        var ease = new SineEase { EasingMode = EasingMode.EaseInOut };
+        DoubleAnimation Breath(double from, double to) =>
+            new(from, to, half) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = ease };
+        scale.BeginAnimation(ScaleTransform.ScaleXProperty, Breath(0.86, 1.14));
+        scale.BeginAnimation(ScaleTransform.ScaleYProperty, Breath(0.86, 1.14));
+        _halo.BeginAnimation(OpacityProperty, Breath(0.95, 0.35));
+        foreach (var ring in new[] { _inner, _orbit }) ring.BeginAnimation(OpacityProperty, Breath(0.65, 1));
+    }
+
+    /// <summary>
+    /// A line from this PC to each device it sends to (from the device when it
+    /// sends to us), with a small chevron at the head: flowing dots while the
+    /// other side has not answered, solid while files move, green once sent,
+    /// grey when declined or failed.
+    /// </summary>
+    void DrawArrows()
+    {
+        Arrows.Children.Clear();
+        foreach (var d in A.Model.Devices)
+        {
+            if (_watched.Add(d)) d.PropertyChanged += OnDevice;
+            if (d.Ask is { } r && _watched.Add(r)) r.PropertyChanged += OnDevice;
+        }
+        var size = new Size(RadarLayer.ActualWidth, RadarLayer.ActualHeight);
+        if (size.Width <= 0 || A.Model.Air != "ready" || RadarLayer.Visibility != Visibility.Visible) return;
+        var g = RadarGeometry.For(size);
+        var n = A.Model.Devices.Count;
+        for (var i = 0; i < n; i++)
+        {
+            var d = A.Model.Devices[i];
+            var (incoming, waiting, brush) = d.Ask is { } ask
+                ? (true, !ask.Receiving, "Accent")
+                : d.State switch
+                {
+                    "asking" => (false, true, "Accent"),
+                    "sending" => (false, false, "Accent"),
+                    "sent" => (false, false, "Success"),
+                    "declined" or "failed" => (false, false, "Text3"),
+                    _ => (false, false, ""),
+                };
+            if (brush == "") continue;
+            var icon = g.IconCenter(i, n);
+            var v = icon - g.Center;
+            v.Normalize();
+            var near = g.Center + v * (RadarGeometry.Hub / 2 + 8);
+            var far = icon - v * (RadarGeometry.Node / 2 + 8);
+            var (tail, head) = incoming ? (far, near) : (near, far);
+            var dim = brush == "Text3";
+
+            var line = new Line { X1 = tail.X, Y1 = tail.Y, X2 = head.X, Y2 = head.Y, StrokeThickness = 2, Opacity = dim ? 0.55 : 0.9,
+                                  StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
+            line.SetResourceReference(Shape.StrokeProperty, brush);
+            if (waiting || dim)
+            {
+                line.StrokeDashCap = PenLineCap.Round;
+                line.StrokeDashArray = [0, 3]; // dots 6 px apart
+                if (waiting && !Motion.Reduced)
+                    line.BeginAnimation(Shape.StrokeDashOffsetProperty,
+                        new DoubleAnimation(0, -3, TimeSpan.FromSeconds(0.45)) { RepeatBehavior = RepeatBehavior.Forever });
+            }
+            Arrows.Children.Add(line);
+
+            // The chevron: two 7 px strokes back from the head at 32 degrees.
+            var back = tail - head;
+            back.Normalize();
+            Vector Turn(Vector u, double deg)
+            {
+                var a = deg * Math.PI / 180;
+                return new Vector(u.X * Math.Cos(a) - u.Y * Math.Sin(a), u.X * Math.Sin(a) + u.Y * Math.Cos(a));
+            }
+            var chevron = new System.Windows.Shapes.Path
+            {
+                Data = new PathGeometry([new PathFigure(head + Turn(back, 32) * 7, [new LineSegment(head, true), new LineSegment(head + Turn(back, -32) * 7, true)], false)]),
+                StrokeThickness = 2, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+                StrokeLineJoin = PenLineJoin.Round, Opacity = line.Opacity,
+            };
+            chevron.SetResourceReference(Shape.StrokeProperty, brush);
+            Arrows.Children.Add(chevron);
+        }
     }
 
     /// <summary>
@@ -249,7 +377,7 @@ public partial class RadarView : UserControl
             };
             scale.BeginAnimation(ScaleTransform.ScaleXProperty, Grow());
             scale.BeginAnimation(ScaleTransform.ScaleYProperty, Grow());
-            r.BeginAnimation(OpacityProperty, new DoubleAnimation(0.36, 0, period)
+            r.BeginAnimation(OpacityProperty, new DoubleAnimation(0.26, 0, period)
             {
                 BeginTime = delay, RepeatBehavior = RepeatBehavior.Forever, EasingFunction = ease,
             });

@@ -135,7 +135,9 @@ public partial class WifiWindow : Window
         }
         StateDetail.SetResourceReference(TextBlock.ForegroundProperty, stateBrush);
         StateGlyph.SetResourceReference(TextBlock.ForegroundProperty, connected ? "Accent" : "Text3");
-        CurrentStripe.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+        // Connected: the whole card is highlighted (accent tint and outline).
+        CurrentCard.SetResourceReference(Border.BackgroundProperty, connected ? "AccentSubtle" : "Card");
+        CurrentCard.SetResourceReference(Border.BorderBrushProperty, connected ? "Accent" : "Border");
         AddressRow.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
         DisconnectButton.Visibility = ssid != "" ? Visibility.Visible : Visibility.Collapsed;
         RefreshButton.IsEnabled = radio == "on" && !scanning;
@@ -173,17 +175,25 @@ public partial class WifiWindow : Window
         var isConnected = (bool?)n["connected"] ?? false;
         var open = sec is "open" or "owe";
         var box = RowBox(ruled, new Thickness(12));
+        // The network in use: the row highlighted, "connected" in the accent instead of a button.
+        if (isConnected) box.SetResourceReference(Border.BackgroundProperty, "AccentSubtle");
         var stack = new StackPanel();
         var line = new DockPanel();
         var action = new Button
         {
-            Content = isConnected ? L.T("wifi.connected") : L.T("wifi.connect"),
+            Content = L.T("wifi.connect"),
             Style = (Style)FindResource("WinButton"),
-            IsEnabled = !isConnected,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        DockPanel.SetDock(action, Dock.Right);
-        line.Children.Add(action);
+        FrameworkElement right = action;
+        if (isConnected)
+        {
+            var done = new TextBlock { Text = L.T("wifi.connected"), FontSize = 12, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            done.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+            right = done;
+        }
+        DockPanel.SetDock(right, Dock.Right);
+        line.Children.Add(right);
         var glyph = new TextBlock { Style = (Style)FindResource("Icon"), Text = Bars(dbm), FontSize = 15, Margin = new Thickness(0, 0, 10, 0) };
         glyph.SetResourceReference(TextBlock.ForegroundProperty, "Text2");
         DockPanel.SetDock(glyph, Dock.Left);
