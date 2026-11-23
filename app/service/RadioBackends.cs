@@ -42,6 +42,7 @@ public static class RadioBackends
     {
         new IwxRadioBackend(),
         new DevourerRadioBackend(),
+        new Mt76RadioBackend(),
     }.ToDictionary(b => b.Kind);
 
     public static IRadioBackend Get(RadioBackendKind kind) =>
@@ -93,4 +94,22 @@ public sealed class DevourerRadioBackend : IRadioBackend
     public string ExeName => "nekodrop-radio-rtl.exe";
 
     public IReadOnlyList<string> BuildArgs(RadioStart s) => [s.Channel.ToString(), "--width", s.Width.ToString()];
+}
+
+/// <summary>
+/// MediaTek MT7902: nekodrop-radio-mt.exe (mtradio/, ported from Linux mt76).
+/// No station mode, so the service runs it on demand. Takes the
+/// country for the firmware's channel domain.
+/// </summary>
+public sealed class Mt76RadioBackend : IRadioBackend
+{
+    public RadioBackendKind Kind => RadioBackendKind.Mt76;
+    public string ExeName => "nekodrop-radio-mt.exe";
+
+    public IReadOnlyList<string> BuildArgs(RadioStart s)
+    {
+        var args = new List<string> { s.Channel.ToString(), "--width", s.Width.ToString() };
+        if (s.Country is { Length: 2 } c && c != "ZZ" && c != "00") args.AddRange(["--country", c]);
+        return args;
+    }
 }

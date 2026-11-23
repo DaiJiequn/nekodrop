@@ -2,6 +2,7 @@
 #   winawdl         radio pipe, RTL8852CE radio, awdld (OWL), Wintun, AirDrop engine (MIT/GPL-2.0/GPL-3.0)
 #   devourer        winawdl's Realtek RTL8852CE user-mode radio library (GPL-2.0)
 #   ForbiddenItlwm  iwlwifi firmware and its licence (GPL-2.0 / Intel redistribution)
+#   linux-firmware  the MediaTek MT7902 firmware and its licence (MediaTek redistribution)
 #   winlibs MinGW   GCC for awdld
 #   WDK (NuGet)     UMDF headers and tools, only when no WDK is installed
 # Pinned to the versions nekodrop is tested with; the downloads are checked by SHA-256.
@@ -27,6 +28,19 @@ function Get-File($url, $out, $sha256) {
 Get-Repo winawdl https://github.com/raph559/winawdl.git 0db7031589dc2bca03c0893db341176376962047
 Get-Repo 'winawdl\upstream\devourer' https://github.com/raph559/devourer.git 8d936de2a3805ce126e5236349afe40e645aaf9b
 Get-Repo ForbiddenItlwm https://github.com/retropineaple/ForbiddenItlwm.git 96ff71e0211789239f6fbf6b64ac8e7fd22b41aa
+
+# MT7902 firmware: three files, not a clone of all of linux-firmware. From its
+# GitLab copy: git.kernel.org answers scripts with a bot check page.
+$lfw = 'a1ebb5ad7eae3caca60b8b3db5792cf43339ba58'
+$mtFw = Join-Path $tp 'linux-firmware-mt7902'
+New-Item -ItemType Directory -Force $mtFw | Out-Null
+foreach ($f in @(@('mediatek/WIFI_RAM_CODE_MT7902_1.bin', 'B5958AC72C71FB8405E080F52D378D02B484812B9F1010C8843727056BBFC998'),
+                 @('mediatek/WIFI_MT7902_patch_mcu_1_1_hdr.bin', 'D73BA9E982F781221A2B9F10C42031F20A9DCE046929FC0D55C791A417EFE30A'),
+                 @('LICENSES/LICENCE.mediatek', 'A90D3F66704D85889945FEC5525EA77622549DA83ACED1AAC99828383F8F1805'))) {
+  Get-File "https://gitlab.com/kernel-firmware/linux-firmware/-/raw/$lfw/$($f[0])" `
+           (Join-Path $mtFw (Split-Path $f[0] -Leaf)) $f[1]
+}
+"linux-firmware (MT7902) @ $($lfw.Substring(0, 7))"
 
 # Wintun for awdld: winawdl's script checks its SHA-256 and WireGuard's signature.
 if (-not (Test-Path "$tp\winawdl\deps\wintun\wintun.dll")) {

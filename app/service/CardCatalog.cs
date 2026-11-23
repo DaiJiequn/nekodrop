@@ -8,6 +8,8 @@ public enum RadioBackendKind
     Iwx,
     /// <summary>winawdl's devourer (Realtek RTL8852CE): monitor and inject only, no station.</summary>
     Devourer,
+    /// <summary>nekodrop-radio-mt: the MediaTek MT7902 driver ported from Linux mt76 (mtradio/): sniffer, inject and AWDL peer stations, no station mode.</summary>
+    Mt76,
 }
 
 /// <summary>
@@ -78,6 +80,9 @@ public static class CardCatalog
     // Killer (Rivet Networks) cards are Intel chips with Intel's driver repackaged.
     static readonly string[] IntelProviders = ["Intel", "Killer", "Rivet Networks"];
 
+    static readonly AdapterCapabilities MediaTekCaps = new(false, false, false, false, 0x10000);
+    static readonly string[] MediaTekProviders = ["MediaTek"];
+
     static AdapterProfile Intel(string device, string family) =>
         new("8086", device, "Intel", family, RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault,
             ProxyInf, ProxyService, ProxyProvider, IntelProviders, Active: true);
@@ -102,6 +107,10 @@ public static class CardCatalog
         new AdapterProfile("10EC", "C852", "Realtek", "RTL8852CE", RadioBackendKind.Devourer,
             new AdapterCapabilities(false, false, false, false, 0x10000),
             ProxyInf, ProxyService, ProxyProvider, ["Realtek"], Active: true),
+        // MediaTek MT7902 (nekodrop-radio-mt.exe, ported from Linux mt76/mt7921):
+        // sniffer and inject only, so on demand; 1 MiB BAR0.
+        new AdapterProfile("14C3", "7902", "MediaTek", "MT7902", RadioBackendKind.Mt76, MediaTekCaps,
+            ProxyInf, ProxyService, ProxyProvider, MediaTekProviders, Active: true),
     ];
 
     /// <summary>The cards the service takes.</summary>
@@ -184,6 +193,7 @@ public static class CardCatalog
         new("ax210", "Intel AX210 (discrete)", "8086", RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault, IntelProviders),
         new("so", "Intel AX211 / AX411 (So, CNVi)", "8086", RadioBackendKind.Iwx, AdapterCapabilities.IntelDefault, IntelProviders),
         new("rtl8852ce", "Realtek RTL8852CE", "10EC", RadioBackendKind.Devourer, RealtekCaps, ["Realtek"]),
+        new("mt7902", "MediaTek MT7902", "14C3", RadioBackendKind.Mt76, MediaTekCaps, MediaTekProviders),
     ];
 
     /// <summary>
@@ -195,7 +205,7 @@ public static class CardCatalog
         if (!TryParsePciId(instanceOrHardwareId, out var v, out var d)) return null;
         var m = ManualModels.FirstOrDefault(x => x.Key == modelKey);
         if (m is null || m.VendorId != v) return null;
-        return new AdapterProfile(v, d, v == "8086" ? "Intel" : "Realtek", m.Name + " (chosen in settings)", m.Backend,
+        return new AdapterProfile(v, d, v switch { "8086" => "Intel", "14C3" => "MediaTek", _ => "Realtek" }, m.Name + " (chosen in settings)", m.Backend,
                                   m.Capabilities, ProxyInf, ProxyService, ProxyProvider, m.VendorProviderPatterns,
                                   Active: true, RadioFamily: m.Backend == RadioBackendKind.Iwx ? m.Key : null);
     }
@@ -218,10 +228,10 @@ public static class CardCatalog
         void Check(bool ok, string what) { if (!ok) fail.Add(what); }
 
         // The 15 Intel IDs the service took before the catalog (Card.DeviceIds, 0.1.20)
-        // plus Realtek RTL8852CE (10EC:C852) built-in on-demand backend = 16 active profiles.
+        // plus Realtek RTL8852CE (10EC:C852) and MediaTek MT7902 (14C3:7902) on-demand backends = 17 active profiles.
         string[] intel = ["43F0", "A0F0", "02F0", "06F0", "34F0", "3DF0", "4DF0",
                           "2723", "2725", "7A70", "7AF0", "51F0", "51F1", "54F0", "7F70"];
-        Check(ActiveProfiles.Count == intel.Length + 1, $"{ActiveProfiles.Count} active profiles, expected {intel.Length + 1}");
+        Check(ActiveProfiles.Count == intel.Length + 2, $"{ActiveProfiles.Count} active profiles, expected {intel.Length + 2}");
         foreach (var dev in intel)
         {
             var id = $"PCI\\VEN_8086&DEV_{dev}&SUBSYS_00748086&REV_00\\3&11583659&0&A3";
