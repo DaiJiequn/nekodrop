@@ -34,7 +34,11 @@
           </Button>
         </StackPanel>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <local:AirDropMark Width="18" Height="18" Brush="{DynamicResource Accent}" Margin="0,0,8,0"/>
+          <!-- The AirDrop mark: who can send to this PC (off, contacts, everyone), as on an iPhone -->
+          <Button x:Name="MarkButton" Style="{StaticResource TitleButton}" Width="30" Height="30" Margin="-6,0,2,0" Click="Mark_Click"
+                  AutomationProperties.Name="{local:T recv.title}">
+            <local:AirDropMark x:Name="Mark" Width="18" Height="18" Brush="{DynamicResource Accent}"/>
+          </Button>
           <TextBlock Text="nekodrop" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0"/>
           <!-- Status pill: opens the quick controls -->
           <ToggleButton x:Name="StatusPill" shell:WindowChrome.IsHitTestVisibleInChrome="True" Cursor="Hand" FocusVisualStyle="{x:Null}"
@@ -59,6 +63,20 @@
         </StackPanel>
       </DockPanel>
     </Border>
+
+    <!-- Who can send to this PC, under the AirDrop mark -->
+    <Popup x:Name="ReceivePopup" PlacementTarget="{Binding ElementName=MarkButton}" Placement="Bottom" VerticalOffset="6"
+           StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade">
+      <Border Width="264" CornerRadius="12" Padding="12" Background="{DynamicResource MicaSolid}" BorderBrush="{DynamicResource BorderStrong}"
+              BorderThickness="1" Margin="8">
+        <Border.Effect><DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.18"/></Border.Effect>
+        <StackPanel>
+          <TextBlock Text="{local:T recv.title}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+          <StackPanel x:Name="ReceiveList"/>
+          <TextBlock x:Name="ReceiveTip" Style="{StaticResource Dim11}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+        </StackPanel>
+      </Border>
+    </Popup>
 
     <!-- Quick controls under the status pill -->
     <Popup x:Name="StatusPopup" PlacementTarget="{Binding ElementName=StatusPill}" Placement="Bottom" VerticalOffset="6"

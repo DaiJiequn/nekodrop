@@ -65,6 +65,7 @@ public partial class MainWindow : Window
         WifiText.Text = m.Mode == "concurrent" && m.Ssid != "" ? m.Ssid : "Wi-Fi";
         UpdateBar.Visibility = m.Update == "" ? Visibility.Collapsed : Visibility.Visible;
         UpdateText.Text = L.F(m.UpdatePreview ? "update.barPreview" : "update.bar", m.Update);
+        ShowMark();
     }
 
     /// <summary>The words and dot colour of a state (the design's status pill).</summary>
@@ -91,7 +92,38 @@ public partial class MainWindow : Window
         StatusPopup.IsOpen = true;
     }
 
-    Button ModeChoice(string key, string text, bool chosen)
+    Button ModeChoice(string key, string text, bool chosen) =>
+        Choice(text, chosen, () => { A.Service.SetMode(key); StatusPopup.IsOpen = false; });
+
+    // ------------------------------------------------- who can send to this PC
+
+    void Mark_Click(object sender, RoutedEventArgs e)
+    {
+        var mode = !A.Model.Allow ? "off" : A.Settings.Receive == "contacts" && AppleId.Present ? "contacts" : "everyone";
+        ReceiveList.Children.Clear();
+        foreach (var (key, text) in new[] { ("off", L.T("recv.off")), ("contacts", L.T("aid.contacts")), ("everyone", L.T("recv.everyone")) })
+            ReceiveList.Children.Add(Choice(text, mode == key, () =>
+            {
+                ReceivePopup.IsOpen = false;
+                if (key == "contacts" && !AppleId.Present) { A.ShowSettings("appleid"); return; }
+                A.SetReceive(key);
+            }));
+        ReceiveTip.Text = AppleId.Present ? "" : L.T("recv.needIdentity");
+        ReceiveTip.Visibility = AppleId.Present ? Visibility.Collapsed : Visibility.Visible;
+        ReceivePopup.IsOpen = true;
+    }
+
+    /// <summary>The mark in the accent while receiving, grey while not, and what it means on hover.</summary>
+    public void ShowMark()
+    {
+        var off = !A.Model.Allow;
+        Mark.SetResourceReference(AirDropMark.BrushProperty, off ? "Text3" : "Accent");
+        MarkButton.ToolTip = L.T("recv.title") + ": " +
+            (off ? L.T("recv.off") : A.Settings.Receive == "contacts" && AppleId.Present ? L.T("aid.contacts") : L.T("recv.everyone"));
+    }
+
+    /// <summary>A row with a radio dot: the chosen one in the accent.</summary>
+    Button Choice(string text, bool chosen, Action pick)
     {
         var dot = new Grid { Width = 12, Height = 12, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
         var ring = new System.Windows.Shapes.Ellipse { StrokeThickness = 1.5 };
@@ -119,7 +151,7 @@ public partial class MainWindow : Window
             Content = row,
         };
         if (chosen) b.SetResourceReference(BackgroundProperty, "AccentSubtle");
-        b.Click += (_, _) => { A.Service.SetMode(key); StatusPopup.IsOpen = false; };
+        b.Click += (_, _) => pick();
         return b;
     }
 

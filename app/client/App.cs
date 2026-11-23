@@ -583,6 +583,18 @@ public sealed class App : Application
         _appleIdTimer.Start();
     }
 
+    /// <summary>Who can send to this PC, from the AirDrop mark: "off", "contacts" or "everyone".</summary>
+    public void SetReceive(string mode)
+    {
+        if (mode == "off") { SetDiscoverable(false); return; }
+        var changed = Settings.Receive != mode;
+        Settings.Receive = mode;
+        Settings.Save();
+        if (!Model.Allow) SetDiscoverable(true); // starts the engine, which reads the mode
+        else if (changed) RestartEngine();
+        _window?.ShowMark();
+    }
+
     public void SetDiscoverable(bool on)
     {
         Model.Allow = on;
