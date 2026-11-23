@@ -466,7 +466,20 @@ public sealed class Supervisor : IDisposable
             return;
         }
         Say("awdld: " + line);
+        // "peers 1 | rx action 21, data 84 (15 joined) | ...": AWDL data from peers. The
+        // RTL8852CE and MT7902 radios print no "rx:" line, so without this a channel move
+        // (now reported by the RTL8852CE radio too, #32) never waited for a transfer to end.
+        var m = AwdldRxData.Match(line);
+        if (m.Success && long.TryParse(m.Groups[1].Value, out var data))
+        {
+            if (data != _awdldRxData) { _lastData = DateTime.UtcNow; _lastUse = DateTime.UtcNow; }
+            _awdldRxData = data;
+        }
     }
+
+    static readonly System.Text.RegularExpressions.Regex AwdldRxData =
+        new(@"\| rx action \d+, data (\d+)", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    long _awdldRxData = -1;
 
     void OnRadioLine(string line)
     {
