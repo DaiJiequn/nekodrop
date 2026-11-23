@@ -4,42 +4,7 @@
              xmlns:local="clr-namespace:NekoDrop"
              Foreground="{DynamicResource Text}">
   <UserControl.Resources>
-    <Style x:Key="Caption" TargetType="TextBlock">
-      <Setter Property="FontSize" Value="12"/>
-      <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
-    </Style>
-
-    <!-- Segmented radar / list switch -->
-    <Style x:Key="Segment" TargetType="RadioButton">
-      <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
-      <Setter Property="Cursor" Value="Hand"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="RadioButton">
-            <Border x:Name="b" CornerRadius="4" Padding="10,3" Background="Transparent">
-              <StackPanel Orientation="Horizontal">
-                <TextBlock FontFamily="{DynamicResource IconFont}" Text="{TemplateBinding Tag}" FontSize="12"
-                           VerticalAlignment="Center" Margin="0,1,6,0"/>
-                <ContentPresenter VerticalAlignment="Center"/>
-              </StackPanel>
-            </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="b" Property="Background" Value="{DynamicResource AccentSubtle}"/>
-                <Setter Property="Foreground" Value="{DynamicResource AccentText}"/>
-              </Trigger>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Text}"/>
-                <Setter TargetName="b" Property="BorderThickness" Value="1"/>
-              </Trigger>
-            </ControlTemplate.Triggers>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
-
-    <!-- A button with no chrome of its own: the template draws everything -->
+    <!-- A button that draws nothing of its own -->
     <Style x:Key="Bare" TargetType="Button">
       <Setter Property="Foreground" Value="{DynamicResource Text}"/>
       <Setter Property="Cursor" Value="Hand"/>
@@ -48,151 +13,253 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="b" Background="Transparent" CornerRadius="8">
+            <Border x:Name="b" Background="Transparent" CornerRadius="10" BorderThickness="0" BorderBrush="{DynamicResource Accent}">
               <ContentPresenter/>
             </Border>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsKeyboardFocused" Value="True">
-                <Setter TargetName="b" Property="BorderBrush" Value="{DynamicResource Text}"/>
-                <Setter TargetName="b" Property="BorderThickness" Value="1"/>
-              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="BorderThickness" Value="2"/></Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
       </Setter>
     </Style>
 
-    <!-- The colour of what became of a send: the outcome ring and the status text -->
+    <!-- Status text colour by the send's state -->
+    <Style x:Key="StateText" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Foreground" Value="{DynamicResource Text3}"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding State}" Value="asking"><Setter Property="Foreground" Value="{DynamicResource Accent}"/></DataTrigger>
+        <DataTrigger Binding="{Binding State}" Value="sending"><Setter Property="Foreground" Value="{DynamicResource Accent}"/></DataTrigger>
+        <DataTrigger Binding="{Binding State}" Value="sent"><Setter Property="Foreground" Value="{DynamicResource Success}"/></DataTrigger>
+        <DataTrigger Binding="{Binding State}" Value="declined"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></DataTrigger>
+        <DataTrigger Binding="{Binding State}" Value="failed"><Setter Property="Foreground" Value="{DynamicResource Error}"/></DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- The rings around a device's icon, one per state -->
+    <Style x:Key="WaitRing" TargetType="Ellipse">
+      <Setter Property="Visibility" Value="Collapsed"/>
+      <Setter Property="Stroke" Value="{DynamicResource Accent}"/>
+      <Setter Property="StrokeThickness" Value="2.5"/>
+      <Setter Property="StrokeDashArray" Value="2.4 2"/>
+      <Setter Property="StrokeDashCap" Value="Round"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding State}" Value="asking">
+          <Setter Property="Visibility" Value="Visible"/>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard x:Name="spin">
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                 From="0" To="360" Duration="0:0:1.6" RepeatBehavior="Forever"/>
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions><StopStoryboard BeginStoryboardName="spin"/></DataTrigger.ExitActions>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="SendRing" TargetType="local:ProgressRing">
+      <Setter Property="Visibility" Value="Collapsed"/>
+      <Setter Property="Stroke" Value="{DynamicResource Accent}"/>
+      <Setter Property="Track" Value="{DynamicResource Border}"/>
+      <Setter Property="Thickness" Value="3"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding State}" Value="sending"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+      </Style.Triggers>
+    </Style>
     <Style x:Key="OutcomeRing" TargetType="Ellipse">
       <Setter Property="Visibility" Value="Collapsed"/>
-      <Setter Property="StrokeThickness" Value="2"/>
+      <Setter Property="StrokeThickness" Value="2.5"/>
       <Style.Triggers>
         <DataTrigger Binding="{Binding State}" Value="sent">
           <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Success}"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding State}" Value="declined">
-          <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Caution}"/>
+          <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Warn}"/><Setter Property="StrokeThickness" Value="2"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding State}" Value="failed">
-          <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Critical}"/>
+          <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Error}"/>
         </DataTrigger>
       </Style.Triggers>
     </Style>
-    <Style x:Key="StatusText" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
-      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    <!-- The device's own glyph, or a check once sent -->
+    <Style x:Key="NodeGlyph" TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="{DynamicResource IconFont}"/>
+      <Setter Property="Text" Value="{Binding Glyph}"/>
+      <Setter Property="Foreground" Value="{DynamicResource Text}"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
       <Style.Triggers>
-        <DataTrigger Binding="{Binding Busy}" Value="True"><Setter Property="Foreground" Value="{DynamicResource AccentText}"/></DataTrigger>
-        <DataTrigger Binding="{Binding State}" Value="sent"><Setter Property="Foreground" Value="{DynamicResource Success}"/></DataTrigger>
-        <DataTrigger Binding="{Binding State}" Value="declined"><Setter Property="Foreground" Value="{DynamicResource Caution}"/></DataTrigger>
-        <DataTrigger Binding="{Binding State}" Value="failed"><Setter Property="Foreground" Value="{DynamicResource Critical}"/></DataTrigger>
-      </Style.Triggers>
-    </Style>
-    <Style x:Key="BusyRing" TargetType="local:ProgressRing">
-      <Setter Property="Visibility" Value="Collapsed"/>
-      <Setter Property="Stroke" Value="{DynamicResource Accent}"/>
-      <Setter Property="Track" Value="{DynamicResource Divider}"/>
-      <Style.Triggers>
-        <DataTrigger Binding="{Binding Busy}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+        <DataTrigger Binding="{Binding State}" Value="sent">
+          <Setter Property="Text" Value="&#xE73E;"/><Setter Property="Foreground" Value="{DynamicResource Success}"/>
+        </DataTrigger>
       </Style.Triggers>
     </Style>
 
-    <!-- A device on the radar: icon on the orbit, name and status below -->
+    <!-- A device on the radar: a 50 px circle on the orbit, name and status below -->
     <DataTemplate x:Key="RadarNode" DataType="local:Device">
-      <Button Style="{StaticResource Bare}" Tag="{Binding}" Click="Node_Click"
+      <Button x:Name="node" Style="{StaticResource Bare}" Tag="{Binding}" Click="Node_Click"
               DragEnter="Node_DragEnter" DragOver="Node_DragOver" DragLeave="Node_DragLeave" Drop="Node_Drop"
-              Width="116" ToolTip="{local:T main.deviceTip}"
+              Width="112" RenderTransformOrigin="0.5,0.27"
               AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding Status}">
-        <StackPanel>
-          <Grid Width="56" Height="56" HorizontalAlignment="Center">
-            <Ellipse x:Name="Disc" Fill="{DynamicResource NodeFill}" Stroke="{DynamicResource CardStroke}" StrokeThickness="1"/>
-            <Ellipse Style="{StaticResource OutcomeRing}"/>
-            <local:ProgressRing Style="{StaticResource BusyRing}" Progress="{Binding Progress}" Thickness="3"/>
-            <TextBlock FontFamily="{DynamicResource IconFont}" Text="{Binding Glyph}" FontSize="22"
-                       HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource Text}"/>
+        <Button.RenderTransform>
+          <TransformGroup>
+            <ScaleTransform x:Name="grow"/>
+            <TranslateTransform x:Name="shake"/>
+          </TransformGroup>
+        </Button.RenderTransform>
+        <StackPanel Margin="0,4">
+          <Grid Width="50" Height="50" HorizontalAlignment="Center">
+            <Ellipse x:Name="Glow" Margin="-6" Fill="{DynamicResource AccentSubtle}" Visibility="Hidden"/>
+            <Ellipse x:Name="Disc" Fill="{DynamicResource CardHover}" Stroke="{DynamicResource BorderStrong}" StrokeThickness="1"/>
+            <Ellipse Style="{StaticResource OutcomeRing}" Margin="1"/>
+            <!-- Its own transform, not the style's: a style's is frozen and cannot turn -->
+            <Ellipse Style="{StaticResource WaitRing}" Margin="1" RenderTransformOrigin="0.5,0.5">
+              <Ellipse.RenderTransform><RotateTransform/></Ellipse.RenderTransform>
+            </Ellipse>
+            <local:ProgressRing Style="{StaticResource SendRing}" Margin="1"/>
+            <TextBlock Style="{StaticResource NodeGlyph}" FontSize="19"/>
           </Grid>
-          <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" TextAlignment="Center"
-                     TextTrimming="CharacterEllipsis" Margin="2,6,2,0" ToolTip="{Binding Name}"/>
-          <TextBlock Text="{Binding Status}" Style="{StaticResource StatusText}" TextAlignment="Center" Margin="2,1,2,0"/>
+          <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" TextAlignment="Center"
+                     TextTrimming="CharacterEllipsis" Margin="2,4,2,0" ToolTip="{Binding Name}"/>
+          <TextBlock Text="{Binding Status}" Style="{StaticResource StateText}" TextAlignment="Center" Margin="2,1,2,0"/>
         </StackPanel>
       </Button>
+      <DataTemplate.Triggers>
+        <Trigger SourceName="node" Property="IsMouseOver" Value="True">
+          <Trigger.EnterActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="grow" Storyboard.TargetProperty="ScaleX" To="1.05" Duration="0:0:0.15"/>
+                <DoubleAnimation Storyboard.TargetName="grow" Storyboard.TargetProperty="ScaleY" To="1.05" Duration="0:0:0.15"/>
+              </Storyboard>
+            </BeginStoryboard>
+          </Trigger.EnterActions>
+          <Trigger.ExitActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="grow" Storyboard.TargetProperty="ScaleX" To="1" Duration="0:0:0.15"/>
+                <DoubleAnimation Storyboard.TargetName="grow" Storyboard.TargetProperty="ScaleY" To="1" Duration="0:0:0.15"/>
+              </Storyboard>
+            </BeginStoryboard>
+          </Trigger.ExitActions>
+        </Trigger>
+        <!-- Declined: a short shake, once -->
+        <DataTrigger Binding="{Binding State}" Value="declined">
+          <DataTrigger.EnterActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimationUsingKeyFrames Storyboard.TargetName="shake" Storyboard.TargetProperty="X" Duration="0:0:0.26">
+                  <LinearDoubleKeyFrame KeyTime="0:0:0.065" Value="-4"/>
+                  <LinearDoubleKeyFrame KeyTime="0:0:0.195" Value="4"/>
+                  <LinearDoubleKeyFrame KeyTime="0:0:0.26" Value="0"/>
+                </DoubleAnimationUsingKeyFrames>
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+        </DataTrigger>
+      </DataTemplate.Triggers>
     </DataTemplate>
 
     <!-- The same device as a row of the list -->
     <DataTemplate x:Key="ListRow" DataType="local:Device">
-      <Button Style="{StaticResource Bare}" Tag="{Binding}" Click="Node_Click" HorizontalContentAlignment="Stretch"
-              DragEnter="Node_DragEnter" DragOver="Node_DragOver" DragLeave="Node_DragLeave" Drop="Node_Drop"
-              Margin="0,0,0,4" AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding Status}">
-        <Border x:Name="Row" Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardStroke}" BorderThickness="1"
-                CornerRadius="8" Padding="12,8">
-          <DockPanel>
-            <TextBlock DockPanel.Dock="Right" FontFamily="{DynamicResource IconFont}" Text="&#xE724;" FontSize="14"
-                       VerticalAlignment="Center" Foreground="{DynamicResource TextSecondary}" Margin="12,0,4,0"/>
-            <Grid DockPanel.Dock="Left" Width="40" Height="40" Margin="0,0,12,0">
-              <Ellipse x:Name="Disc" Fill="{DynamicResource NodeFill}" Stroke="{DynamicResource CardStroke}" StrokeThickness="1"/>
-              <Ellipse Style="{StaticResource OutcomeRing}"/>
-              <local:ProgressRing Style="{StaticResource BusyRing}" Progress="{Binding Progress}" Thickness="2.5"/>
-              <TextBlock FontFamily="{DynamicResource IconFont}" Text="{Binding Glyph}" FontSize="17"
-                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Grid>
-            <StackPanel VerticalAlignment="Center">
-              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-              <TextBlock Text="{Binding Status}">
-                <TextBlock.Style>
-                  <!-- No status yet: no empty line, so the name sits in the middle -->
-                  <Style TargetType="TextBlock" BasedOn="{StaticResource StatusText}">
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding Status}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBlock.Style>
-              </TextBlock>
+      <Border x:Name="row" Style="{StaticResource WinCard}" Padding="12,10" Margin="0,0,0,8" AllowDrop="True" Tag="{Binding}"
+              DragEnter="Node_DragEnter" DragOver="Node_DragOver" DragLeave="Node_DragLeave" Drop="Node_Drop">
+        <DockPanel>
+          <Grid DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0,0,0">
+            <Button x:Name="send" Style="{StaticResource WinButton}" Content="{local:T dev.send}" Tag="{Binding}" Click="Node_Click" Padding="12,6"/>
+            <TextBlock x:Name="waiting" Text="{local:T dev.waiting}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" Visibility="Collapsed"/>
+            <Border x:Name="bar" Width="96" Height="6" CornerRadius="3" Background="{DynamicResource Border}" Visibility="Collapsed" ClipToBounds="True">
+              <local:Bar Progress="{Binding Progress}" Fill="{DynamicResource Accent}"/>
+            </Border>
+            <StackPanel x:Name="done" Orientation="Horizontal" Visibility="Collapsed">
+              <TextBlock FontFamily="{DynamicResource IconFont}" Text="&#xE73E;" FontSize="12" Foreground="{DynamicResource Success}" VerticalAlignment="Center" Margin="0,1,4,0"/>
+              <TextBlock Text="{local:T dev.sent}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Success}"/>
             </StackPanel>
-          </DockPanel>
-        </Border>
-      </Button>
+          </Grid>
+          <Grid DockPanel.Dock="Left" Width="36" Height="36" Margin="0,0,12,0">
+            <Ellipse Fill="{DynamicResource AccentSubtle}"/>
+            <TextBlock FontFamily="{DynamicResource IconFont}" Text="{Binding Glyph}" FontSize="15" Foreground="{DynamicResource Accent}"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Grid>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding Status}" Style="{StaticResource StateText}" FontSize="12"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+      <DataTemplate.Triggers>
+        <Trigger SourceName="row" Property="IsMouseOver" Value="True">
+          <Setter TargetName="row" Property="Background" Value="{DynamicResource CardHover}"/>
+          <Setter TargetName="row" Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
+        </Trigger>
+        <DataTrigger Binding="{Binding State}" Value="asking">
+          <Setter TargetName="send" Property="Visibility" Value="Collapsed"/><Setter TargetName="waiting" Property="Visibility" Value="Visible"/>
+        </DataTrigger>
+        <DataTrigger Binding="{Binding State}" Value="sending">
+          <Setter TargetName="send" Property="Visibility" Value="Collapsed"/><Setter TargetName="bar" Property="Visibility" Value="Visible"/>
+        </DataTrigger>
+        <DataTrigger Binding="{Binding State}" Value="sent">
+          <Setter TargetName="send" Property="Visibility" Value="Collapsed"/><Setter TargetName="done" Property="Visibility" Value="Visible"/>
+        </DataTrigger>
+      </DataTemplate.Triggers>
     </DataTemplate>
   </UserControl.Resources>
 
   <DockPanel>
-    <!-- Header: section title and the view switch -->
-    <Grid DockPanel.Dock="Top" Margin="2,0,0,10">
-      <TextBlock Text="{local:T main.nearby}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
-      <Border x:Name="Switch" HorizontalAlignment="Right" Background="{DynamicResource Card}" BorderBrush="{DynamicResource CardStroke}"
-              BorderThickness="1" CornerRadius="6" Padding="2">
+    <!-- Header: section title and the radar / list switch -->
+    <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
+      <TextBlock x:Name="Heading" Text="{local:T main.nearby}" Style="{StaticResource H14}" VerticalAlignment="Center"/>
+      <Border Style="{StaticResource SegmentBox}" HorizontalAlignment="Right">
         <StackPanel Orientation="Horizontal">
           <RadioButton x:Name="RadarChoice" Style="{StaticResource Segment}" Content="{local:T view.radar}" Tag="&#xEB44;"
                        GroupName="view" Checked="View_Checked"/>
           <RadioButton x:Name="ListChoice" Style="{StaticResource Segment}" Content="{local:T view.list}" Tag="&#xE8FD;"
-                       GroupName="view" Checked="View_Checked" Margin="2,0,0,0"/>
+                       GroupName="view" Checked="View_Checked"/>
         </StackPanel>
       </Border>
     </Grid>
 
     <!-- The stage -->
-    <Border x:Name="Stage" Background="{DynamicResource RadarBg}" BorderBrush="{DynamicResource CardStroke}" BorderThickness="1"
+    <Border x:Name="Stage" Background="{DynamicResource RadarBg}" BorderBrush="{DynamicResource Border}" BorderThickness="1"
             CornerRadius="12" ClipToBounds="True">
       <Grid>
+        <!-- Radar -->
         <Grid x:Name="RadarLayer" SizeChanged="RadarLayer_SizeChanged">
-          <!-- Rings, ripples and the hub are placed by code from RadarGeometry -->
           <Canvas x:Name="Rings" IsHitTestVisible="False"/>
           <ItemsControl x:Name="RadarItems" ItemTemplate="{StaticResource RadarNode}" Focusable="False">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><local:RadarPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
           </ItemsControl>
-          <StackPanel x:Name="Hint" VerticalAlignment="Bottom" Margin="24,0,24,18" IsHitTestVisible="False">
+          <!-- Below the hub: looking, standby, starting -->
+          <StackPanel x:Name="Hint" VerticalAlignment="Bottom" Margin="20,0,20,16">
             <TextBlock x:Name="HintTitle" FontSize="13" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap"/>
-            <TextBlock x:Name="HintText" Style="{StaticResource Caption}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
+            <TextBlock x:Name="HintText" FontSize="12" Foreground="{DynamicResource Text3}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
+            <Button x:Name="HintButton" Style="{StaticResource WinPrimary}" HorizontalAlignment="Center" Margin="0,8,0,0" Padding="14,7" Click="HintButton_Click"/>
           </StackPanel>
         </Grid>
 
-        <Grid x:Name="ListLayer" Visibility="Collapsed">
-          <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
-            <ItemsControl x:Name="ListItems" ItemTemplate="{StaticResource ListRow}" Focusable="False"/>
-          </ScrollViewer>
-          <StackPanel x:Name="ListHint" VerticalAlignment="Center" Margin="24" IsHitTestVisible="False">
-            <TextBlock x:Name="ListHintTitle" FontSize="13" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap"/>
-            <TextBlock x:Name="ListHintText" Style="{StaticResource Caption}" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
+        <!-- List -->
+        <ScrollViewer x:Name="ListLayer" VerticalScrollBarVisibility="Auto" Visibility="Collapsed" Padding="10,10,10,2">
+          <ItemsControl x:Name="ListItems" ItemTemplate="{StaticResource ListRow}" Focusable="False"/>
+        </ScrollViewer>
+
+        <!-- AirDrop is off, failed, or cannot run: what and what to do -->
+        <StackPanel x:Name="Blocked" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24" Visibility="Collapsed" MaxWidth="360">
+          <Border Width="48" Height="48" CornerRadius="24" Background="{DynamicResource Card}" BorderBrush="{DynamicResource BorderStrong}"
+                  BorderThickness="1" HorizontalAlignment="Center" Margin="0,0,0,12">
+            <TextBlock x:Name="BlockedGlyph" FontFamily="{DynamicResource IconFont}" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Border>
+          <TextBlock x:Name="BlockedTitle" FontSize="14" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap"/>
+          <TextBlock x:Name="BlockedText" FontSize="12" Foreground="{DynamicResource Text2}" TextAlignment="Center" TextWrapping="Wrap"
+                     Margin="0,4,0,16" LineHeight="18"/>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+            <Button x:Name="BlockedAction" Style="{StaticResource WinPrimary}" Padding="14,8" Click="BlockedAction_Click"/>
+            <Button x:Name="BlockedReport" Style="{StaticResource WinButton}" Padding="12,8" Margin="8,0,0,0"
+                    Content="{local:T tray.report}" Click="Report_Click"/>
           </StackPanel>
-        </Grid>
+        </StackPanel>
       </Grid>
     </Border>
   </DockPanel>

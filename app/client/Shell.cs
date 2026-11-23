@@ -213,4 +213,34 @@ public static class Shell
         try { ToastNotificationManager.History.Remove("ask-" + id, "nekodrop", Aumid); }
         catch (Exception) { }
     }
+
+    [DllImport("user32.dll")]
+    static extern IntPtr GetForegroundWindow();
+
+    /// <summary>
+    /// The files selected in the Explorer window in front, for the hotkey;
+    /// none when Explorer is not in front or nothing is selected.
+    /// </summary>
+    public static string[] ExplorerSelection()
+    {
+        try
+        {
+            var front = GetForegroundWindow();
+            if (Type.GetTypeFromProgID("Shell.Application") is not { } type || Activator.CreateInstance(type) is not { } shellApp) return [];
+            dynamic shell = shellApp;
+            foreach (dynamic window in shell.Windows())
+            {
+                try
+                {
+                    if (new IntPtr(Convert.ToInt64(window.HWND)) != front) continue;
+                    var picked = new List<string>();
+                    foreach (dynamic item in window.Document.SelectedItems()) picked.Add((string)item.Path);
+                    return [.. picked];
+                }
+                catch (Exception) { /* not a folder window */ }
+            }
+        }
+        catch (Exception) { }
+        return [];
+    }
 }

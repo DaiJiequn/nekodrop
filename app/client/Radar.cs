@@ -14,11 +14,11 @@ namespace NekoDrop;
 public readonly record struct RadarGeometry(Point Center, double Orbit, double Inner, double Outer)
 {
     /// <summary>A device's icon (its circle), in pixels.</summary>
-    public const double Node = 56;
-    /// <summary>A device's whole box: icon, name and status below it.</summary>
-    public const double NodeWidth = 116, NodeHeight = Node + 44;
+    public const double Node = 50;
+    /// <summary>A device's whole box: 4 px padding, icon, name and status below it.</summary>
+    public const double NodeWidth = 112, NodeHeight = 4 + Node + 4 + 16 + 15 + 4;
     /// <summary>"This PC" in the middle.</summary>
-    public const double Hub = 60;
+    public const double Hub = 58;
     /// <summary>More devices than this go to the list.</summary>
     public const int MaxOnRadar = 8;
 
@@ -34,7 +34,8 @@ public readonly record struct RadarGeometry(Point Center, double Orbit, double I
         var byBottom = (stage.Height / 2 - (NodeHeight - Node / 2) - 8) / 0.93;
         // Never so small that the icons touch the hub.
         var orbit = Math.Max(Hub / 2 + Node / 2 + 12, Math.Min(byWidth, Math.Min(byTop, byBottom)));
-        return new RadarGeometry(center, orbit, orbit * 0.52, orbit * 1.45);
+        // Two guide rings as in the design (154 and 248 px there): the orbit and one inside it.
+        return new RadarGeometry(center, orbit, orbit * 0.62, orbit * 1.05);
     }
 
     /// <summary>
@@ -71,8 +72,8 @@ public sealed class RadarPanel : Panel
         for (var i = 0; i < n; i++)
         {
             var p = g.IconCenter(i, n);
-            // The icon is at the top of the box: its center is half an icon down.
-            InternalChildren[i].Arrange(new Rect(p.X - RadarGeometry.NodeWidth / 2, p.Y - RadarGeometry.Node / 2,
+            // The icon is at the top of the box: its center is padding and half an icon down.
+            InternalChildren[i].Arrange(new Rect(p.X - RadarGeometry.NodeWidth / 2, p.Y - 4 - RadarGeometry.Node / 2,
                                                  RadarGeometry.NodeWidth, RadarGeometry.NodeHeight));
         }
         return final;
@@ -151,6 +152,61 @@ public sealed class ProgressRing : FrameworkElement
         }
         geo.Freeze();
         dc.DrawGeometry(null, pen, geo);
+    }
+}
+
+/// <summary>A thin progress bar: the share done, filled from the left with rounded ends.</summary>
+public sealed class Bar : FrameworkElement
+{
+    public static readonly DependencyProperty ProgressProperty = DependencyProperty.Register(
+        nameof(Progress), typeof(double), typeof(Bar), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty FillProperty = DependencyProperty.Register(
+        nameof(Fill), typeof(Brush), typeof(Bar), new FrameworkPropertyMetadata(Brushes.DodgerBlue, FrameworkPropertyMetadataOptions.AffectsRender));
+    public double Progress { get => (double)GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
+    public Brush Fill { get => (Brush)GetValue(FillProperty); set => SetValue(FillProperty, value); }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        var w = ActualWidth * Math.Clamp(Progress, 0, 1);
+        if (w <= 0) return;
+        var r = ActualHeight / 2;
+        dc.DrawRoundedRectangle(Fill, null, new Rect(0, 0, Math.Max(w, ActualHeight), ActualHeight), r, r);
+    }
+}
+
+/// <summary>
+/// The AirDrop mark: three concentric arcs open at the bottom around a dot,
+/// drawn to any size in one brush (the title bars and the tray menu).
+/// </summary>
+public sealed class AirDropMark : FrameworkElement
+{
+    public static readonly DependencyProperty BrushProperty = DependencyProperty.Register(
+        nameof(Brush), typeof(Brush), typeof(AirDropMark), new FrameworkPropertyMetadata(Brushes.DodgerBlue, FrameworkPropertyMetadataOptions.AffectsRender));
+    public Brush Brush { get => (Brush)GetValue(BrushProperty); set => SetValue(BrushProperty, value); }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        var size = Math.Min(ActualWidth, ActualHeight);
+        if (size <= 0) return;
+        var k = size / 20; // drawn on a 20 x 20 grid
+        var c = new Point(ActualWidth / 2, ActualHeight / 2);
+        var pen = new Pen(Brush, 1.6 * k) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        foreach (var r in new[] { 8.2, 5.4 })
+        {
+            // From 120 degrees round the top to 60 degrees: a gap of 60 degrees at the bottom.
+            var radius = r * k;
+            var from = new Point(c.X + radius * Math.Cos(Math.PI * 2 / 3), c.Y + radius * Math.Sin(Math.PI * 2 / 3));
+            var to = new Point(c.X + radius * Math.Cos(Math.PI / 3), c.Y + radius * Math.Sin(Math.PI / 3));
+            var arc = new StreamGeometry();
+            using (var g = arc.Open())
+            {
+                g.BeginFigure(from, false, false);
+                g.ArcTo(to, new Size(radius, radius), 0, true, SweepDirection.Clockwise, true, false);
+            }
+            arc.Freeze();
+            dc.DrawGeometry(null, pen, arc);
+        }
+        dc.DrawEllipse(Brush, null, c, 2.4 * k, 2.4 * k);
     }
 }
 

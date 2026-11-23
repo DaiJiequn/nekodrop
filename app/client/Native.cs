@@ -63,6 +63,24 @@ public static class Native
         return true;
     }
 
+    /// <summary>
+    /// The design's window: no system title bar (each window draws its own,
+    /// 40 px, with its own buttons), Mica where Windows has it, the theme's
+    /// solid background elsewhere.
+    /// </summary>
+    public static void Chrome(Window w, double caption = 40)
+    {
+        System.Windows.Shell.WindowChrome.SetWindowChrome(w, new System.Windows.Shell.WindowChrome
+        {
+            CaptionHeight = caption,
+            GlassFrameThickness = new Thickness(-1),
+            ResizeBorderThickness = new Thickness(6),
+            UseAeroCaptionButtons = false,
+        });
+        w.SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, "MicaSolid");
+        w.SourceInitialized += (_, _) => { if (ApplyMica(w)) w.Background = System.Windows.Media.Brushes.Transparent; };
+    }
+
     /// <summary>The user's accent color (DWM colorization), opaque.</summary>
     public static System.Windows.Media.Color Accent()
     {

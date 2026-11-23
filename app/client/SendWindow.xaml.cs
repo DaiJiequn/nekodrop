@@ -20,7 +20,9 @@ public partial class SendWindow : Window
     {
         InitializeComponent();
         DataContext = A.Model;
-        SourceInitialized += (_, _) => { if (Native.ApplyMica(this)) Background = Brushes.Transparent; };
+        Native.Chrome(this);
+        Radar.Compact = true;
+        HintText.Text = L.T("send.hint") + (A.Settings.Hotkey ? " · Win+Shift+D" : "");
         A.Model.Files.CollectionChanged += OnChanged;
         Closed += (_, _) =>
         {
@@ -39,7 +41,8 @@ public partial class SendWindow : Window
     public void Refresh()
     {
         var files = A.Model.Files;
-        if (files.Count == 0) { SummaryText.Text = L.T("pick.files"); SizeText.Text = ""; return; }
+        CountText.Text = files.Count.ToString();
+        if (files.Count == 0) { SummaryText.Text = L.T("pick.files"); return; }
         var first = Path.GetFileName(files[0].TrimEnd('\\'));
         SummaryText.Text = files.Count == 1 ? first : L.F("send.summary", first, files.Count, files.Count - 1);
         long bytes = 0;
@@ -53,7 +56,7 @@ public partial class SendWindow : Window
             }
             catch (Exception) { }
         }
-        SizeText.Text = $"{L.F("done.items", files.Count)} · {Size(bytes)}";
+        SummaryText.ToolTip = $"{L.F("done.items", files.Count)} · {Size(bytes)}";
     }
 
     static string Size(long b) =>

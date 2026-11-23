@@ -61,11 +61,16 @@ public sealed class App : Application
         try { Shell.Register(Settings.StartWithWindows); } catch (Exception) { }
         ApplyTheme();
         CreateTray();
+        ApplyHotkey();
         Service.State += o => Dispatcher.BeginInvoke(() => OnServiceState(o));
         Service.Connected += up => Dispatcher.BeginInvoke(() =>
         {
-            if (!up) Model.Status = L.T("status.noService");
+            if (up) return;
+            Model.Status = L.T("status.noService");
+            Model.Air = "service_stopped";
+            Model.RadioOn = false;
         });
+        Model.Allow = Settings.Discoverable;
         Service.Start();
         Engine.Event += o => Dispatcher.BeginInvoke(() => OnEngine(o));
         Engine.Event += o => EngineLog(o.ToJsonString());
@@ -173,38 +178,24 @@ public sealed class App : Application
             Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? System.Drawing.SystemIcons.Application,
             Visible = true,
         };
-        _tray.MouseClick += (_, a) => { if (a.Button == Forms.MouseButtons.Left) ShowWindow(); };
-        _tray.ContextMenuStrip = BuildMenu();
+        // Left: the main window. Right: the design's menu at the pointer.
+        _tray.MouseClick += (_, a) =>
+        {
+            if (a.Button == Forms.MouseButtons.Left) ShowWindow();
+            else if (a.Button == Forms.MouseButtons.Right) ShowTrayMenu();
+        };
     }
 
-    Forms.ContextMenuStrip BuildMenu()
+    void ShowTrayMenu()
     {
-        var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add(L.T("tray.open"), null, (_, _) => ShowWindow());
-        menu.Items.Add(new Forms.ToolStripSeparator());
-        var receive = new Forms.ToolStripMenuItem(L.T("tray.receive")) { CheckOnClick = true, Checked = Settings.Discoverable };
-        receive.CheckedChanged += (_, _) => SetDiscoverable(receive.Checked);
-        menu.Items.Add(receive);
-        var mode = new Forms.ToolStripMenuItem(L.T("tray.mode"));
-        foreach (var (label, value) in new[] { (L.T("mode.concurrent.short"), "concurrent"), (L.T("mode.ondemand.short"), "ondemand"), (L.T("mode.off.short"), "off") })
-        {
-            var item = new Forms.ToolStripMenuItem(label) { Tag = value };
-            item.Click += (_, _) => Service.SetMode(value);
-            mode.DropDownItems.Add(item);
-        }
-        mode.DropDownOpening += (_, _) =>
-        {
-            var current = (string?)Service.Last?["mode"];
-            foreach (Forms.ToolStripMenuItem i in mode.DropDownItems) i.Checked = (string?)i.Tag == current;
-        };
-        menu.Items.Add(mode);
-        menu.Items.Add(L.T("wifi.tray"), null, (_, _) => ShowWifi());
-        menu.Items.Add(L.T("tray.settings"), null, (_, _) => new SettingsWindow().Show());
-        menu.Items.Add(L.T("tray.report"), null, (_, _) => RunReport());
-        menu.Items.Add(new Forms.ToolStripSeparator());
-        menu.Items.Add(L.T("tray.quit"), null, (_, _) => Quit());
-        return menu;
+        var at = Forms.Cursor.Position;
+        // The pointer is in device pixels; WPF places windows in 96-dpi units.
+        double scale;
+        using (var g = System.Drawing.Graphics.FromHwnd(IntPtr.Zero)) scale = g.DpiX / 96.0;
+        new TrayMenu().ShowAt(new Point(at.X / scale, at.Y / scale));
     }
+
+    public void QuitApp() => Quit();
 
     /// <summary>
     /// The diagnostic report (report.ps1 beside the app): it asks for
@@ -263,10 +254,15 @@ public sealed class App : Application
         if (lang >= 0 && lang + 1 < _startArgs.Length) L.Use(_startArgs[lang + 1]);
         _theme = Theme.Build(Settings.Accent, _startArgs.Contains("--dark") ? true : _startArgs.Contains("--light") ? false : null);
         Resources.MergedDictionaries.Add(_theme);
+        EnsureStyles();
         Directory.CreateDirectory(dir);
-        Model.Status = L.F("status.on", 44);
-        Model.Detail = "Wi-Fi: " + L.T("wifi.connected");
+        Model.Status = L.F("status.on", 149);
         Model.RadioOn = true;
+        Model.Air = "ready";
+        Model.Mode = "concurrent";
+        Model.Channel = 149;
+        Model.Ssid = "Office-5G";
+        Model.Update = "0.1.40";
         Motion.ForceOn = true;
         Model.Devices.Add(new Device { Id = "a", Name = "iPhone", Model = "iPhone15,2" });
         Model.Devices.Add(new Device { Id = "b", Name = "MacBook Air", Model = "Mac14,2", Busy = true, Progress = 0.42, State = "sending", Status = L.F("send.sending", 0.42) });
@@ -274,17 +270,44 @@ public sealed class App : Application
         Model.Devices.Add(new Device { Id = "d", Name = "iPhone 15 Pro Max", Model = "iPhone16,2", State = "declined", Status = L.T("send.declined") });
         Model.Requests.Add(new Request { Id = "r", Sender = "iPhone", Model = "iPhone15,2", What = L.F("what.photos", 2) });
         Model.ReceivedFiles.Add(new Received { Name = "IMG_0042.HEIC", Path = "", From = "iPhone" });
-        foreach (var f in _startArgs.SkipWhile(a => a != "--send").Skip(1).TakeWhile(a => !a.StartsWith("--")))
-            Model.Files.Add(f);
-        // Each window is built just before it is drawn, so a variant (the list, no
-        // devices) can change the settings and the model first.
-        var windows = new (string Name, Func<Window> Make)[]
+        Model.ReceivedFiles.Add(new Received { Name = L.F("what.videos", 1), Path = "", From = "MacBook Air", Failed = true });
+        Model.Files.Add(@"C:\Users\me\Pictures\IMG_2048.HEIC");
+        Model.Files.Add(@"C:\Users\me\Documents\Plan.pdf");
+        var wifiState = new JsonObject
         {
-            ("send", () => new SendWindow()),
-            ("main", () => new MainWindow()),
-            ("main-list", () => { Settings.DeviceView = "list"; return new MainWindow(); }),
-            ("main-empty", () => { Settings.DeviceView = "radar"; Model.Devices.Clear(); return new MainWindow(); }),
-            ("settings", () => new SettingsWindow()),
+            ["radio"] = "on", ["mode"] = "concurrent", ["wifi"] = "connected", ["ssid"] = "Office-5G",
+            ["networks"] = new JsonArray(
+                new JsonObject { ["ssid"] = "Office-5G", ["dbm"] = -48, ["security"] = "wpa2-psk", ["saved"] = true, ["connected"] = true },
+                new JsonObject { ["ssid"] = "Home-WiFi", ["dbm"] = -61, ["security"] = "wpa2/3-psk", ["saved"] = true },
+                new JsonObject { ["ssid"] = "Guest-5G", ["dbm"] = -70, ["security"] = "wpa2-psk" },
+                new JsonObject { ["ssid"] = "CoffeeShop-Free", ["dbm"] = -80, ["security"] = "open" }),
+            ["known"] = new JsonArray(
+                new JsonObject { ["ssid"] = "Office-5G", ["auto"] = true },
+                new JsonObject { ["ssid"] = "Home-WiFi", ["auto"] = false }),
+        };
+        Window Main(string air, string detail = "") { Model.Air = air; Model.Detail = detail; return new MainWindow(); }
+        // Each window is built just before it is drawn, so a variant can change the
+        // settings and the model first. A height draws more than fits on the build
+        // machine's screen (the main window's whole content).
+        var windows = new (string Name, Func<Window> Make, double Height)[]
+        {
+            ("send", () => new SendWindow(), 0),
+            ("main", () => Main("ready"), 1000),
+            ("main-list", () => { Settings.DeviceView = "list"; return Main("ready"); }, 1000),
+            ("settings-general", () => new SettingsWindow("general"), 0),
+            ("settings-network", () => new SettingsWindow("network"), 0),
+            ("settings-hardware", () => new SettingsWindow("hardware"), 0),
+            ("settings-updates", () => new SettingsWindow("updates"), 0),
+            ("wifi", () => { var w = new WifiWindow(); w.Render(wifiState); return w; }, 0),
+            ("wifi-windows", () => { var w = new WifiWindow(); wifiState["mode"] = "ondemand"; w.Render(wifiState); return w; }, 0),
+            ("tray", () => { var m = new TrayMenu(); m.Loaded += (_, _) => m.OpenModes(); return m; }, 0),
+            ("main-empty", () => { Settings.DeviceView = "radar"; Model.Devices.Clear(); Model.Requests.Clear(); return Main("ready"); }, 0),
+            ("main-starting", () => Main("starting"), 0),
+            ("main-standby", () => Main("standby"), 0),
+            ("main-off", () => Main("off"), 0),
+            ("main-error", () => Main("error", "bring-up failed: out of DMA memory for the firmware image"), 0),
+            ("main-noservice", () => Main("service_stopped"), 0),
+            ("main-nocard", () => Main("no_adapter"), 0),
         };
         if (_startArgs.Contains("--live"))
         {
@@ -292,7 +315,7 @@ public sealed class App : Application
             _ = LiveSnapshot(dir, windows.Select(x => (x.Name, x.Make())).ToArray());
             return;
         }
-        foreach (var (name, make) in windows)
+        foreach (var (name, make, tall) in windows)
         {
             var w = make();
             w.WindowStartupLocation = WindowStartupLocation.Manual;
@@ -303,17 +326,22 @@ public sealed class App : Application
             // picture shows where it is centered.
             Pump(TimeSpan.FromMilliseconds(1200));
             if (w.Content is not FrameworkElement root) continue;
-            // A scrolling window (the settings): all of its content, not the first screen.
-            if (root is System.Windows.Controls.ScrollViewer { Content: FrameworkElement inner }) root = inner;
+            var width = root.ActualWidth;
+            var height = tall > 0 ? tall : root.ActualHeight;
+            if (tall > 0)
+            {
+                root.Measure(new Size(width, height));
+                root.Arrange(new Rect(0, 0, width, height));
+                root.UpdateLayout();
+            }
             Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            var width = (int)root.ActualWidth; var height = (int)root.ActualHeight;
             var visual = new System.Windows.Media.DrawingVisual();
             using (var dc = visual.RenderOpen())
             {
-                dc.DrawRectangle((System.Windows.Media.Brush)Resources["Window"], null, new Rect(0, 0, width, height));
+                if (w is not TrayMenu) dc.DrawRectangle((System.Windows.Media.Brush)Resources["MicaSolid"], null, new Rect(0, 0, width, height));
                 dc.DrawRectangle(new System.Windows.Media.VisualBrush(root), null, new Rect(0, 0, width, height));
             }
-            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)width, (int)height, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
             bmp.Render(visual);
             var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
             png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
@@ -353,6 +381,57 @@ public sealed class App : Application
         Engine.Look(true);
     }
 
+    ResourceDictionary? _styles;
+
+    /// <summary>The design's control styles (Styles.xaml), after the colours they use.</summary>
+    void EnsureStyles()
+    {
+        if (_styles is not null) return;
+        _styles = new ResourceDictionary { Source = new Uri("/nekodrop;component/Styles.xaml", UriKind.Relative) };
+        Resources.MergedDictionaries.Add(_styles);
+    }
+
+    SettingsWindow? _settings;
+
+    /// <summary>The settings, at a tab: general, network, hardware or updates.</summary>
+    public void ShowSettings(string tab)
+    {
+        _settings?.Close();
+        _settings = new SettingsWindow(tab);
+        _settings.Closed += (s, _) => { if (_settings == s) _settings = null; };
+        _settings.Show();
+        _settings.Activate();
+    }
+
+    /// <summary>Starts NekoDropService (Windows asks for administrator rights).</summary>
+    public static void StartService()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("sc.exe", "start NekoDropService")
+                { UseShellExecute = true, Verb = "runas", WindowStyle = ProcessWindowStyle.Hidden });
+        }
+        catch (Exception) { /* the user said no */ }
+    }
+
+    Hotkey? _hotkey;
+
+    /// <summary>Win+Shift+D on or off, after the setting.</summary>
+    public void ApplyHotkey()
+    {
+        _hotkey?.Dispose();
+        _hotkey = null;
+        if (!Settings.Hotkey) return;
+        _hotkey = Hotkey.Register(() =>
+        {
+            var selected = Shell.ExplorerSelection();
+            if (selected.Length == 0) { ShowWindow(); return; }
+            Model.Files.Clear();
+            foreach (var f in selected) Model.Files.Add(f);
+            ShowSendWindow();
+        });
+    }
+
     ResourceDictionary? _theme;
 
     /// <summary>The colours, again after the accent setting changes: every window follows (DynamicResource).</summary>
@@ -360,21 +439,23 @@ public sealed class App : Application
     {
         var fresh = Theme.Build(Settings.Accent);
         if (_theme is not null) Resources.MergedDictionaries.Remove(_theme);
-        Resources.MergedDictionaries.Add(fresh);
+        Resources.MergedDictionaries.Insert(0, fresh);
         _theme = fresh;
+        EnsureStyles();
     }
 
     /// <summary>After the language setting changes: menus, Explorer verb and open windows follow.</summary>
     public void ApplyLanguage()
     {
         L.Use(Settings.Language);
-        if (_tray is not null) { var old = _tray.ContextMenuStrip; _tray.ContextMenuStrip = BuildMenu(); old?.Dispose(); }
+
         try { Shell.Register(Settings.StartWithWindows); } catch (Exception) { }
         if (_window is not null) { var w = _window; _window = null; w.Close(); ShowWindow(); }
     }
 
     public void SetDiscoverable(bool on)
     {
+        Model.Allow = on;
         Settings.Discoverable = on;
         Settings.Save();
         if (on) { StartEngine(); Service.Wake(); }
@@ -479,6 +560,11 @@ public sealed class App : Application
         var res = await Updater.Check(Settings.PreviewUpdates);
         if (res.Status == Updater.CheckStatus.Available && res.Release is { } found)
         {
+            if (Settings.SkipVersion != found.Version.ToString())
+            {
+                Model.Update = found.Version.ToString();
+                Model.UpdatePreview = found.Preview;
+            }
             var announce = !asked && (_update is null || _update.Version != found.Version) &&
                            Settings.SkipVersion != found.Version.ToString();
             _update = found;
@@ -556,7 +642,8 @@ public sealed class App : Application
                 { Timeout = TimeSpan.FromSeconds(8) };
             var r = await http.GetAsync("http://www.msftconnecttest.com/connecttest.txt");
             var body = r.IsSuccessStatusCode ? await r.Content.ReadAsStringAsync() : "";
-            if (body.Trim() == "Microsoft Connect Test") return;
+            if (body.Trim() == "Microsoft Connect Test") { Model.Portal = ""; return; }
+            Model.Portal = ssid;
             Process.Start(new ProcessStartInfo("http://www.msftconnecttest.com/redirect") { UseShellExecute = true });
             Shell.DoneToast("portal", L.F("wifi.portal.title", ssid), L.T("wifi.portal.body"), null);
         }
@@ -580,6 +667,18 @@ public sealed class App : Application
         }
         _lastRadio = radio ?? "";
         Model.RadioOn = radio == "on";
+        var stateMode = (string?)o["effectiveMode"] ?? (string?)o["mode"] ?? "";
+        var card = (string?)o["card"] ?? "";
+        Model.Mode = (string?)o["mode"] ?? "";
+        Model.Channel = (int?)o["channel"] ?? 0;
+        Model.Ssid = (string?)o["wifi"] == "connected" ? (string?)o["ssid"] ?? "" : "";
+        Model.Air = card == "" && stateMode != "off" ? "no_adapter" : radio switch
+        {
+            "on" => "ready",
+            "starting" => "starting",
+            "error" => "error",
+            _ => stateMode == "off" ? "off" : "standby",
+        };
         var wifiNow = (string?)o["wifi"] ?? "";
         if (wifiNow == "connected" && _lastWifi != "connected") _ = CheckPortal((string?)o["ssid"] ?? "");
         _lastWifi = wifiNow;
@@ -595,7 +694,7 @@ public sealed class App : Application
         };
         Model.Detail = radio == "error" ? (string?)o["detail"] ?? "" :
             wifi == "" ? "" : wifi.StartsWith("unsupported") ? "Wi-Fi：" + wifi[13..] : "Wi-Fi：" + WifiText(wifi);
-        if (_tray is not null) _tray.Text = "nekodrop – " + Model.Status;
+        if (_tray is not null) _tray.Text = "nekodrop — " + MainWindow.Status(Model.Air).Label;
     }
 
     static string WifiText(string s) => s switch
@@ -677,6 +776,7 @@ public sealed class App : Application
                 if (_requests.Remove(id, out var lost))
                 {
                     Model.Requests.Remove(lost);
+                    Model.ReceivedFiles.Insert(0, new Received { Name = lost.What, Path = "", From = lost.Sender, Failed = true });
                     Shell.DoneToast(id, L.F("done.lost", lost.Sender), (string?)o["reason"] ?? "", null);
                 }
                 break;
@@ -702,6 +802,15 @@ public sealed class App : Application
                 if (state is "sent" or "done" or "declined" or "failed")
                 {
                     d.Busy = false;
+                    // A device that took the files is ready for more a moment later.
+                    if (state is "sent" or "done")
+                        _ = Task.Delay(TimeSpan.FromSeconds(3.5)).ContinueWith(_ => Dispatcher.BeginInvoke(() =>
+                        {
+                            if (d.State != "sent") return;
+                            d.State = "";
+                            d.Progress = 0;
+                            d.Status = L.T("dev.ready");
+                        }));
                     if (state is "sent" or "done") Shell.DoneToast(id, L.F("done.sent", d.Name), L.F("done.items", Model.Files.Count), null);
                 }
                 Service.Touch();

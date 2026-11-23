@@ -21,7 +21,7 @@ public abstract class Observable : INotifyPropertyChanged
 public sealed class Device : Observable
 {
     public required string Id { get; init; }
-    string _name = "", _model = "", _status = "";
+    string _name = "", _model = "", _status = L.T("dev.ready");
     double _progress;
     bool _busy;
     public string Name { get => _name; set { Set(ref _name, value); Raise(nameof(Glyph)); } }
@@ -65,6 +65,9 @@ public sealed class Received
     public required string Path { get; init; }
     public required string From { get; init; }
     public DateTime When { get; init; } = DateTime.Now;
+    /// <summary>The transfer broke off: shown in red, nothing to open.</summary>
+    public bool Failed { get; init; }
+    public string WhenText => When.ToString("HH:mm");
 }
 
 public sealed class AppModel : Observable
@@ -74,10 +77,30 @@ public sealed class AppModel : Observable
     public ObservableCollection<string> Files { get; } = [];
     public ObservableCollection<Received> ReceivedFiles { get; } = [];
     string _status = L.T("status.connecting"), _detail = "";
-    bool _looking, _radioOn;
+    bool _looking, _radioOn, _allow = true, _updatePreview;
+    string _air = "service_stopped", _mode = "", _ssid = "", _update = "";
+    int _channel;
     public string Status { get => _status; set => Set(ref _status, value); }
     public string Detail { get => _detail; set => Set(ref _detail, value); }
     public bool Looking { get => _looking; set => Set(ref _looking, value); }
     /// <summary>The radio is on and AirDrop listens (the radar's ripples run).</summary>
     public bool RadioOn { get => _radioOn; set => Set(ref _radioOn, value); }
+    /// <summary>
+    /// What AirDrop is doing, as the design's states: ready, starting, standby
+    /// (on demand), off, error, service_stopped, no_adapter.
+    /// </summary>
+    public string Air { get => _air; set => Set(ref _air, value); }
+    /// <summary>concurrent, ondemand or off.</summary>
+    public string Mode { get => _mode; set => Set(ref _mode, value); }
+    public int Channel { get => _channel; set => Set(ref _channel, value); }
+    /// <summary>The network nekodrop's own Wi-Fi is on, "" if none.</summary>
+    public string Ssid { get => _ssid; set => Set(ref _ssid, value); }
+    /// <summary>A newer version found ("" if none), and whether it is a preview.</summary>
+    public string Update { get => _update; set => Set(ref _update, value); }
+    public bool UpdatePreview { get => _updatePreview; set => Set(ref _updatePreview, value); }
+    string _portal = "";
+    /// <summary>A network that wants a web sign-in after joining ("" if none).</summary>
+    public string Portal { get => _portal; set => Set(ref _portal, value); }
+    /// <summary>Receiving allowed (visible to others).</summary>
+    public bool Allow { get => _allow; set => Set(ref _allow, value); }
 }

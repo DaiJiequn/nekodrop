@@ -1,37 +1,40 @@
 // SPDX-License-Identifier: GPL-2.0-only
+using System.Text.Json.Nodes;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace NekoDrop;
 
+/// <summary>
+/// Settings in four tabs (the design's pivot): general (name, folder,
+/// language, accent, start with Windows, hotkey), network and receiving
+/// (mode, ask first, always-accept list), card and advanced (detected or
+/// chosen card, experimental switches, diagnostic report), about and updates.
+/// Save keeps the window open and says so; Cancel closes it.
+/// </summary>
 public partial class SettingsWindow : Window
 {
     static App A => App.Instance;
+    string _folder;
+    readonly List<string> _trusted;
+    string _releasesUrl = Updater.ReleasesPage;
 
-    public SettingsWindow()
+    public SettingsWindow(string tab = "general")
     {
         InitializeComponent();
-        SourceInitialized += (_, _) => { if (Native.ApplyMica(this)) Background = Brushes.Transparent; };
+        Native.Chrome(this);
         var s = A.Settings;
         NameBox.Text = s.DeviceName;
-        FolderBox.Text = s.SaveFolder;
+        _folder = s.SaveFolder;
+        FolderText.Text = _folder;
         AskBox.IsChecked = s.Ask;
         StartupBox.IsChecked = s.StartWithWindows;
+        HotkeyBox.IsChecked = s.Hotkey;
         LanguageBox.SelectedIndex = s.Language switch { "zh" => 1, "en" => 2, _ => 0 };
-        foreach (var hex in Theme.Accents)
-        {
-            var dot = new System.Windows.Controls.RadioButton
-            {
-                Style = (Style)FindResource("Swatch"),
-                Tag = hex,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!),
-                ToolTip = hex,
-                IsChecked = string.Equals(hex, s.Accent, StringComparison.OrdinalIgnoreCase),
-            };
-            AccentPanel.Children.Add(dot);
-        }
-        AccentSystem.IsChecked = !Theme.Accents.Contains(s.Accent, StringComparer.OrdinalIgnoreCase);
-        foreach (var t in s.AlwaysAccept) TrustedList.Items.Add(t.Replace("|", " · "));
+        BuildAccents(s.Accent);
+        _trusted = [.. s.AlwaysAccept];
+        ShowTrusted();
         var mode = (string?)A.Service.Last?["mode"] ?? "concurrent";
         ModeConcurrent.IsChecked = mode == "concurrent";
         ModeOnDemand.IsChecked = mode == "ondemand";
@@ -40,30 +43,97 @@ public partial class SettingsWindow : Window
         CoexPlanBox.IsChecked = (bool?)A.Service.Last?["coexPlan"] ?? false;
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
-        UpdateStatus.Text = "nekodrop " + Updater.Current;
+        VersionText.Text = "nekodrop " + Updater.Current;
+        Title = L.T("set.title") + " · nekodrop " + Updater.Current;
         ShowCard(A.Service.Last);
         A.Service.Reply += OnCardsReply;
         Closed += (_, _) => A.Service.Reply -= OnCardsReply;
         A.Service.RequestCards();
-        /* Always visible, also after "Check now" replaces the status line (#11). */
-        Title = L.T("set.title") + " · nekodrop " + Updater.Current;
+        (tab switch { "network" => TabNetwork, "hardware" => TabHardware, "updates" => TabUpdates, _ => TabGeneral }).IsChecked = true;
     }
 
-    string _releasesUrl = Updater.ReleasesPage;
+    void Tab_Checked(object sender, RoutedEventArgs e)
+    {
+        if (PageGeneral is null) return; // still loading
+        PageGeneral.Visibility = TabGeneral.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        PageNetwork.Visibility = TabNetwork.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        PageHardware.Visibility = TabHardware.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        PageUpdates.Visibility = TabUpdates.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ------------------------------------------------------------- accent
+
+    /// <summary>"Same as Windows" and the four accents of the design, one at a time.</summary>
+    void BuildAccents(string chosen)
+    {
+        var system = new RadioButton
+        {
+            Style = (Style)FindResource("Segment"),
+            Content = L.T("set.accent.system"),
+            Tag = null,
+            GroupName = "accent",
+            IsChecked = Theme.Accents.All(a => a.Key != chosen),
+            Margin = new Thickness(0, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        system.SetValue(FrameworkElement.NameProperty, "AccentSystem");
+        AccentPanel.Children.Add(system);
+        foreach (var a in Theme.Accents)
+        {
+            AccentPanel.Children.Add(new RadioButton
+            {
+                Style = (Style)FindResource("Swatch"),
+                Tag = a.Key,
+                GroupName = "accent",
+                Background = new SolidColorBrush(Theme.Dark ? a.Dark : a.Light),
+                ToolTip = a.Key,
+                IsChecked = a.Key == chosen,
+            });
+        }
+    }
+
+    string ChosenAccent() =>
+        AccentPanel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true && r.Tag is string)?.Tag as string ?? "";
+
+    // ----------------------------------------------------- always accept
+
+    void ShowTrusted()
+    {
+        TrustedTitle.Text = L.F("set.trustedCount", _trusted.Count);
+        TrustedEmpty.Visibility = _trusted.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        TrustedList.Children.Clear();
+        foreach (var t in _trusted)
+        {
+            var row = new DockPanel { Margin = new Thickness(0, 4, 0, 0) };
+            var remove = new Button { Style = (Style)FindResource("WinButton"), Content = L.T("set.remove"), Padding = new Thickness(10, 4, 10, 4) };
+            remove.Click += (_, _) => { _trusted.Remove(t); ShowTrusted(); };
+            DockPanel.SetDock(remove, Dock.Right);
+            row.Children.Add(remove);
+            row.Children.Add(new TextBlock { Text = t.Replace("|", " · "), FontSize = 13, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
+            TrustedList.Children.Add(row);
+        }
+    }
+
+    // ------------------------------------------------------------ the card
 
     /// <summary>A row of the card or model list.</summary>
     sealed record Item(string Key, string Label, string Vendor = "");
 
-    void ShowCard(System.Text.Json.Nodes.JsonObject? state)
+    void ShowCard(JsonObject? state)
     {
         var card = (string?)state?["card"] ?? "";
         var manual = (string?)state?["manualCard"] ?? "";
-        CardStatus.Text = card != "" ? L.F(manual != "" ? "set.card.manual" : "set.card.detected", card)
-                                     : L.T("set.card.none");
+        var found = card != "";
+        CardStatus.Text = found ? (manual != "" ? L.F("set.card.manual", card) : card) : L.T("set.card.none");
+        CardBadgeText.Text = found ? L.T("set.card.detectedBadge") : L.T("set.card.unrecognized");
+        CardBadge.SetResourceReference(Border.BackgroundProperty, found ? "SuccessBg" : "WarnBg");
+        CardBadgeText.SetResourceReference(TextBlock.ForegroundProperty, found ? "Success" : "Warn");
+        // The manual choice is for a card nekodrop does not know; shown when none was found or one was chosen by hand.
+        CardManual.Visibility = !found || manual != "" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>The service's card list and models (the "cards" event); a manual choice's answer ("card-manual").</summary>
-    void OnCardsReply(System.Text.Json.Nodes.JsonObject o) => Dispatcher.BeginInvoke(() =>
+    void OnCardsReply(JsonObject o) => Dispatcher.BeginInvoke(() =>
     {
         var ev = (string?)o["event"];
         if (ev == "card-manual")
@@ -76,7 +146,7 @@ public partial class SettingsWindow : Window
         var manualHw = (string?)A.Service.Last?["manualCard"] ?? "";
         var manualModel = (string?)A.Service.Last?["manualModel"] ?? "";
         CardBox.Items.Clear();
-        foreach (var c in o["candidates"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray())
+        foreach (var c in o["candidates"]?.AsArray() ?? [])
         {
             var hw = (string?)c?["hw"] ?? "";
             var name = (string?)c?["name"] ?? "";
@@ -84,7 +154,7 @@ public partial class SettingsWindow : Window
             CardBox.Items.Add(new Item(hw, $"{(name == "" ? hw : name)} ({hw.Replace("PCI\\", "")}) · {tag}"));
         }
         ModelBox.Items.Clear();
-        foreach (var m in o["models"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray())
+        foreach (var m in o["models"]?.AsArray() ?? [])
             ModelBox.Items.Add(new Item((string?)m?["key"] ?? "", (string?)m?["name"] ?? "", (string?)m?["vendor"] ?? ""));
         CardBox.SelectedItem = CardBox.Items.Cast<Item>().FirstOrDefault(i => i.Key == manualHw) ??
                                CardBox.Items.Cast<Item>().FirstOrDefault();
@@ -109,11 +179,25 @@ public partial class SettingsWindow : Window
         A.Service.SetManualCard("", "");
     }
 
+    void Report_Click(object sender, RoutedEventArgs e) => App.RunReport();
+
+    // ------------------------------------------------------------- updates
+
+    void Status(string text, bool releases = false, double? progress = null)
+    {
+        UpdateBox.Visibility = Visibility.Visible;
+        UpdateStatus.Text = text;
+        OpenReleasesButton.Visibility = releases ? Visibility.Visible : Visibility.Collapsed;
+        UpdateBox.SetResourceReference(Border.BackgroundProperty, releases ? "WarnBg" : "AccentSubtle");
+        UpdateStatus.SetResourceReference(TextBlock.ForegroundProperty, releases ? "Warn" : "Text");
+        UpdateBarBox.Visibility = progress is null ? Visibility.Collapsed : Visibility.Visible;
+        UpdateBar.Progress = progress ?? 0;
+    }
+
     async void CheckNow_Click(object sender, RoutedEventArgs e)
     {
         CheckNowButton.IsEnabled = false;
-        OpenReleasesButton.Visibility = Visibility.Collapsed;
-        UpdateStatus.Text = L.T("update.checking");
+        Status(L.T("update.checking"));
         try
         {
             A.Settings.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
@@ -121,26 +205,23 @@ public partial class SettingsWindow : Window
             switch (res.Status)
             {
                 case Updater.CheckStatus.UpToDate:
-                    UpdateStatus.Text = L.T("update.none");
+                    Status(L.T("update.none"));
                     return;
                 case Updater.CheckStatus.RateLimited:
                     _releasesUrl = res.PageUrl ?? Updater.ReleasesPage;
-                    OpenReleasesButton.Visibility = Visibility.Visible;
-                    UpdateStatus.Text = res.NewerTag is not null
-                        ? L.F("update.rateLimitedFound", res.NewerTag)
-                        : L.T("update.rateLimited");
+                    Status(res.NewerTag is not null ? L.F("update.rateLimitedFound", res.NewerTag) : L.T("update.rateLimited"), releases: true);
                     return;
                 case Updater.CheckStatus.Failed:
-                    UpdateStatus.Text = L.T("update.checkFailed") +
-                        (string.IsNullOrEmpty(res.Detail) ? "" : ": " + res.Detail);
+                    Status(L.T("update.checkFailed") + (string.IsNullOrEmpty(res.Detail) ? "" : ": " + res.Detail));
                     return;
             }
             var found = res.Release;
-            if (found is null) { UpdateStatus.Text = L.T("update.none"); return; }
-            UpdateStatus.Text = L.F("update.found", found.Version.ToString());
-            var progress = new Progress<int>(p => UpdateStatus.Text = L.F("update.found", found.Version.ToString()) + $" {p}%");
+            if (found is null) { Status(L.T("update.none")); return; }
+            var text = L.F("update.found", found.Version.ToString());
+            Status(text, progress: 0);
+            var progress = new Progress<int>(p => Status(text + $" {p}%", progress: p / 100.0));
             var why = await A.InstallUpdate(progress);
-            if (why != "") UpdateStatus.Text = L.T("update.failed") + ": " + why;
+            if (why != "") Status(L.T("update.failed") + ": " + why);
         }
         finally { CheckNowButton.IsEnabled = true; }
     }
@@ -151,33 +232,33 @@ public partial class SettingsWindow : Window
         catch (Exception) { }
     }
 
+    // ---------------------------------------------------------------- save
+
     void Browse_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = L.T("pick.folder"), InitialDirectory = FolderBox.Text };
-        if (dlg.ShowDialog(this) == true) FolderBox.Text = dlg.FolderName;
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = L.T("pick.folder"), InitialDirectory = _folder };
+        if (dlg.ShowDialog(this) != true) return;
+        _folder = dlg.FolderName;
+        FolderText.Text = _folder;
     }
 
-    void RemoveTrusted_Click(object sender, RoutedEventArgs e)
-    {
-        if (TrustedList.SelectedIndex >= 0) TrustedList.Items.RemoveAt(TrustedList.SelectedIndex);
-    }
-
-    void Save_Click(object sender, RoutedEventArgs e)
+    async void Save_Click(object sender, RoutedEventArgs e)
     {
         var s = A.Settings;
         var name = NameBox.Text.Trim();
         if (name.Length > 0) s.DeviceName = name;
-        s.SaveFolder = FolderBox.Text;
+        s.SaveFolder = _folder;
         s.Ask = AskBox.IsChecked == true;
         s.StartWithWindows = StartupBox.IsChecked == true;
+        var hotkeyChanged = (HotkeyBox.IsChecked == true) != s.Hotkey;
+        s.Hotkey = HotkeyBox.IsChecked == true;
         s.CheckUpdates = CheckUpdatesBox.IsChecked == true;
         s.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
-        var language = (LanguageBox.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string ?? "auto";
+        var language = (LanguageBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "auto";
         var languageChanged = language != s.Language;
         s.Language = language;
-        s.AlwaysAccept = TrustedList.Items.Cast<string>().Select(x => x.Replace(" · ", "|")).ToList();
-        var accent = AccentPanel.Children.OfType<System.Windows.Controls.RadioButton>()
-            .FirstOrDefault(r => r.IsChecked == true)?.Tag as string ?? "";
+        s.AlwaysAccept = [.. _trusted];
+        var accent = ChosenAccent();
         var accentChanged = accent != s.Accent;
         s.Accent = accent;
         s.Save();
@@ -190,9 +271,12 @@ public partial class SettingsWindow : Window
         var coexPlan = CoexPlanBox.IsChecked == true;
         if (coexPlan != ((bool?)A.Service.Last?["coexPlan"] ?? false)) A.Service.SetCoexPlan(coexPlan);
         A.Window?.FolderChanged();
+        if (hotkeyChanged) A.ApplyHotkey();
         if (accentChanged) A.ApplyTheme();
-        if (languageChanged) A.ApplyLanguage();
-        Close();
+        if (languageChanged) { A.ApplyLanguage(); Close(); return; }
+        SavedText.Text = "✓ " + L.T("set.saved");
+        await Task.Delay(2000);
+        SavedText.Text = "";
     }
 
     void Cancel_Click(object sender, RoutedEventArgs e) => Close();
