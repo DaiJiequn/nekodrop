@@ -283,7 +283,7 @@ public sealed class App : Application
             ("main", () => new MainWindow()),
             ("main-list", () => { Settings.DeviceView = "list"; return new MainWindow(); }),
             ("main-empty", () => { Settings.DeviceView = "radar"; Model.Devices.Clear(); return new MainWindow(); }),
-            ("settings", () => new SettingsWindow()),
+            ("settings", () => new SettingsWindow { Height = 1500 }), // all of it, not the first screen
         };
         if (_startArgs.Contains("--live"))
         {
@@ -298,6 +298,9 @@ public sealed class App : Application
             w.Left = -20000; w.Top = -20000; w.ShowActivated = false; w.ShowInTaskbar = false;
             w.Show();
             w.UpdateLayout();
+            // Let the radar's first ripple grow out from behind the hub, so the
+            // picture shows where it is centered.
+            Pump(TimeSpan.FromMilliseconds(1200));
             if (w.Content is not FrameworkElement root) continue;
             Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
             var width = (int)root.ActualWidth; var height = (int)root.ActualHeight;
@@ -315,6 +318,16 @@ public sealed class App : Application
             w.Close();
         }
         Shutdown();
+    }
+
+    /// <summary>Runs the dispatcher (animations, layout) for a while, for --snapshot.</summary>
+    void Pump(TimeSpan time)
+    {
+        var frame = new DispatcherFrame();
+        var timer = new DispatcherTimer { Interval = time };
+        timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+        timer.Start();
+        Dispatcher.PushFrame(frame);
     }
 
     SendWindow? _send;

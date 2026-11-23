@@ -136,7 +136,16 @@
             </Grid>
             <StackPanel VerticalAlignment="Center">
               <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-              <TextBlock Text="{Binding Status}" Style="{StaticResource StatusText}"/>
+              <TextBlock Text="{Binding Status}">
+                <TextBlock.Style>
+                  <!-- No status yet: no empty line, so the name sits in the middle -->
+                  <Style TargetType="TextBlock" BasedOn="{StaticResource StatusText}">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding Status}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
             </StackPanel>
           </DockPanel>
         </Border>
