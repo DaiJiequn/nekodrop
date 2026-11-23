@@ -527,7 +527,7 @@ int main(int argc, char **argv) {
       uint32_t dest_frames = 0, epoch = 0;
       awdl::BaTxBulk bulk;
       uint8_t token = 0x5a;
-      unsigned asks = 0, resume_failures = 0;
+      unsigned asks = 0, resume_failures = 0, stalls = 0;
       uint16_t peer_window = awdl::kBaWindowMax;
       uint64_t ask_started_us = 0, last_ask_us = 0, rest_until_us = 0, last_peer_us = 0, last_agg_us = 0, retry_us = 0,
                agreed_us = 0;
@@ -1334,8 +1334,18 @@ int main(int argc, char **argv) {
                           static_cast<unsigned long long>(a.singles_fail),
                           static_cast<unsigned>(a.last_fail_status),
                           static_cast<unsigned>(a.last_single_rate));
-            agg.retry_us = t + awdl::kBaTxFailBackoffUS;
+            /* A second stall means this card's firmware never reports Block
+             * Acks (seen on an AX210, #39): stop asking until the radio restarts. */
+            agg.retry_us = ++agg.stalls >= 2 ? UINT64_MAX : t + awdl::kBaTxFailBackoffUS;
             stop(detail);
+            /* The peer still holds the session it agreed to: end it (DELBA), as
+             * after a finished bulk send, so its receive side does not keep
+             * waiting for aggregate sequence numbers that will never come (#39). */
+            static const uint8_t kAwdlBssid[6] = {0x00, 0x25, 0x00, 0xff, 0x94, 0x73};
+            uint8_t delba[awdl::kDelbaLength];
+            awdl::build_delba(delba, agg.peer, dev_address, kAwdlBssid, 0, true, ++mgmt_seq);
+            uq.push_front({std::vector<uint8_t>(delba, delba + sizeof(delba)), TxRate{}, false});
+            if (agg.retry_us == UINT64_MAX) log_line("aggregate: off until the radio restarts (no Block Acks twice)");
           }
         }
       }

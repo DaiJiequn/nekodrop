@@ -18,6 +18,8 @@
 - 接收时「本机」外圈显示进度，保存完成后变绿打勾；接受 / 拒绝气泡保留，接受后收起
 - 新增动效（Windows Fluent 原生缓动曲线）：面板滑入滑出、设备出现时淡入放大、设备增减时平滑移位、请求气泡弹出、雷达 / 列表切换过渡；发送时蓝色波纹送出，进度环匀速（线性）走满，完成时蓝环渐变为绿环、对号一笔画出、图标轻弹并送出绿色波纹；接收完成时「本机」同样变绿弹出对号
 - 修复雷达上的发送进度环没有跟随真实进度（一直是转圈的等待弧）
+- 修复收起面板后进行中的内容全部消失：面板收起后继续查找 90 秒，有发送或请求进行中就一直保持，重新打开时设备、发送进度和结果都还在
+- 修复 AX210 上 A-MPDU 收不到 Block Ack 退回单帧后发送卡住、iPad 无响应（[#39](https://github.com/zheznanohana/nekodrop/issues/39)）：退回时主动发 DELBA 结束对方的聚合会话；同一次 radio 运行中第二次出现就不再尝试聚合。未在真机验证，需要 AX210 用户确认
 - 新增自定义全局快捷键：设置 → 常规里点一下快捷键再按下新的组合键（Esc 取消，可恢复默认 Win+Shift+D）；被其他程序占用时会提示
 
 ### English
@@ -28,6 +30,8 @@
 - While receiving, a progress ring around "This PC", then green with a check mark once saved; the accept / decline bubble stays and closes after accepting
 - New motion on Windows' Fluent curves: the panel slides in and out, devices fade and grow in and glide when one comes or goes, the request bubble pops open, radar / list cross-fade; sending sends a blue wave off, the ring fills at a steady (linear) pace, and on arrival it turns green, a check is drawn in one stroke, the icon pops and a green wave leaves it; "This PC" does the same when files arrive
 - Fixed the send ring on the radar not following the real progress (it kept turning as if waiting)
+- Fixed everything under way disappearing when the panel closed: looking goes on for 90 s after it closes, and for as long as a send or a request is under way, so devices, a send's progress and its outcome are still there when it opens again
+- Fixed sending stalling on an AX210 after A-MPDU fell back to single frames for lack of Block Acks, with the iPad never answering ([#39](https://github.com/zheznanohana/nekodrop/issues/39)): the fallback now ends the peer's Block Ack session (DELBA), and a second stall in the same radio run stops aggregation. Not verified on hardware yet; needs an AX210 owner to confirm
 - New: record your own global shortcut in Settings → General (click it, press the keys; Esc cancels; Default restores Win+Shift+D); you are told when another program holds it
 
 ---

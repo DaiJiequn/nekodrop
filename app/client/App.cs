@@ -470,7 +470,7 @@ public sealed class App : Application
         if (_send is null)
         {
             var w = new SendWindow();
-            w.Closed += (_, _) => { if (_send == w) _send = null; if (_window is not { IsVisible: true }) Engine.Look(false); };
+            w.Closed += (_, _) => { if (_send == w) _send = null; if (_window is not { IsVisible: true }) StopLookingLater(); };
             _send = w;
         }
         _send.Refresh();
@@ -580,10 +580,33 @@ public sealed class App : Application
         if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
         _window.Activate();
         if (opening) _window.Reveal();
+        _lookTimer?.Stop();
         Engine.Look(true);
     }
 
-    public void WindowClosed() { if (_send is null) Engine.Look(false); }
+    public void WindowClosed() { if (_send is null) StopLookingLater(); }
+
+    System.Windows.Threading.DispatcherTimer? _lookTimer;
+
+    /// <summary>
+    /// The panel or the send window went away: keep looking a while (90 s), and
+    /// for as long as a send or a request is under way, so devices, a send's
+    /// progress and its outcome are all still there when the panel opens again.
+    /// Looking wakes every Apple device nearby, so it does stop in the end.
+    /// </summary>
+    void StopLookingLater()
+    {
+        _lookTimer?.Stop();
+        _lookTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(90) };
+        _lookTimer.Tick += (_, _) =>
+        {
+            if (_send is not null || _window is { IsVisible: true }) { _lookTimer.Stop(); return; }
+            if (Model.Devices.Any(d => d.Busy) || Model.Requests.Count > 0) return; // check again in 90 s
+            _lookTimer.Stop();
+            Engine.Look(false);
+        };
+        _lookTimer.Start();
+    }
 
     void Quit()
     {
