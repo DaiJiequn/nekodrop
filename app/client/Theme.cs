@@ -53,7 +53,6 @@ public static class Theme
         var card = dark ? A(Colors.White, 0.065) : A(Colors.White, 0.80);
         var cardHover = dark ? A(Colors.White, 0.11) : A(Colors.White, 0.96);
         var success = dark ? C(0xFF6CCB5F) : C(0xFF0F7B0F);
-        var warn = dark ? C(0xFFFCE100) : C(0xFF9D5D00);
         var error = dark ? C(0xFFFF99A4) : C(0xFFC42B1C);
 
         return new ResourceDictionary
@@ -73,10 +72,12 @@ public static class Theme
             ["Text"] = B(text),
             ["Text2"] = B(text2),
             ["Text3"] = B(text3),
+            // One colour, the accent; success stays green, the design's amber is a
+            // neutral grey, and only real errors are red.
             ["Success"] = B(success),
             ["SuccessBg"] = B(dark ? A(success, 0.15) : C(0xFFDFF6DD)),
-            ["Warn"] = B(warn),
-            ["WarnBg"] = B(dark ? A(warn, 0.14) : C(0xFFFFF4CE)),
+            ["Warn"] = B(text2),
+            ["WarnBg"] = B(card),
             ["Error"] = B(error),
             ["ErrorBg"] = B(dark ? A(error, 0.16) : C(0xFFFDE7E9)),
             // Older names still used by some windows
@@ -86,7 +87,7 @@ public static class Theme
             ["CardStroke"] = B(border),
             ["Divider"] = B(border),
             ["DropWell"] = B(card),
-            ["Caution"] = B(warn),
+            ["Caution"] = B(text2),
             ["Critical"] = B(error),
             ["UiFont"] = new FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"),
             ["IconFont"] = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),

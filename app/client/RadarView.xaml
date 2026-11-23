@@ -34,7 +34,7 @@
         <DataTrigger Binding="{Binding State}" Value="sending"><Setter Property="Foreground" Value="{DynamicResource Accent}"/></DataTrigger>
         <DataTrigger Binding="{Binding State}" Value="sent"><Setter Property="Foreground" Value="{DynamicResource Success}"/></DataTrigger>
         <DataTrigger Binding="{Binding State}" Value="declined"><Setter Property="Foreground" Value="{DynamicResource Warn}"/></DataTrigger>
-        <DataTrigger Binding="{Binding State}" Value="failed"><Setter Property="Foreground" Value="{DynamicResource Error}"/></DataTrigger>
+        <DataTrigger Binding="{Binding State}" Value="failed"><Setter Property="Foreground" Value="{DynamicResource Text2}"/></DataTrigger>
       </Style.Triggers>
     </Style>
 
@@ -77,10 +77,10 @@
           <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Success}"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding State}" Value="declined">
-          <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Warn}"/><Setter Property="StrokeThickness" Value="2"/>
+          <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Text3}"/><Setter Property="StrokeThickness" Value="2"/>
         </DataTrigger>
         <DataTrigger Binding="{Binding State}" Value="failed">
-          <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Error}"/>
+          <Setter Property="Visibility" Value="Visible"/><Setter Property="Stroke" Value="{DynamicResource Text3}"/><Setter Property="StrokeThickness" Value="2"/>
         </DataTrigger>
       </Style.Triggers>
     </Style>
