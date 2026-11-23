@@ -351,6 +351,7 @@ public:
     /* The answer comes in ~10 ms; now and then not for 0.35 s, so a move
      * goes on after 60 ms (the switch itself still happens). */
     dev.move_timeout_ms = 60;
+    dev.sta_cmd_timeout_ms = 500;
     dev.set_rx_handler([this](const Mt7902::RxFrame &f) { on_rx(f); });
     dev.set_tx_status_handler([this](unsigned token, bool acked, unsigned tries) { on_tx_status(token, acked, tries); });
   }
@@ -377,7 +378,9 @@ public:
   }
 
   /* Starts the Wi-Fi station beside AWDL (Concurrent mode). */
-  bool start_station(const StaConfig &cfg) {
+  bool start_station(StaConfig cfg) {
+    /* Block Ack from the AP: MtStation reorders on the host. */
+    cfg.block_ack = true;
     const auto log = [](const std::string &l) { say("%s", l.c_str()); };
     if (cfg.channel <= 14) {
       /* The card completes no frame that waits for an acknowledgement on
@@ -492,13 +495,15 @@ public:
       unsigned router = 0;
       for (uint8_t a : _away) router += a;
       say("wifi: %s, %llu packets in, %llu out; frames to the AP %llu sent, %llu acked, %llu failed, %llu held, "
-          "%llu dropped, rate %s; from the AP %llu, %llu opened, %llu bad MIC, %llu without key, %llu replayed, "
-          "%llu repeats, %llu sent again by the AP; sleep/wake frames %llu/%llu sent, %llu/%llu acked; channel moves "
+          "%llu dropped, rate %s (%llu at it); from the AP %llu (and %llu to others), %llu opened, %llu bad MIC, "
+          "%llu without key, %llu replayed, %llu repeats, %llu sent again by the AP, A-MPDU sessions %u (%llu "
+          "reordered, %llu late); sleep/wake frames %llu/%llu sent, %llu/%llu acked; channel moves "
           "%llu (%llu us average, %llu us longest), %u of 16 entries on the router's channel%s, %llu%% of the time "
           "there; AWDL frames held too long %llu",
           _sta->state_name(), _sta->rx_packets(), _sta->tx_packets(), s.tx, s.tx_acked, s.tx_failed, s.tx_held,
-          s.tx_dropped, _sta_dev->rate_name().c_str(), s.rx, s.rx_opened, s.rx_bad_mic, s.rx_no_key, s.rx_replay,
-          s.rx_repeat, s.rx_retry, s.sleep_sent, s.wake_sent, s.sleep_acked, s.wake_acked, _moves,
+          s.tx_dropped, _sta_dev->rate_name().c_str(), s.tx_fw, s.rx, s.rx_others, s.rx_opened, s.rx_bad_mic,
+          s.rx_no_key, s.rx_replay, s.rx_repeat, s.rx_retry, s.rx_ba, s.rx_reordered, s.rx_late, s.sleep_sent,
+          s.wake_sent, s.sleep_acked, s.wake_acked, _moves,
           _moves ? _move_us / _moves : 0ull, _move_us_max, _timeshare ? router : 0u,
           _aw.valid ? "" : " (no AWDL clock yet)", _here_total_us ? _here_us * 100 / _here_total_us : 0ull, _tx_stale);
     }
@@ -513,6 +518,12 @@ private:
   unsigned station_tick() {
     unsigned did = 0;
     _sta->tick(now_us());
+    _sta_dev->tick();
+    RxFrame late{};
+    while (_sta_dev->take(late)) {
+      _sta->on_frame(late);
+      did++;
+    }
     if (_sta->state() != _published_wifi) {
       _published_wifi = _sta->state();
       if (_published_wifi == WifiStation::State::Running) _running_since = Clock::now();
@@ -542,9 +553,10 @@ private:
       if (s == channel) {
         want_w = width;
       } else if (joining) {
-        /* A join takes the card for the second or so it needs. */
+        /* A join takes the card for the second or so it needs, at AWDL's
+         * width (the sniffer's): the moves stay the RF switch alone. */
         want = s;
-        want_w = _sta_dev->width();
+        want_w = width;
       } else if (st == WifiStation::State::Running && Clock::now() - _running_since < std::chrono::seconds(3)) {
         /* The first seconds after joining (DHCP, ARP, the router's own
          * checks) stay with the router: leaving at once got us
@@ -595,7 +607,7 @@ private:
       if (at_router) _here_us += t - _here_last_us;
     }
     _here_last_us = t;
-    if (want == at && w == _dev.width_mhz()) {
+    if (want == at && w == _dev.width_mhz() && !_move_failed) {
       if (_sta) _sta_dev->on_channel(at_router);
       return 0;
     }
@@ -620,6 +632,8 @@ private:
     _move_us += us;
     if (us > _move_us_max) _move_us_max = us;
     if (!ok && _move_fail_logged++ < 5) say("channel move to %u failed", want);
+    /* The switch may not have happened: the next round does it once more. */
+    _move_failed = !ok && !_move_failed;
     const bool to_router = station_on_air() && want == _sta_dev->channel();
     if (to_router) {
       _sta_dev->on_channel(true);
@@ -696,8 +710,9 @@ private:
     const bool radar = ch >= 52 && ch <= 144;
     if (!radar) probe(ch);
     /* From when the card is there: a beacon every 102 ms, so a radar
-     * channel (listening only) gets a little more than one interval. */
-    _scan.until = Clock::now() + std::chrono::milliseconds(radar ? 120 : 90);
+     * channel (listening only) gets two intervals; one interval (120 ms)
+     * often missed the AP when the move ran late. */
+    _scan.until = Clock::now() + std::chrono::milliseconds(radar ? 250 : 150);
     return 1;
   }
 
@@ -862,11 +877,15 @@ private:
     if (f.len < 10) return;
     const uint16_t fc = fc_of(f.data);
     note_bss(f);
-    if (station_on_air() && f.len >= 24) {
+    if (station_on_air() && f.len >= 20) {
       const RxFrame r{f.data, f.len, f.dbm, f.channel, 0, 0, false};
-      if (_sta->owns(r)) {
+      /* Block Ack requests from the AP, for the reorder buffers (WifiStation
+       * leaves control frames to the card). */
+      const bool bar = (f.data[0] & 0xfc) == 0x84 && std::memcmp(f.data + 10, _sta_dev->ap(), 6) == 0;
+      if (bar || _sta->owns(r)) {
+        _sta_dev->receive(f);
         RxFrame opened{};
-        if (_sta_dev->receive(f, opened, _sta_buf)) _sta->on_frame(opened);
+        while (_sta_dev->take(opened)) _sta->on_frame(opened);
         return;
       }
     }
@@ -1146,7 +1165,7 @@ private:
   std::unique_ptr<MtStation> _sta_dev;
   std::unique_ptr<WifiStation> _sta;
   WifiStation::State _published_wifi = WifiStation::State::Idle;
-  std::vector<uint8_t> _sta_buf, _rewritten;
+  std::vector<uint8_t> _rewritten;
   std::map<std::string, BssSeen> _bss;
   AwClock _aw;
   awdl_plan::InfraMeter _meter;
@@ -1157,6 +1176,7 @@ private:
   uint64_t _here_us = 0, _here_total_us = 0, _here_last_us = 0;
   uint64_t _moves = 0, _move_us = 0, _move_us_max = 0, _tx_stale = 0;
   unsigned _move_fail_logged = 0;
+  bool _move_failed = false;
 };
 
 /* ---- Self tests on the air ---- */

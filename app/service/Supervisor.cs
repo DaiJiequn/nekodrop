@@ -36,6 +36,7 @@ public sealed class Supervisor : IDisposable
     bool _userChose, _userOff;
     string _staSsid = "", _wifiError = "";
     (string Ssid, string? Password, bool? Auto)? _pendingConnect;
+    int _pendingScans; // scans that missed the pending network so far
     static readonly TimeSpan StaleScan = TimeSpan.FromSeconds(20);
     string _detail = "";
     bool _wanted;
@@ -631,12 +632,14 @@ public sealed class Supervisor : IDisposable
             case "scan-done":
                 lock (_lock)
                 {
-                    // One row per network name, its strongest access point; on a card whose
-                    // station joins only 5 GHz (MT7902), its strongest 5 GHz one when it has one.
+                    // One row per network name, its strongest access point. A card whose
+                    // station joins only 5 GHz (MT7902) lists 5 GHz ones only: a scan that
+                    // missed a dual-band network's 5 GHz beacon otherwise had it join the
+                    // 2.4 GHz one, which fails at once.
                     var on24 = _caps.StationOn24GHz;
-                    _scan = _scanPending.GroupBy(n => (string?)n["ssid"] ?? "")
-                        .Select(g => g.OrderByDescending(n => on24 || ((int?)n["channel"] ?? 0) > 14)
-                                      .ThenByDescending(n => (int?)n["dbm"] ?? -127).First())
+                    _scan = _scanPending.Where(n => on24 || ((int?)n["channel"] ?? 0) > 14)
+                        .GroupBy(n => (string?)n["ssid"] ?? "")
+                        .Select(g => g.OrderByDescending(n => (int?)n["dbm"] ?? -127).First())
                         .OrderByDescending(n => (int?)n["dbm"] ?? -127).ToList();
                     _scanPending = [];
                     _scanBusy = false;
@@ -1042,6 +1045,16 @@ public sealed class Supervisor : IDisposable
         {
             bool found;
             lock (_lock) found = _scan.Any(n => (string?)n["ssid"] == pc.Ssid);
+            // A scan hears a DFS channel's access point only by its beacons, and
+            // one scan in three missed the MT7902's 5 GHz one: look twice more.
+            if (!found && _pendingScans < 2)
+            {
+                _pendingScans++;
+                lock (_lock) _pendingConnect = pc;
+                WifiScan(pc.Ssid);
+                return;
+            }
+            _pendingScans = 0;
             var why = found ? WifiConnect(pc.Ssid, pc.Password, pc.Auto, false) : $"\"{pc.Ssid}\" was not found";
             if (why != "") lock (_lock) _wifiError = why;
             Publish();

@@ -140,12 +140,18 @@ public:
     uint8_t nss = 2;
   };
   static constexpr uint8_t kFirstPeerWcid = 1, kLastPeerWcid = 8;
-  bool sta_add(uint8_t wcid, const uint8_t peer[6], const PeerCaps &caps);
-  bool sta_remove(uint8_t wcid, const uint8_t peer[6]);
-  bool sta_ba(uint8_t wcid, const uint8_t peer[6], uint8_t tid, uint16_t ssn, uint16_t win, bool tx, bool enable);
+  /* The Wi-Fi station's access point, under own MAC 1 (mt_station.h). */
+  static constexpr uint8_t kApWcid = 9;
+  /* How long STA record commands wait for the firmware's answer. */
+  unsigned sta_cmd_timeout_ms = 3000;
+  /* `omac`: the own MAC (and BSS) the peer talks to: 0 for AWDL. */
+  bool sta_add(uint8_t wcid, const uint8_t peer[6], const PeerCaps &caps, uint8_t omac = 0);
+  bool sta_remove(uint8_t wcid, const uint8_t peer[6], uint8_t omac = 0);
+  bool sta_ba(uint8_t wcid, const uint8_t peer[6], uint8_t tid, uint16_t ssn, uint16_t win, bool tx, bool enable,
+              uint8_t omac = 0);
   /* A QoS data frame to a peer station: the firmware's rate, Block Ack
    * allowed, the frame's own sequence number kept. Token or -1. */
-  int transmit_sta(const uint8_t *frame, size_t len, uint8_t wcid);
+  int transmit_sta(const uint8_t *frame, size_t len, uint8_t wcid, uint8_t omac = 0);
 
   static uint16_t tx_rate_ofdm(unsigned mbps);
   static uint16_t tx_rate_cck(unsigned mbps_x2);

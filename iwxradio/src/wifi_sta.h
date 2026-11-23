@@ -81,6 +81,7 @@ public:
   }
 
 private:
+  void send_probe();
   void send_auth();
   void send_assoc();
   void handle_mgmt(const RxFrame &f);
@@ -152,6 +153,9 @@ private:
   uint16_t _ap_capab = 0, _beacon_int = 100;
   uint8_t _dtim = 1;
   unsigned _ap_width = 20;
+  uint16_t _ap_ht_cap = 0, _ap_vht_mcs = 0xffff;
+  uint8_t _ap_ampdu = 0;
+  uint32_t _ap_vht_cap = 0;
   std::vector<uint8_t> _ap_rates;
 
   /* WPA2 */

@@ -422,7 +422,7 @@ int Mt7902::transmit(const uint8_t *frame, size_t len, uint16_t rate, uint8_t om
   return queue_frame(frame, len, txd);
 }
 
-int Mt7902::transmit_sta(const uint8_t *frame, size_t len, uint8_t wcid) {
+int Mt7902::transmit_sta(const uint8_t *frame, size_t len, uint8_t wcid, uint8_t omac) {
   /* mt76_connac2_mac_write_txwi for a station's data: no fixed rate (the
    * firmware's rate control), Block Ack allowed, BE queue. */
   if (len < 26) return -1;
@@ -433,7 +433,7 @@ int Mt7902::transmit_sta(const uint8_t *frame, size_t len, uint8_t wcid) {
   const uint32_t tid = frame[hdrlen - 2] & 0x7;
   uint32_t txd[8] = {};
   txd[0] = static_cast<uint32_t>(len + kTxdSize) | kTxTypeCt << 23 | kLmacAc01 << 25;
-  txd[1] = kTxd1LongFormat | wcid | static_cast<uint32_t>(kOmacIdx) << 24 | kHdrFormat80211 << 16 |
+  txd[1] = kTxd1LongFormat | wcid | static_cast<uint32_t>(omac) << 24 | kHdrFormat80211 << 16 |
            static_cast<uint32_t>(hdrlen / 2) << 11 | tid << 20;
   txd[2] = type << 4 | subtype;
   const uint16_t sc = static_cast<uint16_t>(frame[22] | frame[23] << 8);
