@@ -239,12 +239,6 @@
           <Setter TargetName="asking" Property="Visibility" Value="Collapsed"/>
           <Setter TargetName="receiving" Property="Visibility" Value="Visible"/>
         </DataTrigger>
-        <!-- Opening outwards above the icon: the notch points down at it -->
-        <DataTrigger Binding="{Binding (local:RadarPanel.BubbleAbove), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" Value="True">
-          <Setter TargetName="bubble" Property="Canvas.Top" Value="-74"/>
-          <Setter TargetName="notchUp" Property="Visibility" Value="Collapsed"/>
-          <Setter TargetName="notchDown" Property="Visibility" Value="Visible"/>
-        </DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
 

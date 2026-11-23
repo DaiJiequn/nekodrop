@@ -70,6 +70,19 @@ public sealed class RadarPanel : Panel
     public static bool GetBubbleAbove(DependencyObject d) => (bool)d.GetValue(BubbleAboveProperty);
     public static void SetBubbleAbove(DependencyObject d, bool value) => d.SetValue(BubbleAboveProperty, value);
 
+    /// <summary>
+    /// Puts a device's request bubble above its icon (notch down) or below its
+    /// name (notch up). Set here, on the template's named parts: a trigger in
+    /// the item template cannot reach this panel's attached property on its container.
+    /// </summary>
+    static void PlaceBubble(UIElement child, bool above)
+    {
+        if (child is not ContentPresenter cp || cp.ContentTemplate is not { } template) return;
+        if (template.FindName("bubble", cp) is UIElement bubble) Canvas.SetTop(bubble, above ? -74 : 92);
+        if (template.FindName("notchUp", cp) is UIElement up) up.Visibility = above ? Visibility.Collapsed : Visibility.Visible;
+        if (template.FindName("notchDown", cp) is UIElement down) down.Visibility = above ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     protected override Size MeasureOverride(Size available)
     {
         foreach (UIElement c in InternalChildren)
@@ -89,7 +102,9 @@ public sealed class RadarPanel : Panel
             var roomAbove = top - Bubble >= 0;
             var roomBelow = top + RadarGeometry.NodeHeight + Bubble <= final.Height;
             var upper = p.Y < g.Center.Y - 1;
-            SetBubbleAbove(InternalChildren[i], upper ? roomAbove || !roomBelow : !roomBelow && roomAbove);
+            var above = upper ? roomAbove || !roomBelow : !roomBelow && roomAbove;
+            SetBubbleAbove(InternalChildren[i], above);
+            PlaceBubble(InternalChildren[i], above);
             // The icon is at the top of the box: its center is padding and half an icon down.
             InternalChildren[i].Arrange(new Rect(p.X - RadarGeometry.NodeWidth / 2, p.Y - 4 - RadarGeometry.Node / 2,
                                                  RadarGeometry.NodeWidth, RadarGeometry.NodeHeight));
