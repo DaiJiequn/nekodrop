@@ -38,11 +38,14 @@
 - **Stay online.** In *Wi-Fi and AirDrop together* mode nekodrop drives the card itself. It joins your Wi-Fi on one virtual interface and runs AWDL (Apple Wireless Direct Link) on the other. Windows sees your internet connection as a wired adapter called **nekodrop**.
 - **Manage Wi-Fi.** Scanning, connecting, hidden networks and saved networks with auto-connect all work. Saved Windows Wi-Fi profiles are imported, and captive portals (hotel, airport and campus sign-in pages) are detected and opened in your browser.
 - **Recover by itself.** A service watches the radio, the AWDL daemon and the AirDrop engine and restarts whatever stops. It starts with Windows.
-- **Tray app in Chinese and English**, with a light UI, system notifications and a settings window.
+- **A small panel by the tray**, in Chinese and English, light and dark. It slides up from the tray icon or your shortcut (Win+Shift+D unless you record your own) and goes away when you click elsewhere. Nearby devices sit on a radar (or a list), with motion on Windows' own Fluent curves: a blue wave and a steady ring while sending, then green with a check mark.
+- **Who can send to you, from the AirDrop mark.** Click the mark at the top left: **Receiving Off**, **Contacts Only** or **Everyone**, as on an iPhone.
+- **Contacts Only (experimental).** Sign in to your Apple ID on the PC, or import a Mac's AirDrop certificate, and the PC shows up on your own iPhone like one of your Macs and works with iPhones set to Contacts Only. See [Contacts Only](#contacts-only-apple-id-experimental).
+- **Windows Share sheet.** nekodrop is in Explorer's and other apps' Share panel.
 
 ## Screenshots
 
-A small panel that slides up beside the tray (click the tray icon, or press the shortcut) and goes away when you click elsewhere: nearby iPhones and Macs on a radar (or as a list), the status and quick controls in the title bar, settings in four tabs, one accent colour you can switch (or colourful), light and dark. While files come in, a progress ring turns around "This PC", which turns green with a check mark when they are saved. The global shortcut is Win+Shift+D unless you record your own in Settings.
+A small panel that slides up beside the tray (click the tray icon, or press the shortcut) and goes away when you click elsewhere: nearby iPhones and Macs on a radar (or as a list), the AirDrop mark that switches who can send to you, the status and quick controls in the title bar, settings in five tabs, one accent colour you can switch (or colourful), light and dark. While files come in, a progress ring turns around "This PC", which turns green with a check mark when they are saved. The global shortcut is Win+Shift+D unless you record your own in Settings.
 
 <table>
   <tr>
@@ -52,8 +55,12 @@ A small panel that slides up beside the tray (click the tray icon, or press the 
   </tr>
   <tr>
     <td align="center"><img src="docs/screenshots/settings.png" width="280" alt="Settings"><br><sub>Settings: accent colour, your own shortcut</sub></td>
+    <td align="center"><img src="docs/screenshots/settings-appleid.png" width="280" alt="Settings: Apple ID"><br><sub>Apple ID and Contacts Only (experimental)</sub></td>
     <td align="center"><img src="docs/screenshots/wifi.png" width="250" alt="Wi-Fi window"><br><sub>nekodrop's own Wi-Fi</sub></td>
+  </tr>
+  <tr>
     <td align="center"><img src="docs/screenshots/tray.png" width="260" alt="Tray menu"><br><sub>Tray menu</sub></td>
+    <td align="center" colspan="2"><img src="docs/screenshots/motion-send.png" width="560" alt="Sending, frame by frame"><br><sub>Sending, frame by frame: the ring fills, turns green, a check is drawn</sub></td>
   </tr>
 </table>
 
@@ -157,13 +164,15 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 
 | I want to… | Do this |
 |---|---|
-| Receive | Keep **Allow receiving** on. On the iPhone, tap Share → AirDrop and pick your PC's name |
+| Receive | Keep receiving on (the AirDrop mark at the top left is coloured, not grey). On the iPhone, tap Share → AirDrop and pick your PC's name |
+| Choose who can send to me | Click the AirDrop mark: **Receiving Off**, **Contacts Only** (experimental, Settings → Apple ID) or **Everyone** |
 | Send | Right-click files → **Send with nekodrop** → pick a device. Or select files in Explorer and press the shortcut (Win+Shift+D by default) |
 | Change Wi-Fi | Tray → **Wi-Fi…**: pick a network, enter the password, Connect |
 | Hidden network | **Wi-Fi…** → *Hidden network*: type the SSID and password |
 | Sign in to hotel Wi-Fi | Connect; the sign-in page opens in your browser by itself |
 | Give the card back to Windows | Tray → *Wi-Fi and AirDrop* → **Take the card on demand** or **AirDrop off** |
 | Change name, folder or language | Tray → **Settings…** |
+| Change the shortcut | Settings → General: click the shortcut, press the new keys |
 
 ### Modes
 
@@ -214,6 +223,8 @@ In *Settings → Experimental*, all off by default; turning one off restores the
 | Wi-Fi and AirDrop at the same time | ✅ works (WPA2, DHCP, DNS through the "nekodrop" adapter) |
 | Wi-Fi manager, saved networks, captive portal | ✅ |
 | Service, tray app, notifications, context menu, installer | ✅ |
+| Tray panel, radar, Share sheet, custom shortcut | ✅ 2.0.2 |
+| Contacts Only (Apple ID sign-in or a Mac's certificate) | 🧪 2.1.0, untested on hardware |
 | WPA3-only, OWE | 🧪 0.1.12, untested on hardware |
 | 802.1X (Enterprise) | ⏳ planned |
 | AX200, AX210, AX211 | ✅ two-way AirDrop in user reports |

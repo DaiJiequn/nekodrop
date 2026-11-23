@@ -1,21 +1,23 @@
 # Changelog / 更新日志
 
 > Release channels / 发布通道：
-> - **Stable（稳定版 / Latest）**：长期保留、经过稳定基线锁定的版本。当前稳定版为 **`v2.0.2`**（首个稳定基线为 `v0.1.22`）。
+> - **Stable（稳定版 / Latest）**：长期保留、经过稳定基线锁定的版本。当前稳定版为 **`v2.1.0`**（首个稳定基线为 `v0.1.22`）。
 > - **Hourly（每时预览版 / Pre-release）**：持续迭代的预览版（客户端默认也会收到；取消勾选「包括预览版」就只收稳定版）；GitHub Releases 仅滚动保留最新 4 个每时版 + 稳定版（最多 5 个 Release），历史 Git Tag 全部保留。
 
 ---
 
-## v2.1.0 (Hourly / Pre-release) — 2026-11-24
+## v2.1.0 (Stable / 稳定版) — 2026-11-24
 
 ### 中文
 - **新增「仅限联系人」（实验性，默认关闭）**：设置里新的「Apple ID」标签页，顶部有总开关；打开后可选「所有人」或「仅限联系人」。身份两种获得方式：在电脑上用 Apple ID 登录（基于 WirDrop 的 appleid，自动续期、读取 iCloud 通讯录），或导入从 Mac 导出的证书（airdrop-keychain-extractor）加 .vcf 通讯录。有身份时，TLS 用 Apple 签发的证书，/Discover 和 /Ask 带上确认记录，蓝牙信标带上你的哈希前缀，开「仅限联系人」的 iPhone 也能看到这台电脑、收到你发的文件。尚未在真机验证
 - 点主界面左上角的 AirDrop 标志切换接收模式：接收关闭 / 仅限联系人 / 所有人（和 iPhone 一样）；关闭时标志变灰
+- README 更新：新功能说明和截图（含 Apple ID 设置页、发送动画逐帧）
 - 安装包附带 appleid.exe / appleid-anisette.exe（从 WirDrop 源码编译，MIT）
 
 ### English
 - **New: Contacts Only (experimental, off by default)**: a new Apple ID tab in Settings with a switch at the top; on, it lets you choose Everyone or Contacts Only. The identity comes from signing in to an Apple ID on this PC (WirDrop's appleid: renewed on its own, reads the iCloud contacts) or from a certificate exported from a Mac (airdrop-keychain-extractor) plus a .vcf of contacts. With one, TLS uses the Apple-issued certificate, /Discover and /Ask carry the validation record, and the Bluetooth beacon carries your hash prefixes, so iPhones set to Contacts Only see this PC and take what you send. Not yet verified on hardware
 - Click the AirDrop mark at the top left of the main window to switch receiving: Off / Contacts Only / Everyone, as on an iPhone; the mark turns grey when off
+- README: the new features and screenshots (the Apple ID page, sending frame by frame)
 - The installer ships appleid.exe / appleid-anisette.exe (built from WirDrop's source, MIT)
 
 ---
