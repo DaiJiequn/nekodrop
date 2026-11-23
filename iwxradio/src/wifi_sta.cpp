@@ -15,7 +15,6 @@
 
 #include "awdl_policy.h"
 #include "crypto.h"
-#include "iwxreg.h"
 
 namespace {
 
@@ -562,7 +561,7 @@ void WifiStation::handle_mgmt(const RxFrame &in) {
   if (in.data[1] & 0x40) {
     /* A protected management frame (PMF): the firmware decrypted it and left
      * the CCMP header in place, as for data. Read it without. */
-    constexpr uint16_t ok = IWX_RX_MPDU_RES_STATUS_DEC_DONE | IWX_RX_MPDU_RES_STATUS_MIC_OK;
+    constexpr uint16_t ok = kStaRxDecDone | kStaRxMicOk;
     if (!_pmf || (in.status & ok) != ok || in.len < 24 + 8) return;
     const size_t end = in.len - (in.mic_stripped ? 0 : 8);
     if (end < 24 + 8) return;
@@ -726,8 +725,8 @@ void WifiStation::handle_data(const RxFrame &f) {
   const bool encrypted = (flags & 0x40) != 0;
   if (encrypted) {
     /* Protected: the firmware decrypted it, or it is dropped. */
-    if ((f.status & (IWX_RX_MPDU_RES_STATUS_DEC_DONE | IWX_RX_MPDU_RES_STATUS_MIC_OK)) !=
-        (IWX_RX_MPDU_RES_STATUS_DEC_DONE | IWX_RX_MPDU_RES_STATUS_MIC_OK)) {
+    if ((f.status & (kStaRxDecDone | kStaRxMicOk)) !=
+        (kStaRxDecDone | kStaRxMicOk)) {
       if (_rx.undecrypted++ < 5) {
         char b[96];
         std::snprintf(b, sizeof(b), "station: frame not decrypted (status 0x%04x, %zu bytes)", f.status, f.len);

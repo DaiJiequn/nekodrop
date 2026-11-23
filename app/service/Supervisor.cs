@@ -379,6 +379,14 @@ public sealed class Supervisor : IDisposable
                 {
                     _net = fresh;
                     _known.Remember(fresh.Ssid, fresh.Passphrase, fresh.PskHex, fresh.Open);
+                    // A card whose station joins only 5 GHz (MT7902): Windows' 2.4 GHz access
+                    // point is no use, so the radio looks for the network's 5 GHz one by name.
+                    if (!_caps.StationOn24GHz && fresh.Channel <= 14)
+                    {
+                        Say($"Wi-Fi: Windows was on \"{fresh.Ssid}\" at 2.4 GHz; this card joins 5 GHz only, so nekodrop scans for its 5 GHz access point");
+                        _net = null;
+                        lock (_lock) { _pendingConnect = (fresh.Ssid, null, null); _wantBootScan = true; }
+                    }
                 }
                 var net = _userOff ? null : _net;
                 lock (_lock) _staSsid = net?.Ssid ?? "";
@@ -620,9 +628,12 @@ public sealed class Supervisor : IDisposable
             case "scan-done":
                 lock (_lock)
                 {
-                    // One row per network name, its strongest access point.
+                    // One row per network name, its strongest access point; on a card whose
+                    // station joins only 5 GHz (MT7902), its strongest 5 GHz one when it has one.
+                    var on24 = _caps.StationOn24GHz;
                     _scan = _scanPending.GroupBy(n => (string?)n["ssid"] ?? "")
-                        .Select(g => g.OrderByDescending(n => (int?)n["dbm"] ?? -127).First())
+                        .Select(g => g.OrderByDescending(n => on24 || ((int?)n["channel"] ?? 0) > 14)
+                                      .ThenByDescending(n => (int?)n["dbm"] ?? -127).First())
                         .OrderByDescending(n => (int?)n["dbm"] ?? -127).ToList();
                     _scanPending = [];
                     _scanBusy = false;
