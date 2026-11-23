@@ -45,12 +45,33 @@ Copy-Item "$repo\third_party\winawdl\build\awdl\awdld.exe", "$repo\third_party\w
 'airdrop engine'
 New-Item -ItemType Directory -Force "$stage\airdrop" | Out-Null
 Copy-Item "$repo\third_party\winawdl\airdrop\*.py", "$repo\third_party\winawdl\airdrop\LICENSE" "$stage\airdrop\"
+# nekodrop's Apple ID identity for the engine (Contacts Only), hooked in by patch-engine.py.
+Copy-Item "$repo\installer\nekodrop_identity.py" "$stage\airdrop\"
 & python -I "$PSScriptRoot\patch-engine.py" "$stage\airdrop"
 if ($LASTEXITCODE -ne 0) { throw 'engine patch failed' }
 # sender.py looks for the Bluetooth beacon script in ..\scripts beside its own folder.
 New-Item -ItemType Directory -Force "$stage\scripts" | Out-Null
 # nekodrop's copy (#22): leaves the install folder and exits with the engine.
 Copy-Item "$repo\installer\airdrop-beacon.ps1" "$stage\scripts\"
+
+'apple id sign-in (Contacts Only)'
+# WirDrop's appleid.exe (64-bit) and appleid-anisette.exe (32-bit, it loads iCloud's
+# own AOSKit): the client runs them to sign in to an Apple ID and keep the AirDrop
+# certificate fresh. Needs Rust; without it the setting stays off (Everyone only).
+$wd = "$repo\third_party\WirDrop"
+if ((Get-Command cargo -ErrorAction SilentlyContinue) -and (Test-Path "$wd\Cargo.toml")) {
+  & python -I "$PSScriptRoot\patch-appleid.py" $wd
+  if ($LASTEXITCODE -ne 0) { throw 'appleid patch failed' }
+  Push-Location $wd
+  try {
+    cargo build --release --locked -q -p wirdrop-appleid
+    if ($LASTEXITCODE -ne 0) { throw 'appleid build failed' }
+    cargo build --release --locked -q -p wirdrop-appleid-anisette --target i686-pc-windows-msvc
+    if ($LASTEXITCODE -ne 0) { throw 'appleid-anisette build failed' }
+  } finally { Pop-Location }
+  New-Item -ItemType Directory -Force "$stage\appleid" | Out-Null
+  Copy-Item "$wd\target\release\appleid.exe", "$wd\target\i686-pc-windows-msvc\release\appleid-anisette.exe", "$wd\LICENSE" "$stage\appleid\"
+} else { '  (no Rust or no third_party\WirDrop: Apple ID sign-in left out)' }
 
 'driver'
 & "$repo\driver\regproxy\build.ps1" | Out-Null
@@ -167,7 +188,7 @@ if ($iscc) {
   if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
   Get-ChildItem "$repo\build\nekodrop-*-setup.exe" | Select-Object Name, Length
 } else {
-  $zip = "$repo\build\nekodrop-2.0.2-windows-x64.zip"
+  $zip = "$repo\build\nekodrop-2.1.0-windows-x64.zip"
   Compress-Archive "$stage\*" $zip -Force
   "Inno Setup not found: made $zip instead (unzip, then run install.ps1 as administrator)."
 }

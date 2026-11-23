@@ -352,3 +352,71 @@ if new_r not in text:
     text = text.replace(old_r, new_r, 1)
     receiver_path.write_text(text, encoding='utf-8')
     print('receiver: 2 MiB socket buffers + TCP_NODELAY')
+
+
+# Contacts Only: nekodrop_identity.py (copied beside the engine by
+# build-installer.ps1) gives the receiver and the sender an Apple ID identity
+# when the client set NEKODROP_IDENTITY: the Apple-signed certificate on TLS,
+# the validation record in /Discover and /Ask, and a Contacts Only filter on
+# the receiver (NEKODROP_RECEIVE=contacts). Without one nothing changes.
+def _hook(name, pairs, mark):
+    path = pathlib.Path(sys.argv[1]) / name
+    text = path.read_text(encoding='utf-8')
+    if mark in text:
+        return
+    for old, new in pairs:
+        if text.count(old) != 1:
+            sys.exit(f'{name}: {old[:60]!r} moved; update patch-engine.py')
+        text = text.replace(old, new, 1)
+    path.write_text(text, encoding='utf-8')
+    print(f'{name}: Apple ID identity (Contacts Only)')
+
+
+_hook('receiver.py', [
+    (NL + 'import mdns' + NL, NL + 'import mdns' + NL + 'import nekodrop_identity' + NL),
+    (NL.join([
+        "        if self.path == '/Discover':",
+        '            self.answer(self.identity_plist())',
+        '        else:',
+        '            self.handle_ask(body)',
+    ]), NL.join([
+        '        try:',
+        "            sender_record = plistlib.loads(body).get('SenderRecordData') if body else None",
+        '        except Exception:',
+        '            sender_record = None',
+        '        if not nekodrop_identity.allowed(sender_record):',
+        "            self.reject(401, 'not one of the contacts (Contacts Only)')",
+        '            return',
+        "        if self.path == '/Discover':",
+        '            self.answer(self.identity_plist())',
+        '        else:',
+        '            self.handle_ask(body)',
+    ])),
+    ("            'ReceiverModelName': settings.model," + NL,
+     "            'ReceiverModelName': settings.model," + NL + '            **nekodrop_identity.receiver_extra(),' + NL),
+    (NL.join([
+        '    context.load_cert_chain(certificate, key)',
+        '    # Senders present self-signed certificates, so none is asked for.',
+    ]), NL.join([
+        '    if not nekodrop_identity.load_into(context):',
+        '        context.load_cert_chain(certificate, key)',
+        '    # Senders present self-signed certificates, so none is asked for.',
+    ])),
+], 'import nekodrop_identity')
+
+_hook('sender.py', [
+    (NL + 'import mdns' + NL, NL + 'import mdns' + NL + 'import nekodrop_identity' + NL),
+    (NL.join([
+        '    context.verify_mode = ssl.CERT_NONE',
+        '    return context',
+    ]), NL.join([
+        '    context.verify_mode = ssl.CERT_NONE',
+        '    # With an Apple ID identity the Apple-signed certificate goes on: an',
+        '    # iPhone takes that one (a self-signed one it refuses, see above).',
+        '    nekodrop_identity.load_into(context)',
+        '    return context',
+    ])),
+    ("post_plist(connection, '/Discover', {})", "post_plist(connection, '/Discover', nekodrop_identity.sender_body({}))"),
+    ("        'SenderModelName': DEFAULT_MODEL," + NL,
+     "        'SenderModelName': DEFAULT_MODEL," + NL + '        **nekodrop_identity.sender_extra(),' + NL),
+], 'import nekodrop_identity')

@@ -6,6 +6,18 @@
 
 ---
 
+## v2.1.0 (Hourly / Pre-release) — 2026-11-24
+
+### 中文
+- **新增「仅限联系人」（实验性）**：设置里新的「Apple ID」标签页，可选「所有人」或「仅限联系人」。身份两种获得方式：在电脑上用 Apple ID 登录（基于 WirDrop 的 appleid，自动续期、读取 iCloud 通讯录），或导入从 Mac 导出的证书（airdrop-keychain-extractor）加 .vcf 通讯录。有身份时，TLS 用 Apple 签发的证书，/Discover 和 /Ask 带上确认记录，蓝牙信标带上你的哈希前缀，开「仅限联系人」的 iPhone 也能看到这台电脑、收到你发的文件。尚未在真机验证
+- 安装包附带 appleid.exe / appleid-anisette.exe（从 WirDrop 源码编译，MIT）
+
+### English
+- **New: Contacts Only (experimental)**: a new Apple ID tab in Settings to choose Everyone or Contacts Only. The identity comes from signing in to an Apple ID on this PC (WirDrop's appleid: renewed on its own, reads the iCloud contacts) or from a certificate exported from a Mac (airdrop-keychain-extractor) plus a .vcf of contacts. With one, TLS uses the Apple-issued certificate, /Discover and /Ask carry the validation record, and the Bluetooth beacon carries your hash prefixes, so iPhones set to Contacts Only see this PC and take what you send. Not yet verified on hardware
+- The installer ships appleid.exe / appleid-anisette.exe (built from WirDrop's source, MIT)
+
+---
+
 ## v2.0.2 (Stable / 稳定版) — 2026-11-24
 
 > 取代 2.0.0（已撤回）和 2.0.1（安装程序的中文提示是乱码，已撤回）。自 v0.1.35 稳定版以来的界面改动见下方 v0.1.36–v2.0.0。 / Replaces 2.0.0 (withdrawn) and 2.0.1 (garbled Chinese text in the installer, withdrawn). Interface changes since the v0.1.35 stable release are in v0.1.36–v2.0.0 below.

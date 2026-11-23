@@ -42,6 +42,7 @@
       <StackPanel Orientation="Horizontal">
         <RadioButton x:Name="TabGeneral" Style="{StaticResource Pivot}" Content="{local:T set.tab.general}" GroupName="tab" Checked="Tab_Checked"/>
         <RadioButton x:Name="TabNetwork" Style="{StaticResource Pivot}" Content="{local:T set.tab.network}" GroupName="tab" Checked="Tab_Checked"/>
+        <RadioButton x:Name="TabAppleId" Style="{StaticResource Pivot}" Content="{local:T set.tab.appleid}" GroupName="tab" Checked="Tab_Checked"/>
         <RadioButton x:Name="TabHardware" Style="{StaticResource Pivot}" Content="{local:T set.tab.hardware}" GroupName="tab" Checked="Tab_Checked"/>
         <RadioButton x:Name="TabUpdates" Style="{StaticResource Pivot}" Content="{local:T set.tab.updates}" GroupName="tab" Checked="Tab_Checked"/>
       </StackPanel>
@@ -155,6 +156,42 @@
               <TextBlock x:Name="TrustedTitle" Style="{StaticResource T13S}"/>
               <TextBlock x:Name="TrustedEmpty" Text="{local:T set.trustedNone}" Style="{StaticResource Dim11}" FontSize="12" Margin="0,8,0,0"/>
               <StackPanel x:Name="TrustedList" Margin="0,4,0,0"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- Apple ID and Contacts Only -->
+        <StackPanel x:Name="PageAppleId" Visibility="Collapsed">
+          <Border Style="{StaticResource CardPad}">
+            <StackPanel>
+              <TextBlock Text="{local:T aid.who}" Style="{StaticResource T13S}" Margin="0,0,0,2"/>
+              <RadioButton x:Name="ReceiveEveryone" Style="{StaticResource ModeCard}" GroupName="receive"
+                           Content="{local:T aid.everyone}" Tag="{local:T aid.everyoneHint}"/>
+              <RadioButton x:Name="ReceiveContacts" Style="{StaticResource ModeCard}" GroupName="receive"
+                           Content="{local:T aid.contacts}" Tag="{local:T aid.contactsHint}"/>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource CardPad}">
+            <StackPanel>
+              <TextBlock Text="{local:T aid.identity}" Style="{StaticResource T13S}"/>
+              <TextBlock x:Name="IdentityText" Style="{StaticResource Sub12}" TextWrapping="Wrap" Margin="0,4,0,10"/>
+              <WrapPanel>
+                <Button x:Name="SignInButton" Style="{StaticResource WinPrimary}" Content="{local:T aid.signInButton}" Click="SignIn_Click"
+                        Padding="12,6" Margin="0,0,8,8"/>
+                <Button Style="{StaticResource WinButton}" Content="{local:T aid.importMac}" Click="ImportMac_Click" Padding="12,6" Margin="0,0,8,8"/>
+                <Button x:Name="ContactsButton" Style="{StaticResource WinButton}" Content="{local:T aid.importContacts}" Click="ImportContacts_Click"
+                        Padding="12,6" Margin="0,0,8,8"/>
+                <Button x:Name="SignOutButton" Style="{StaticResource QuietButton}" Content="{local:T aid.signOut}" Click="SignOut_Click"
+                        Padding="12,6" Margin="0,0,0,8"/>
+              </WrapPanel>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource CardPad}">
+            <StackPanel>
+              <TextBlock Text="{local:T aid.howTitle}" Style="{StaticResource T13S}"/>
+              <TextBlock Text="{local:T aid.howAppleId}" Style="{StaticResource Sub12}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+              <TextBlock Text="{local:T aid.howMac}" Style="{StaticResource Sub12}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+              <TextBlock Text="{local:T aid.howNote}" Style="{StaticResource Sub12}" TextWrapping="Wrap" Margin="0,6,0,0"/>
             </StackPanel>
           </Border>
         </StackPanel>

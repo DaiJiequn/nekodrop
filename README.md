@@ -188,6 +188,15 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 | WPA2/WPA3-Enterprise (802.1X, PEAP…) | ❌ not yet. nekodrop switches to *on demand* |
 | WEP, WPA/TKIP | ❌ (insecure; not planned) |
 
+### Contacts Only (Apple ID, experimental)
+
+Settings → **Apple ID**: choose who can send to this PC, **Everyone** or **Contacts Only**. Contacts Only needs an AirDrop identity like a Mac's, which you get one of two ways:
+
+- **Sign in with Apple ID** on this PC. nekodrop asks Apple for an AirDrop certificate the way a Mac does (WirDrop's `appleid`, MIT), keeps it renewed and reads your iCloud contacts. The first sign-in downloads a component of iCloud for Windows from Apple (about 160 MB; iCloud isn't installed). The password is used once and never stored.
+- **Import from a Mac** signed in to your Apple ID: export `certificate.pem`, `key.pem` and `validation_record.cms` with [airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) (it needs SIP partly off), pick their folder, then import your contacts as a `.vcf`.
+
+With an identity, your own iPhone lists this PC like one of your Macs, and iPhones set to Contacts Only see it when your Apple ID's e-mail or phone number is in their contacts. The receiver's Contacts Only filter reads the sender's record without checking Apple's signature, so it is a filter, not proof. Not yet tested on hardware.
+
 ### Experimental features
 
 In *Settings → Experimental*, all off by default; turning one off restores the old behaviour exactly. (Graduated from here and always on: aggregated sending, A-MPDU, in 0.1.35: 30.8 MB/s to an iPhone on AX201, 9–25 MiB/s on AX200; balanced Bluetooth coexistence on Intel cards in 0.1.37, which lets the Bluetooth beacon through so the PC finds iPhones and Macs in seconds, measured on AX200 and AX211: thanks to [@XXD051030](https://github.com/XXD051030), [#26](../../pull/26).)
@@ -285,6 +294,7 @@ nekodrop is built on other open-source projects. This section says exactly what 
 | [raph559/devourer](https://github.com/raph559/devourer) (`winawdl/pcie-windows`) | GPL-2.0 | Realtek RTL8852CE user-mode PCIe driver (`KESTREL_8852C`, embedded firmware and A-MPDU stack) | built into `radio\nekodrop-radio-rtl.exe` (`licenses\devourer-GPL-2.0.txt`) |
 | winawdl `awdl/` (`awdld`) | GPL-3.0-or-later (builds on OWL) | The AWDL daemon: OWL's protocol core with a Windows I/O layer and Wintun | built from source, shipped as `awdl\awdld.exe` |
 | winawdl `airdrop/` | MIT | The AirDrop engine in Python: mDNS, the HTTPS receiver, the sender, the BLE beacon | shipped as `airdrop\` with two small patches (`scripts/patch-engine.py`: stable instance name, spare ports) |
+| [JungyoKim/WirDrop](https://github.com/JungyoKim/WirDrop) | MIT | Its Apple ID sign-in, `appleid` and `appleid-anisette`: Apple's sign-in, the AirDrop certificate from aidc.apple.com, the iCloud contacts. Its identity layout and the record / hash handling of owly-airdrop (MIT) guided `installer/nekodrop_identity.py` | `appleid\appleid.exe`, `appleid\appleid-anisette.exe`, built from source with one patch (`scripts/patch-appleid.py`: phone numbers default to +86) |
 | [seemoo-lab/owl](https://github.com/seemoo-lab/owl) | GPL-3.0 | The AWDL implementation inside `awdld` | through winawdl |
 | [Wintun](https://www.wintun.net/) | Wintun license | The `awdl0` virtual interface | `awdl\wintun.dll` (prebuilt) |
 | [TAP-Windows6](https://github.com/OpenVPN/tap-windows6) | GPL-2.0 / OpenVPN | The "nekodrop" virtual Ethernet adapter for Windows' internet | installed by the setup (signed OpenVPN installer) |

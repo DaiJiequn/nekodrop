@@ -77,9 +77,17 @@ public static class AirDropBeaconWatch {
   } catch { }
 
   # Type 5 (AirDrop), 18 bytes: eight zeros, version 1, four two-byte hashes
-  # of the sender's contact details, a zero. The hashes are random here.
+  # of the sender's contact details, a zero. With an Apple ID identity the
+  # engine passes the owner's prefixes (Apple ID, phone, email, second email)
+  # in NEKODROP_BLE_HASHES, so iPhones set to Contacts Only wake for a known
+  # sender; otherwise they are random.
   $hashes = New-Object byte[] 8
-  (New-Object Random).NextBytes($hashes)
+  $known = $env:NEKODROP_BLE_HASHES
+  if ($known -match '^[0-9a-fA-F]{16}$') {
+    for ($i = 0; $i -lt 8; $i++) { $hashes[$i] = [Convert]::ToByte($known.Substring(2 * $i, 2), 16) }
+  } else {
+    (New-Object Random).NextBytes($hashes)
+  }
   [byte[]]$payload = @(0x05, 0x12) + (,0 * 8) + @(0x01) + $hashes + @(0x00)
 
   $data = New-Object "$namespace.BluetoothLEManufacturerData"

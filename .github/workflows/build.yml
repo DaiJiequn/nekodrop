@@ -16,6 +16,12 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Rust (Apple ID sign-in)
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal --target x86_64-pc-windows-msvc,i686-pc-windows-msvc
+          rustup default stable
+          cargo --version
       - name: Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Fetch dependencies

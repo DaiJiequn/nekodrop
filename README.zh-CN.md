@@ -188,6 +188,15 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 | WPA2/WPA3 企业版（802.1X、PEAP 等） | ❌ 暂不支持，会自动改用“按需”模式 |
 | WEP、WPA/TKIP | ❌（不安全，不计划支持） |
 
+### 仅限联系人（Apple ID，实验性）
+
+设置 →「Apple ID」里选择谁可以给这台电脑发送：「所有人」或「仅限联系人」。「仅限联系人」需要一个和 Mac 一样的 AirDrop 身份，有两种方式获得：
+
+- **用 Apple ID 登录**：nekodrop 像 Mac 一样向 Apple 申请 AirDrop 证书（WirDrop 的 `appleid`，MIT），自动续期并读取 iCloud 通讯录。第一次登录会从 Apple 下载 iCloud for Windows 的一个组件（约 160 MB，不安装 iCloud）。密码只用一次、不保存。
+- **从 Mac 导入**：在登录了你 Apple ID 的 Mac 上用 [airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) 导出 `certificate.pem`、`key.pem`、`validation_record.cms`（需要临时部分关闭 SIP），在设置里选中它们所在的文件夹，再导入一个 `.vcf` 通讯录。
+
+有了身份，你自己的 iPhone 会像对待你的 Mac 一样列出这台电脑；对方 iPhone 开「仅限联系人」时，只要它的通讯录里有你 Apple ID 的邮箱或手机号，也能看到这台电脑。接收端的「仅限联系人」过滤只读对方的确认记录、不校验 Apple 签名，只是过滤，不是身份证明。尚未在真机上测试。
+
 ### 实验性功能
 
 在 *设置 → 实验性功能* 里，默认都关闭；关掉后行为和原来完全一样。（已经转正、始终打开的：聚合发送 A-MPDU，0.1.35 起，AX201 上发给 iPhone 30.8 MB/s，AX200 上 9–25 MiB/s；Intel 网卡的蓝牙与 Wi-Fi 均衡共存，0.1.37 起，让蓝牙信标发得出去，电脑几秒内就能找到 iPhone 和 Mac，AX200 和 AX211 上有实测，感谢 [@XXD051030](https://github.com/XXD051030)，[#26](../../pull/26)。）
@@ -285,6 +294,7 @@ nekodrop 是在其他开源项目的基础上做的。这里写清楚哪些是**
 | [raph559/devourer](https://github.com/raph559/devourer)（`winawdl/pcie-windows`） | GPL-2.0 | Realtek RTL8852CE 用户态 PCIe 驱动（`KESTREL_8852C`，内嵌固件与双向 A-MPDU 栈） | 编译打包为 `radio\nekodrop-radio-rtl.exe`（`licenses\devourer-GPL-2.0.txt`） |
 | winawdl 的 `awdl/`（`awdld`） | GPL-3.0 或更新（基于 OWL） | AWDL 守护进程：OWL 的协议核心加上 Windows I/O 层和 Wintun | 从源码编译，随安装包放在 `awdl\awdld.exe` |
 | winawdl 的 `airdrop/` | MIT | Python 写的 AirDrop 引擎：mDNS、HTTPS 接收端、发送端、蓝牙信标 | 放在 `airdrop\`，打了两个小补丁（`scripts/patch-engine.py`：固定实例名、备用端口） |
+| [JungyoKim/WirDrop](https://github.com/JungyoKim/WirDrop) | MIT | Apple ID 登录（`appleid`、`appleid-anisette`）：Apple 登录、向 aidc.apple.com 申请 AirDrop 证书、读取 iCloud 通讯录。`installer/nekodrop_identity.py` 参照了它的身份目录格式和 owly-airdrop（MIT）的确认记录 / 哈希处理 | `appleid\appleid.exe`、`appleid\appleid-anisette.exe`，从源码编译，打了一个补丁（`scripts/patch-appleid.py`：手机号默认 +86） |
 | [seemoo-lab/owl](https://github.com/seemoo-lab/owl) | GPL-3.0 | `awdld` 里的 AWDL 实现 | 经由 winawdl |
 | [Wintun](https://www.wintun.net/) | Wintun 许可 | 虚拟网卡 `awdl0` | `awdl\wintun.dll`（预编译） |
 | [TAP-Windows6](https://github.com/OpenVPN/tap-windows6) | GPL-2.0 / OpenVPN | Windows 上网用的“nekodrop”虚拟以太网卡 | 安装时装上（OpenVPN 签名的安装程序） |

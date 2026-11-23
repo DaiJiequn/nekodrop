@@ -64,6 +64,7 @@ public sealed class App : Application
         ApplyTheme();
         CreateTray();
         ApplyHotkey();
+        KeepAppleIdFresh();
         Service.State += o => Dispatcher.BeginInvoke(() => OnServiceState(o));
         Service.Connected += up => Dispatcher.BeginInvoke(() =>
         {
@@ -304,6 +305,7 @@ public sealed class App : Application
             ("main-list", () => { Settings.DeviceView = "list"; return Main("ready"); }, 1000),
             ("settings-general", () => new SettingsWindow("general"), 0),
             ("settings-network", () => new SettingsWindow("network"), 0),
+            ("settings-appleid", () => new SettingsWindow("appleid"), 0),
             ("settings-hardware", () => new SettingsWindow("hardware"), 0),
             ("settings-updates", () => new SettingsWindow("updates"), 0),
             ("wifi", () => { var w = new WifiWindow(); w.Render(wifiState); return w; }, 0),
@@ -551,6 +553,34 @@ public sealed class App : Application
 
         try { Shell.Register(Settings.StartWithWindows); } catch (Exception) { }
         if (_window is not null) { var w = _window; var shown = w.IsVisible; _window = null; w.Close(); if (shown) ShowWindow(); }
+    }
+
+    /// <summary>The engine again (a new identity, or Contacts Only switched): it reads both when it starts.</summary>
+    public void RestartEngine()
+    {
+        Engine.Dispose();
+        if (Settings.Discoverable) StartEngine();
+    }
+
+    System.Windows.Threading.DispatcherTimer? _appleIdTimer;
+
+    /// <summary>
+    /// Keeps a signed-in Apple ID's certificate and record fresh (appleid.exe
+    /// renews them ahead of expiry, and re-reads the iCloud contacts): soon
+    /// after start, then every 12 hours. A new certificate restarts the engine.
+    /// </summary>
+    void KeepAppleIdFresh()
+    {
+        _appleIdTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(2) };
+        _appleIdTimer.Tick += async (_, _) =>
+        {
+            _appleIdTimer.Interval = TimeSpan.FromHours(12);
+            if (AppleId.Source != "appleid") return;
+            var before = AppleId.CertificateUntil;
+            var result = await AppleId.Refresh();
+            if (result == 0 && AppleId.CertificateUntil != before) RestartEngine();
+        };
+        _appleIdTimer.Start();
     }
 
     public void SetDiscoverable(bool on)

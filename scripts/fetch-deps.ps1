@@ -3,6 +3,7 @@
 #   devourer        winawdl's Realtek RTL8852CE user-mode radio library (GPL-2.0)
 #   ForbiddenItlwm  iwlwifi firmware and its licence (GPL-2.0 / Intel redistribution)
 #   linux-firmware  the MediaTek MT7902 firmware and its licence (MediaTek redistribution)
+#   WirDrop         its Apple ID sign-in (appleid.exe, appleid-anisette.exe) for Contacts Only (MIT)
 #   winlibs MinGW   GCC for awdld
 #   WDK (NuGet)     UMDF headers and tools, only when no WDK is installed
 # Pinned to the versions nekodrop is tested with; the downloads are checked by SHA-256.
@@ -28,6 +29,7 @@ function Get-File($url, $out, $sha256) {
 Get-Repo winawdl https://github.com/raph559/winawdl.git 0db7031589dc2bca03c0893db341176376962047
 Get-Repo 'winawdl\upstream\devourer' https://github.com/raph559/devourer.git 8d936de2a3805ce126e5236349afe40e645aaf9b
 Get-Repo ForbiddenItlwm https://github.com/retropineaple/ForbiddenItlwm.git 96ff71e0211789239f6fbf6b64ac8e7fd22b41aa
+Get-Repo WirDrop https://github.com/JungyoKim/WirDrop.git 7c5308ca7fb9ee3d375e4c4ca93f7f9d6a7542a6
 
 # MT7902 firmware: three files, not a clone of all of linux-firmware. From its
 # GitLab copy: git.kernel.org answers scripts with a bot check page.

@@ -31,6 +31,8 @@ public partial class SettingsWindow : Window
         AskBox.IsChecked = s.Ask;
         StartupBox.IsChecked = s.StartWithWindows;
         HotkeyBox.IsChecked = s.Hotkey;
+        (s.Receive == "contacts" ? ReceiveContacts : ReceiveEveryone).IsChecked = true;
+        ShowIdentity();
         _hotkeyKeys = Hotkey.TryParse(s.HotkeyKeys, out _, out _) ? s.HotkeyKeys : Hotkey.Default;
         ShowHotkey();
         LanguageBox.SelectedIndex = s.Language switch { "zh" => 1, "en" => 2, _ => 0 };
@@ -52,7 +54,7 @@ public partial class SettingsWindow : Window
         A.Service.Reply += OnCardsReply;
         Closed += (_, _) => A.Service.Reply -= OnCardsReply;
         A.Service.RequestCards();
-        (tab switch { "network" => TabNetwork, "hardware" => TabHardware, "updates" => TabUpdates, _ => TabGeneral }).IsChecked = true;
+        (tab switch { "network" => TabNetwork, "appleid" => TabAppleId, "hardware" => TabHardware, "updates" => TabUpdates, _ => TabGeneral }).IsChecked = true;
     }
 
     void Tab_Checked(object sender, RoutedEventArgs e)
@@ -60,6 +62,7 @@ public partial class SettingsWindow : Window
         if (PageGeneral is null) return; // still loading
         PageGeneral.Visibility = TabGeneral.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         PageNetwork.Visibility = TabNetwork.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        PageAppleId.Visibility = TabAppleId.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         PageHardware.Visibility = TabHardware.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         PageUpdates.Visibility = TabUpdates.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -269,6 +272,9 @@ public partial class SettingsWindow : Window
         s.SaveFolder = _folder;
         s.Ask = AskBox.IsChecked == true;
         s.StartWithWindows = StartupBox.IsChecked == true;
+        var receive = ReceiveContacts.IsChecked == true && AppleId.Present ? "contacts" : "everyone";
+        var receiveChanged = receive != s.Receive;
+        s.Receive = receive;
         var hotkeyChanged = (HotkeyBox.IsChecked == true) != s.Hotkey || _hotkeyKeys != s.HotkeyKeys;
         s.Hotkey = HotkeyBox.IsChecked == true;
         s.HotkeyKeys = _hotkeyKeys;
@@ -293,6 +299,7 @@ public partial class SettingsWindow : Window
         if (coexPlan != ((bool?)A.Service.Last?["coexPlan"] ?? false)) A.Service.SetCoexPlan(coexPlan);
         A.Window?.FolderChanged();
         var hotkeyTaken = hotkeyChanged && !A.ApplyHotkey();
+        if (receiveChanged) A.RestartEngine();
         if (accentChanged) A.ApplyTheme();
         if (languageChanged) { A.ApplyLanguage(); Close(); return; }
         SavedText.Text = hotkeyTaken ? L.F("set.hotkeyTaken", Hotkey.Show(_hotkeyKeys)) : "✓ " + L.T("set.saved");
@@ -301,6 +308,77 @@ public partial class SettingsWindow : Window
     }
 
     void Cancel_Click(object sender, RoutedEventArgs e) => Close();
+
+    // ------------------------------------------------ Apple ID, Contacts Only
+
+    /// <summary>What identity there is, and which buttons make sense with it.</summary>
+    void ShowIdentity()
+    {
+        var present = AppleId.Present;
+        ReceiveContacts.IsEnabled = present;
+        if (!present) ReceiveEveryone.IsChecked = true;
+        SignInButton.IsEnabled = AppleId.CanSignIn;
+        SignInButton.ToolTip = AppleId.CanSignIn ? null : L.T("aid.noTool");
+        SignOutButton.Visibility = present || System.IO.Directory.Exists(AppleId.Out) ? Visibility.Visible : Visibility.Collapsed;
+        ContactsButton.Visibility = AppleId.Source == "appleid" ? Visibility.Collapsed : Visibility.Visible;
+        if (!present) { IdentityText.Text = L.T("aid.none"); return; }
+        var until = AppleId.CertificateUntil is { } d ? d.ToString("yyyy-MM-dd") : "?";
+        var who = AppleId.Source == "appleid" ? L.F("aid.signedIn", AppleId.Account) : L.T("aid.fromMac");
+        IdentityText.Text = who + " · " + L.F("aid.until", until) + " · " + L.F("aid.contactCount", AppleId.ContactCount);
+    }
+
+    void IdentityChanged()
+    {
+        ShowIdentity();
+        A.RestartEngine();
+    }
+
+    void SignIn_Click(object sender, RoutedEventArgs e)
+    {
+        var w = new AppleIdWindow { Owner = this };
+        if (w.ShowDialog() == true)
+        {
+            IdentityChanged();
+            SavedText.Text = "✓ " + L.T("aid.done");
+        }
+    }
+
+    void ImportMac_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = L.T("aid.pickMac") };
+        if (dlg.ShowDialog(this) != true) return;
+        var why = AppleId.ImportFromMac(dlg.FolderName, null);
+        if (why == "need_passphrase")
+        {
+            var pass = Microsoft.VisualBasic.Interaction.InputBox(L.T("aid.passphrase"), "nekodrop");
+            if (pass.Length == 0) return;
+            why = AppleId.ImportFromMac(dlg.FolderName, pass);
+        }
+        if (why is not null) { MessageBox.Show(this, why, "nekodrop", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        IdentityChanged();
+        SavedText.Text = "✓ " + L.T("aid.imported");
+    }
+
+    void ImportContacts_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog { Title = L.T("aid.pickVcf"), Filter = "vCard (*.vcf)|*.vcf" };
+        if (dlg.ShowDialog(this) != true) return;
+        try
+        {
+            var people = AppleId.ImportContacts(dlg.FileName);
+            IdentityChanged();
+            SavedText.Text = "✓ " + L.F("aid.contactsImported", people);
+        }
+        catch (Exception x) { MessageBox.Show(this, x.Message, "nekodrop", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    void SignOut_Click(object sender, RoutedEventArgs e)
+    {
+        if (MessageBox.Show(this, L.T("aid.signOutAsk"), "nekodrop", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        try { AppleId.SignOut(); } catch (Exception x) { MessageBox.Show(this, x.Message, "nekodrop"); return; }
+        if (A.Settings.Receive == "contacts") { A.Settings.Receive = "everyone"; A.Settings.Save(); }
+        IdentityChanged();
+    }
 
     // ------------------------------------------------- recording the shortcut
 
