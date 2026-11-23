@@ -157,5 +157,7 @@ public sealed class ProgressRing : FrameworkElement
 /// <summary>Windows' "Animation effects" setting: off means no looping motion.</summary>
 public static class Motion
 {
-    public static bool Reduced => !SystemParameters.ClientAreaAnimation;
+    /// <summary>Set by --snapshot: the build machine has animations off, and the pictures should show the ripple.</summary>
+    public static bool ForceOn { get; set; }
+    public static bool Reduced => !ForceOn && !SystemParameters.ClientAreaAnimation;
 }

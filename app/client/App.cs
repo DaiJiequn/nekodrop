@@ -267,6 +267,7 @@ public sealed class App : Application
         Model.Status = L.F("status.on", 44);
         Model.Detail = "Wi-Fi: " + L.T("wifi.connected");
         Model.RadioOn = true;
+        Motion.ForceOn = true;
         Model.Devices.Add(new Device { Id = "a", Name = "iPhone", Model = "iPhone15,2" });
         Model.Devices.Add(new Device { Id = "b", Name = "MacBook Air", Model = "Mac14,2", Busy = true, Progress = 0.42, State = "sending", Status = L.F("send.sending", 0.42) });
         Model.Devices.Add(new Device { Id = "c", Name = "iPad Pro", Model = "iPad14,5", State = "sent", Status = L.T("send.sent") });
@@ -283,7 +284,7 @@ public sealed class App : Application
             ("main", () => new MainWindow()),
             ("main-list", () => { Settings.DeviceView = "list"; return new MainWindow(); }),
             ("main-empty", () => { Settings.DeviceView = "radar"; Model.Devices.Clear(); return new MainWindow(); }),
-            ("settings", () => new SettingsWindow { Height = 1500 }), // all of it, not the first screen
+            ("settings", () => new SettingsWindow()),
         };
         if (_startArgs.Contains("--live"))
         {
@@ -302,6 +303,8 @@ public sealed class App : Application
             // picture shows where it is centered.
             Pump(TimeSpan.FromMilliseconds(1200));
             if (w.Content is not FrameworkElement root) continue;
+            // A scrolling window (the settings): all of its content, not the first screen.
+            if (root is System.Windows.Controls.ScrollViewer { Content: FrameworkElement inner }) root = inner;
             Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
             var width = (int)root.ActualWidth; var height = (int)root.ActualHeight;
             var visual = new System.Windows.Media.DrawingVisual();
