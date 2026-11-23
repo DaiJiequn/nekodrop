@@ -335,6 +335,7 @@ nekodrop 是在其他开源项目的基础上做的。这里写清楚哪些是**
 - [@XXD051030](https://github.com/XXD051030)：Intel 网卡可选的蓝牙均衡共存模式，让电脑几秒内就能找到 iPhone 和 Mac，而不是等一两分钟，并附了一份 AX200 上的详细前后对照（[#26](../../pull/26)）。
 - [@GGBond-cer](https://github.com/GGBond-cer)：大量详细的 AX200 实测报告，帮我们定位了 A-MPDU 和速度问题（[#4](../../issues/4)），找到了卸载残留的根因（[#22](../../issues/22)），写了传输速度测试指南（[#28](../../pull/28)），并修好了卸载程序被自己的清理步骤结束、留下快捷方式和安装目录的问题（[#38](../../pull/38)）。
 - [@DaiJiequn](https://github.com/DaiJiequn)：MediaTek MT7902 支持，从 Linux mt76 移植的用户态驱动，按需模式下双向 AirDrop 可用（[#34](../../pull/34)）。
+- [@sh17632](https://github.com/sh17632)：提出 AirDrop 风格的雷达界面和「共享」菜单方案，成为 2.0 新界面的基础（[#36](../../issues/36)），以及 AX211 实测反馈（[#35](../../issues/35)）。
 
 ## 许可
 
