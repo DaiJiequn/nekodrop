@@ -204,7 +204,7 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 - **用 Apple ID 登录**：nekodrop 像 Mac 一样向 Apple 申请 AirDrop 证书（WirDrop 的 `appleid`，MIT），自动续期并读取 iCloud 通讯录。第一次登录会从 Apple 下载 iCloud for Windows 的一个组件（约 160 MB，不安装 iCloud）。密码只用一次、不保存。
 - **从 Mac 导入**：在登录了你 Apple ID 的 Mac 上用 [airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) 导出 `certificate.pem`、`key.pem`、`validation_record.cms`（需要临时部分关闭 SIP），在设置里选中它们所在的文件夹，再导入一个 `.vcf` 通讯录。
 
-有了身份，你自己的 iPhone 会像对待你的 Mac 一样列出这台电脑；对方 iPhone 开「仅限联系人」时，只要它的通讯录里有你 Apple ID 的邮箱或手机号，也能看到这台电脑。接收端的「仅限联系人」过滤只读对方的确认记录、不校验 Apple 签名，只是过滤，不是身份证明。尚未在真机上测试。
+有了身份，你自己的 iPhone 会像对待你的 Mac 一样列出这台电脑；对方 iPhone 开「仅限联系人」时，只要它的通讯录里有你 Apple ID 的邮箱或手机号，也能看到这台电脑。接收端的「仅限联系人」过滤只读对方的确认记录、不校验 Apple 签名，只是过滤，不是身份证明。维护者已在 2.1.0 上真机确认可用。
 
 ### 实验性功能
 
@@ -224,7 +224,7 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 | Wi-Fi 管理、已保存网络、网页登录识别 | ✅ |
 | 服务、托盘程序、通知、右键菜单、安装包 | ✅ |
 | 托盘面板、雷达、「共享」菜单、自定义快捷键 | ✅ 2.0.2 |
-| 仅限联系人（Apple ID 登录或 Mac 证书） | 🧪 2.1.0，尚未真机测试 |
+| 仅限联系人（Apple ID 登录或 Mac 证书） | ✅ 2.1.0，实验性（维护者真机确认可用） |
 | 纯 WPA3、OWE | 🧪 0.1.12，未实机测试 |
 | 802.1X（企业版） | ⏳ 计划中 |
 | AX200、AX210、AX211 | ✅ 用户反馈双向 AirDrop 可用 |

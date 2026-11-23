@@ -204,7 +204,7 @@ Settings → **Apple ID**: turn on the experimental switch at the top, then choo
 - **Sign in with Apple ID** on this PC. nekodrop asks Apple for an AirDrop certificate the way a Mac does (WirDrop's `appleid`, MIT), keeps it renewed and reads your iCloud contacts. The first sign-in downloads a component of iCloud for Windows from Apple (about 160 MB; iCloud isn't installed). The password is used once and never stored.
 - **Import from a Mac** signed in to your Apple ID: export `certificate.pem`, `key.pem` and `validation_record.cms` with [airdrop-keychain-extractor](https://github.com/seemoo-lab/airdrop-keychain-extractor) (it needs SIP partly off), pick their folder, then import your contacts as a `.vcf`.
 
-With an identity, your own iPhone lists this PC like one of your Macs, and iPhones set to Contacts Only see it when your Apple ID's e-mail or phone number is in their contacts. The receiver's Contacts Only filter reads the sender's record without checking Apple's signature, so it is a filter, not proof. Not yet tested on hardware.
+With an identity, your own iPhone lists this PC like one of your Macs, and iPhones set to Contacts Only see it when your Apple ID's e-mail or phone number is in their contacts. The receiver's Contacts Only filter reads the sender's record without checking Apple's signature, so it is a filter, not proof. Confirmed working by the maintainer on 2.1.0.
 
 ### Experimental features
 
@@ -224,7 +224,7 @@ In *Settings → Experimental*, all off by default; turning one off restores the
 | Wi-Fi manager, saved networks, captive portal | ✅ |
 | Service, tray app, notifications, context menu, installer | ✅ |
 | Tray panel, radar, Share sheet, custom shortcut | ✅ 2.0.2 |
-| Contacts Only (Apple ID sign-in or a Mac's certificate) | 🧪 2.1.0, untested on hardware |
+| Contacts Only (Apple ID sign-in or a Mac's certificate) | ✅ 2.1.0, experimental (confirmed by the maintainer) |
 | WPA3-only, OWE | 🧪 0.1.12, untested on hardware |
 | 802.1X (Enterprise) | ⏳ planned |
 | AX200, AX210, AX211 | ✅ two-way AirDrop in user reports |
