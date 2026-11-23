@@ -134,7 +134,7 @@
           <StackPanel Margin="0,4">
             <Grid Width="50" Height="50" HorizontalAlignment="Center">
               <!-- A request: a soft accent halo that breathes -->
-              <Ellipse x:Name="AskGlow" Margin="-9" Fill="{DynamicResource AccentSubtle}" Visibility="Hidden" RenderTransformOrigin="0.5,0.5">
+              <Ellipse x:Name="AskGlow" Margin="-5" Fill="{DynamicResource AccentSubtle}" Visibility="Hidden" RenderTransformOrigin="0.5,0.5">
                 <Ellipse.RenderTransform><ScaleTransform x:Name="askBreath"/></Ellipse.RenderTransform>
               </Ellipse>
               <Ellipse x:Name="Glow" Margin="-6" Fill="{DynamicResource AccentSubtle}" Visibility="Hidden"/>
@@ -224,10 +224,10 @@
           <DataTrigger.EnterActions>
             <BeginStoryboard x:Name="askPulse">
               <Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                <DoubleAnimation Storyboard.TargetName="askBreath" Storyboard.TargetProperty="ScaleX" From="0.86" To="1.12" Duration="0:0:1.2">
+                <DoubleAnimation Storyboard.TargetName="askBreath" Storyboard.TargetProperty="ScaleX" From="0.94" To="1.1" Duration="0:0:1.2">
                   <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
                 </DoubleAnimation>
-                <DoubleAnimation Storyboard.TargetName="askBreath" Storyboard.TargetProperty="ScaleY" From="0.86" To="1.12" Duration="0:0:1.2">
+                <DoubleAnimation Storyboard.TargetName="askBreath" Storyboard.TargetProperty="ScaleY" From="0.94" To="1.1" Duration="0:0:1.2">
                   <DoubleAnimation.EasingFunction><SineEase EasingMode="EaseInOut"/></DoubleAnimation.EasingFunction>
                 </DoubleAnimation>
               </Storyboard>
@@ -239,8 +239,8 @@
           <Setter TargetName="asking" Property="Visibility" Value="Collapsed"/>
           <Setter TargetName="receiving" Property="Visibility" Value="Visible"/>
         </DataTrigger>
-        <!-- Low on the radar: the bubble opens above the icon, its notch pointing down -->
-        <DataTrigger Binding="{Binding (local:RadarPanel.Lower), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" Value="True">
+        <!-- Opening outwards above the icon: the notch points down at it -->
+        <DataTrigger Binding="{Binding (local:RadarPanel.BubbleAbove), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" Value="True">
           <Setter TargetName="bubble" Property="Canvas.Top" Value="-74"/>
           <Setter TargetName="notchUp" Property="Visibility" Value="Collapsed"/>
           <Setter TargetName="notchDown" Property="Visibility" Value="Visible"/>

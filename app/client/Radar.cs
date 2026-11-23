@@ -57,14 +57,18 @@ public readonly record struct RadarGeometry(Point Center, double Orbit, double I
 /// <summary>Puts its children (device boxes) on the radar's orbit.</summary>
 public sealed class RadarPanel : Panel
 {
+    /// <summary>The request bubble's height, with its notch and the gap to the icon or the name.</summary>
+    public const double Bubble = 70 + 6;
+
     /// <summary>
-    /// Set on each child: it sits in the lower half, so its request bubble
-    /// opens above the icon instead of below the name (it would leave the stage).
+    /// Set on each child: its request bubble opens above the icon (true) or
+    /// below the name. Outwards, away from this PC, where the stage has room:
+    /// above for the upper half, below for the lower half, else the other way.
     /// </summary>
-    public static readonly DependencyProperty LowerProperty = DependencyProperty.RegisterAttached(
-        "Lower", typeof(bool), typeof(RadarPanel), new FrameworkPropertyMetadata(false));
-    public static bool GetLower(DependencyObject d) => (bool)d.GetValue(LowerProperty);
-    public static void SetLower(DependencyObject d, bool value) => d.SetValue(LowerProperty, value);
+    public static readonly DependencyProperty BubbleAboveProperty = DependencyProperty.RegisterAttached(
+        "BubbleAbove", typeof(bool), typeof(RadarPanel), new FrameworkPropertyMetadata(false));
+    public static bool GetBubbleAbove(DependencyObject d) => (bool)d.GetValue(BubbleAboveProperty);
+    public static void SetBubbleAbove(DependencyObject d, bool value) => d.SetValue(BubbleAboveProperty, value);
 
     protected override Size MeasureOverride(Size available)
     {
@@ -81,7 +85,11 @@ public sealed class RadarPanel : Panel
         for (var i = 0; i < n; i++)
         {
             var p = g.IconCenter(i, n);
-            SetLower(InternalChildren[i], p.Y > g.Center.Y + 1);
+            var top = p.Y - 4 - RadarGeometry.Node / 2; // the box's top edge
+            var roomAbove = top - Bubble >= 0;
+            var roomBelow = top + RadarGeometry.NodeHeight + Bubble <= final.Height;
+            var upper = p.Y < g.Center.Y - 1;
+            SetBubbleAbove(InternalChildren[i], upper ? roomAbove || !roomBelow : !roomBelow && roomAbove);
             // The icon is at the top of the box: its center is padding and half an icon down.
             InternalChildren[i].Arrange(new Rect(p.X - RadarGeometry.NodeWidth / 2, p.Y - 4 - RadarGeometry.Node / 2,
                                                  RadarGeometry.NodeWidth, RadarGeometry.NodeHeight));

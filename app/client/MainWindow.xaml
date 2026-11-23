@@ -102,7 +102,7 @@
     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
       <StackPanel Margin="20,16,20,16">
         <!-- Nearby devices -->
-        <local:RadarView Height="400"/>
+        <local:RadarView Height="470"/>
 
         <!-- Files to send: dashed while empty -->
         <Grid Margin="0,14,0,0">
