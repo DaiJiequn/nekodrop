@@ -22,7 +22,7 @@ public partial class SendWindow : Window
         DataContext = A.Model;
         Native.Chrome(this);
         Radar.Compact = true;
-        HintText.Text = L.T("send.hint") + (A.Settings.Hotkey ? " · Win+Shift+D" : "");
+        HintText.Text = L.T("send.hint") + (A.Settings.Hotkey ? " · " + Hotkey.Show(A.Settings.HotkeyKeys).Replace(" ", "") : "");
         A.Model.Files.CollectionChanged += OnChanged;
         Closed += (_, _) =>
         {

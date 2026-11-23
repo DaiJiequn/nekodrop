@@ -31,6 +31,8 @@ public partial class SettingsWindow : Window
         AskBox.IsChecked = s.Ask;
         StartupBox.IsChecked = s.StartWithWindows;
         HotkeyBox.IsChecked = s.Hotkey;
+        _hotkeyKeys = Hotkey.TryParse(s.HotkeyKeys, out _, out _) ? s.HotkeyKeys : Hotkey.Default;
+        ShowHotkey();
         LanguageBox.SelectedIndex = s.Language switch { "zh" => 1, "en" => 2, _ => 0 };
         BuildAccents(s.Accent);
         (s.HubIcon switch { "desktop" => HubDesktop, "laptop" => HubLaptop, _ => HubAuto }).IsChecked = true;
@@ -267,8 +269,9 @@ public partial class SettingsWindow : Window
         s.SaveFolder = _folder;
         s.Ask = AskBox.IsChecked == true;
         s.StartWithWindows = StartupBox.IsChecked == true;
-        var hotkeyChanged = (HotkeyBox.IsChecked == true) != s.Hotkey;
+        var hotkeyChanged = (HotkeyBox.IsChecked == true) != s.Hotkey || _hotkeyKeys != s.HotkeyKeys;
         s.Hotkey = HotkeyBox.IsChecked == true;
+        s.HotkeyKeys = _hotkeyKeys;
         s.CheckUpdates = CheckUpdatesBox.IsChecked == true;
         s.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
         var language = (LanguageBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "auto";
@@ -289,13 +292,56 @@ public partial class SettingsWindow : Window
         var coexPlan = CoexPlanBox.IsChecked == true;
         if (coexPlan != ((bool?)A.Service.Last?["coexPlan"] ?? false)) A.Service.SetCoexPlan(coexPlan);
         A.Window?.FolderChanged();
-        if (hotkeyChanged) A.ApplyHotkey();
+        var hotkeyTaken = hotkeyChanged && !A.ApplyHotkey();
         if (accentChanged) A.ApplyTheme();
         if (languageChanged) { A.ApplyLanguage(); Close(); return; }
-        SavedText.Text = "✓ " + L.T("set.saved");
+        SavedText.Text = hotkeyTaken ? L.F("set.hotkeyTaken", Hotkey.Show(_hotkeyKeys)) : "✓ " + L.T("set.saved");
         await Task.Delay(2000);
         SavedText.Text = "";
     }
 
     void Cancel_Click(object sender, RoutedEventArgs e) => Close();
+
+    // ------------------------------------------------- recording the shortcut
+
+    string _hotkeyKeys = Hotkey.Default;
+    bool _recording;
+
+    void ShowHotkey() => HotkeyText.Text = _recording ? L.T("set.hotkeyPress") : Hotkey.Show(_hotkeyKeys);
+
+    void HotkeyRecorder_Click(object sender, RoutedEventArgs e)
+    {
+        _recording = !_recording;
+        ShowHotkey();
+    }
+
+    void HotkeyRecorder_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (!_recording) return;
+        e.Handled = true;
+        var key = e.Key == System.Windows.Input.Key.System ? e.SystemKey : e.Key;
+        if (key == System.Windows.Input.Key.Escape) { _recording = false; ShowHotkey(); return; }
+        // Keyboard.Modifiers leaves out Win; ask for it directly.
+        var mods = System.Windows.Input.Keyboard.Modifiers;
+        if (System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LWin) || System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RWin))
+            mods |= System.Windows.Input.ModifierKeys.Windows;
+        if (Hotkey.FromKeys(mods, key) is not { } combo) return; // only modifiers so far, or no modifier
+        _hotkeyKeys = combo;
+        _recording = false;
+        ShowHotkey();
+    }
+
+    void HotkeyRecorder_LostFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        if (!_recording) return;
+        _recording = false;
+        ShowHotkey();
+    }
+
+    void HotkeyReset_Click(object sender, RoutedEventArgs e)
+    {
+        _recording = false;
+        _hotkeyKeys = Hotkey.Default;
+        ShowHotkey();
+    }
 }

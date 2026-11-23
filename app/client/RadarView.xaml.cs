@@ -160,6 +160,7 @@ public partial class RadarView : UserControl
     {
         _hubRing.Visibility = Visibility.Collapsed;
         HubLook(true);
+        Motion.Pop(_hub);
         _doneTimer?.Stop();
         _doneTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         _doneTimer.Tick += (_, _) => { _doneTimer!.Stop(); HubLook(false); HubReceiving(); };
@@ -185,6 +186,7 @@ public partial class RadarView : UserControl
         A.Settings.DeviceView = ListChoice.IsChecked == true ? "list" : "radar";
         A.Settings.Save();
         Update();
+        Motion.FadeIn(ListChoice.IsChecked == true ? ListLayer : RadarLayer, 8);
     }
 
     /// <summary>More devices than the radar holds always show as the list.</summary>

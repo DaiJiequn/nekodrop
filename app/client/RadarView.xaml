@@ -138,6 +138,7 @@
           <Button.RenderTransform>
             <TransformGroup>
               <ScaleTransform x:Name="grow"/>
+              <ScaleTransform x:Name="enter"/>
               <TranslateTransform x:Name="shake"/>
             </TransformGroup>
           </Button.RenderTransform>
@@ -165,7 +166,8 @@
 
         <!-- The request: wants to send…, accept / decline; then receiving with a bar -->
         <Canvas x:Name="bubbleHost" Visibility="Collapsed" Panel.ZIndex="5">
-          <Grid x:Name="bubble" Canvas.Left="-14" Canvas.Top="98">
+          <Grid x:Name="bubble" Canvas.Left="-14" Canvas.Top="98" RenderTransformOrigin="0.5,0">
+            <Grid.RenderTransform><ScaleTransform x:Name="bubbleScale"/></Grid.RenderTransform>
             <Path x:Name="notchUp" Data="M0,6 L6,0 L12,6" Fill="{DynamicResource MicaSolid}" Stroke="{DynamicResource Accent}" StrokeThickness="1"
                   HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-5,0,0" Panel.ZIndex="1"/>
             <Path x:Name="notchDown" Data="M0,0 L6,6 L12,0" Fill="{DynamicResource MicaSolid}" Stroke="{DynamicResource Accent}" StrokeThickness="1"
@@ -186,6 +188,20 @@
         </Canvas>
       </Grid>
       <DataTemplate.Triggers>
+        <!-- Found: fades in and grows from 60 % with a slight overshoot -->
+        <EventTrigger SourceName="node" RoutedEvent="FrameworkElement.Loaded">
+          <BeginStoryboard>
+            <Storyboard>
+              <DoubleAnimation Storyboard.TargetName="node" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25"/>
+              <DoubleAnimation Storyboard.TargetName="enter" Storyboard.TargetProperty="ScaleX" From="0.6" To="1" Duration="0:0:0.38">
+                <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.35"/></DoubleAnimation.EasingFunction>
+              </DoubleAnimation>
+              <DoubleAnimation Storyboard.TargetName="enter" Storyboard.TargetProperty="ScaleY" From="0.6" To="1" Duration="0:0:0.38">
+                <DoubleAnimation.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.35"/></DoubleAnimation.EasingFunction>
+              </DoubleAnimation>
+            </Storyboard>
+          </BeginStoryboard>
+        </EventTrigger>
         <Trigger SourceName="node" Property="IsMouseOver" Value="True">
           <Trigger.EnterActions>
             <BeginStoryboard>
@@ -224,6 +240,17 @@
           <Setter TargetName="AskGlow" Property="Visibility" Value="Visible"/>
           <Setter TargetName="status" Property="Visibility" Value="Hidden"/>
           <DataTrigger.EnterActions>
+            <BeginStoryboard>
+              <Storyboard>
+                <DoubleAnimation Storyboard.TargetName="bubble" Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.2"/>
+                <DoubleAnimation Storyboard.TargetName="bubbleScale" Storyboard.TargetProperty="ScaleX" From="0.85" To="1" Duration="0:0:0.26">
+                  <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="bubbleScale" Storyboard.TargetProperty="ScaleY" From="0.85" To="1" Duration="0:0:0.26">
+                  <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+              </Storyboard>
+            </BeginStoryboard>
             <BeginStoryboard x:Name="askPulse">
               <Storyboard RepeatBehavior="Forever" AutoReverse="True">
                 <DoubleAnimation Storyboard.TargetName="askBreath" Storyboard.TargetProperty="ScaleX" From="0.94" To="1.1" Duration="0:0:1.2">

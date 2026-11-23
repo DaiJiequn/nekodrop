@@ -1,8 +1,8 @@
-﻿; nekodrop setup (Inno Setup 6). Built by scripts\build-installer.ps1 from build\stage.
+; nekodrop setup (Inno Setup 6). Built by scripts\build-installer.ps1 from build\stage.
 ; One exe installs everything: the client and service (self-contained, no .NET
 ; needed), the user-mode radio, awdld + Wintun, the AirDrop engine with its own
 ; Python, the register-proxy driver, TAP-Windows, firewall rules and the service.
-#define AppVersion "2.0.1"
+#define AppVersion "2.0.2"
 
 [Setup]
 AppId={{6C1F2E7A-4B8E-4E57-9C61-5E2B1D0A9F31}
@@ -29,13 +29,13 @@ Name: "zh"; MessagesFile: "ChineseSimplified.isl"
 Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
-zh.Installing=姝ｅ湪瀹夎椹卞姩銆乀AP 缃戝崱銆侀槻鐏瑙勫垯鍜?nekodrop 鏈嶅姟鈥?
+zh.Installing=正在安装驱动、TAP 网卡、防火墙规则和 nekodrop 服务…
 en.Installing=Installing the driver, TAP adapter, firewall rules and the nekodrop service...
-zh.Failed=nekodrop 鐨勭郴缁熺粍浠舵病鏈夎濂斤細%n%n%1%n%n瀹屾暣鏃ュ織锛?2
+zh.Failed=nekodrop 的系统组件没有装好：%n%n%1%n%n完整日志：%2
 en.Failed=nekodrop's system parts did not install:%n%n%1%n%nFull log: %2
-zh.StartNow=鍚姩 nekodrop
+zh.StartNow=启动 nekodrop
 en.StartNow=Start nekodrop
-zh.Desktop=鍒涘缓妗岄潰蹇嵎鏂瑰紡
+zh.Desktop=创建桌面快捷方式
 en.Desktop=Create a desktop shortcut
 
 [Tasks]
@@ -55,7 +55,7 @@ Name: "{autoprograms}\nekodrop - diagnostic report"; Filename: "{app}\report.cmd
 
 [Run]
 ; Started as the signed-in user: the first start registers the Explorer
-; "鐢?nekodrop 鍙戦€? menu, Send To and the notification protocol for that user.
+; "用 nekodrop 发送" menu, Send To and the notification protocol for that user.
 Filename: "{app}\nekodrop.exe"; Description: "{cm:StartNow}"; Flags: postinstall nowait skipifsilent runasoriginaluser
 ; An update started from nekodrop runs silently: start the new version again.
 Filename: "{app}\nekodrop.exe"; Parameters: "--background"; Flags: nowait runasoriginaluser; Check: WizardSilent

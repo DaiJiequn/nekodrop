@@ -429,13 +429,13 @@ public sealed class App : Application
 
     Hotkey? _hotkey;
 
-    /// <summary>Win+Shift+D on or off, after the setting.</summary>
-    public void ApplyHotkey()
+    /// <summary>The global shortcut on or off, with its keys, after the settings. False when Windows would not register it (taken).</summary>
+    public bool ApplyHotkey()
     {
         _hotkey?.Dispose();
         _hotkey = null;
-        if (!Settings.Hotkey) return;
-        _hotkey = Hotkey.Register(() =>
+        if (!Settings.Hotkey) return true;
+        _hotkey = Hotkey.Register(Settings.HotkeyKeys, () =>
         {
             var selected = Shell.ExplorerSelection();
             if (selected.Length == 0) { ShowWindow(); return; }
@@ -443,6 +443,7 @@ public sealed class App : Application
             foreach (var f in selected) Model.Files.Add(f);
             ShowSendWindow();
         });
+        return _hotkey is not null;
     }
 
     ResourceDictionary? _theme;
@@ -488,9 +489,11 @@ public sealed class App : Application
         // focus from it (it goes away); that click means "close", not "open again".
         else if (!_window.IsVisible && (DateTime.UtcNow - _window.ShutAt).TotalMilliseconds < 400) return;
         _window.DockRight();
+        var opening = !_window.IsVisible;
         _window.Show();
         if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
         _window.Activate();
+        if (opening) _window.Reveal();
         Engine.Look(true);
     }
 

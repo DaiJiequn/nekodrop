@@ -1,37 +1,46 @@
-﻿# Changelog / 鏇存柊鏃ュ織
+# Changelog / 更新日志
 
-> Release channels / 鍙戝竷閫氶亾锛?
-> - **Stable锛堢ǔ瀹氱増 / Latest锛?*锛氶暱鏈熶繚鐣欍€佺粡杩囩ǔ瀹氬熀绾块攣瀹氱殑鐗堟湰銆傚綋鍓嶇ǔ瀹氱増涓?**`v0.1.35`**锛堥涓ǔ瀹氬熀绾夸负 `v0.1.22`锛夈€?
-> - **Hourly锛堟瘡鏃堕瑙堢増 / Pre-release锛?*锛氭寔缁凯浠ｇ殑棰勮鐗堬紙瀹㈡埛绔粯璁や篃浼氭敹鍒帮紱鍙栨秷鍕鹃€夈€屽寘鎷瑙堢増銆嶅氨鍙敹绋冲畾鐗堬級锛汫itHub Releases 浠呮粴鍔ㄤ繚鐣欐渶鏂?4 涓瘡鏃剁増 + 绋冲畾鐗堬紙鏈€澶?5 涓?Release锛夛紝鍘嗗彶 Git Tag 鍏ㄩ儴淇濈暀銆?
+> Release channels / 发布通道：
+> - **Stable（稳定版 / Latest）**：长期保留、经过稳定基线锁定的版本。当前稳定版为 **`v2.0.2`**（首个稳定基线为 `v0.1.22`）。
+> - **Hourly（每时预览版 / Pre-release）**：持续迭代的预览版（客户端默认也会收到；取消勾选「包括预览版」就只收稳定版）；GitHub Releases 仅滚动保留最新 4 个每时版 + 稳定版（最多 5 个 Release），历史 Git Tag 全部保留。
 
 ---
 
-## v2.0.1 (Stable / 绋冲畾鐗? 鈥?2026-11-23
+## v2.0.2 (Stable / 稳定版) — 2026-11-24
 
-### 涓枃
-- 涓荤獥鍙ｆ敼涓烘墭鐩樻梺鐨勫脊鍑洪潰鏉匡細璐村睆骞曞彸涓嬭锛岀偣澶栭潰鑷姩鏀惰捣锛屽崟鍑绘墭鐩樺浘鏍囧紑 / 鍏?- 淇鍙充笂瑙掑嚭鐜颁袱濂楁渶灏忓寲 / 鏈€澶у寲 / 鍏抽棴鎸夐挳
-- 淇绐楀彛姣斿睆骞曢珮鏃跺簳閮ㄦ樉绀轰笉鍏紱璁惧鍚嶅拰鐘舵€佷笉鍐嶈瑁佸垏
-- 闆疯揪鏀惧ぇ锛岃澶囦笉鍐嶅帇浣忋€屾湰鏈恒€嶏紱鍒犻櫎闆疯揪涓婄殑绠ご
-- 鎺ユ敹鏃躲€屾湰鏈恒€嶅鍦堟樉绀鸿繘搴︼紝瀹屾垚鍚庡彉缁挎樉绀哄鍙凤紱鎺ュ彈 / 鎷掔粷姘旀场淇濈暀
+> 取代 2.0.0（已撤回）和 2.0.1（安装程序的中文提示是乱码，已撤回）。自 v0.1.35 稳定版以来的界面改动见下方 v0.1.36–v2.0.0。 / Replaces 2.0.0 (withdrawn) and 2.0.1 (garbled Chinese text in the installer, withdrawn). Interface changes since the v0.1.35 stable release are in v0.1.36–v2.0.0 below.
+
+### 中文
+- 主窗口改为托盘旁的弹出面板：贴屏幕右下角，点外面自动收起，单击托盘图标开 / 关，双击不会一闪就没
+- 修复右上角出现两套最小化 / 最大化 / 关闭按钮
+- 修复窗口比屏幕高时底部显示不全；设备名和状态不再被裁切
+- 雷达放大，设备不再压住「本机」；删除雷达上的箭头
+- 接收时「本机」外圈显示进度，保存完成后变绿打勾；接受 / 拒绝气泡保留，接受后收起
+- 新增动效：面板滑入滑出、设备出现时淡入放大、设备增减时平滑移位、请求气泡弹出、雷达 / 列表切换过渡，进度环匀速（线性）过渡不再跳变
+- 新增自定义全局快捷键：设置 → 常规里点一下快捷键再按下新的组合键（Esc 取消，可恢复默认 Win+Shift+D）；被其他程序占用时会提示
 
 ### English
-- The main window is now a flyout by the tray: bottom-right corner, closes when you click elsewhere, the tray icon toggles it
+- The main window is now a flyout by the tray: bottom-right corner, closes when you click elsewhere, the tray icon toggles it, and a double click no longer closes it at once
 - Fixed a second set of minimize / maximize / close buttons in the corner
 - Fixed windows taller than the screen being cut off; device names and states are no longer clipped
 - A larger radar, devices no longer cover "This PC"; the arrows on the radar are gone
-- While receiving, a progress ring around "This PC", then green with a check mark; the accept / decline bubble stays
+- While receiving, a progress ring around "This PC", then green with a check mark once saved; the accept / decline bubble stays and closes after accepting
+- New motion: the panel slides in and out, devices fade and grow in, move smoothly when one comes or goes, the request bubble pops open, radar / list cross-fade, and progress rings move at a steady (linear) pace instead of jumping
+- New: record your own global shortcut in Settings → General (click it, press the keys; Esc cancels; Default restores Win+Shift+D); you are told when another program holds it
 
 ---
 
-## v2.0.0 (Hourly / Pre-release) 鈥?2026-11-24
+## v2.0.0 (Hourly / Pre-release, withdrawn / 已撤回) — 2026-11-24
 
-### 涓枃
-- 鏂板鏈変汉鍙戞枃浠舵椂锛屽湪瀵规柟鍥炬爣鏃佺洿鎺ユ帴鍙?/ 鎷掔粷锛屽苟鏄剧ず鎺ユ敹杩涘害
-- 鏂板闆疯揪涓婄殑绠ご锛氱瓑寰呫€佸彂閫佷腑銆佸凡鍙戦€併€佽鎷掔粷涓€鐩簡鐒?
-- 鏂板闆疯揪鍛煎惛鏁堟灉
-- 鏂板銆屾湰鏈恒€嶅浘鏍囧彲閫夊彴寮忔満 / 绗旇鏈紙榛樿鑷姩锛?
-- 鏂板 Windows銆屽叡浜€嶈彍鍗曪細璧勬簮绠＄悊鍣ㄥ拰鍏朵粬搴旂敤鐨勫垎浜潰鏉块噷鍙洿鎺ラ€?nekodrop
-- 浼樺寲 Wi-Fi 绐楀彛锛氭鍦ㄤ娇鐢ㄧ殑缃戠粶鏁村潡楂樹寒
+> 已撤回，由 2.0.2 取代（双标题栏按钮、窗口显示不全）。 / Withdrawn, replaced by 2.0.2 (two sets of title buttons, windows cut off).
+
+### 中文
+- 新增有人发文件时，在对方图标旁直接接受 / 拒绝，并显示接收进度
+- 新增雷达上的箭头：等待、发送中、已发送、被拒绝一目了然
+- 新增雷达呼吸效果
+- 新增「本机」图标可选台式机 / 笔记本（默认自动）
+- 新增 Windows「共享」菜单：资源管理器和其他应用的分享面板里可直接选 nekodrop
+- 优化 Wi-Fi 窗口：正在使用的网络整块高亮
 
 ### English
 - New: accept or decline right beside the sender's icon, with the receiving progress
@@ -43,52 +52,52 @@
 
 ---
 
-## v0.1.39 (Hourly / Pre-release) 鈥?2026-11-24
+## v0.1.39 (Hourly / Pre-release, withdrawn / 已撤回) — 2026-11-24
 
-### 涓枃
-- 鍏ㄦ柊鐣岄潰锛氳嚜缁樻爣棰樻爮銆侀浄杈?/ 鍒楄〃鍒囨崲銆佸洓涓爣绛鹃〉鐨勮缃€佹柊鐨?Wi-Fi 绐楀彛鍜屾墭鐩樿彍鍗曪紙[#36](https://github.com/zheznanohana/nekodrop/issues/36)锛?
-- 鏂板鍏ㄥ眬蹇嵎閿?Win+Shift+D锛氶€変腑鏂囦欢鏃剁洿鎺ュ彂閫侊紝鍚﹀垯鎵撳紑涓荤獥鍙?
-- 鏂板涓婚鑹插垏鎹細澶氬僵銆佽窡闅忕郴缁燂紝鎴栬摑銆侀潧銆侀潚銆佺帿绾?
-- 鏂板鏍囬鏍忕姸鎬侀潰鏉匡細鍏佽鎺ユ敹銆佸垏鎹㈣仈缃戞柟寮?
-- 鏂板鏂囦欢鍙€愪釜绉婚櫎銆佹柊鐗堟湰妯箙銆佸悇绉嶇姸鎬佷笅鐨勬搷浣滄寜閽紙閲嶈瘯銆佸惎鍔ㄦ湇鍔°€佸墠寰€璁剧疆绛夛級
+### 中文
+- 全新界面：自绘标题栏、雷达 / 列表切换、四个标签页的设置、新的 Wi-Fi 窗口和托盘菜单（[#36](https://github.com/zheznanohana/nekodrop/issues/36)）
+- 新增全局快捷键 Win+Shift+D：选中文件时直接发送，否则打开主窗口
+- 新增主题色切换：多彩、跟随系统，或蓝、靛、青、玫红
+- 新增标题栏状态面板：允许接收、切换联网方式
+- 新增文件可逐个移除、新版本横幅、各种状态下的操作按钮（重试、启动服务、前往设置等）
 
 ### English
 - New interface: own title bars, radar / list view, settings in four tabs, new Wi-Fi window and tray menu ([#36](https://github.com/zheznanohana/nekodrop/issues/36))
 - New global shortcut Win+Shift+D: sends the files selected in Explorer, or opens the main window
 - New accent colour choice: colourful, same as Windows, or blue, indigo, teal, rose
 - New status panel in the title bar: allow receiving, switch the network mode
-- New: remove files one by one, an update bar, and actions for each state (retry, start the service, choose the card鈥?
+- New: remove files one by one, an update bar, and actions for each state (retry, start the service, choose the card…)
 
 ---
 
-## v0.1.38 (Hourly / Pre-release) 鈥?2026-11-24
+## v0.1.38 (Hourly / Pre-release) — 2026-11-24
 
-### 涓枃
-- 淇 Realtek RTL8852CE 涓€鐩村仠鍦?2.4 GHz銆佷紶杈撳緢鎱㈢殑 bug锛圼#32](https://github.com/zheznanohana/nekodrop/issues/32)锛?
-- 淇 Realtek / MediaTek 缃戝崱浼犺緭涓€旀惉淇￠亾鏂紑鐨?bug
-- 鏇存鏂囨。锛欰X210 鐙珛缃戝崱鏃╁凡鍙敤
+### 中文
+- 修复 Realtek RTL8852CE 一直停在 2.4 GHz、传输很慢的 bug（[#32](https://github.com/zheznanohana/nekodrop/issues/32)）
+- 修复 Realtek / MediaTek 网卡传输中途搬信道断开的 bug
+- 更正文档：AX210 独立网卡早已可用
 
 ### English
 - Fixed the Realtek RTL8852CE staying on 2.4 GHz and transferring slowly ([#32](https://github.com/zheznanohana/nekodrop/issues/32))
 - Fixed Realtek / MediaTek cards changing channel in the middle of a transfer
 - Docs: the discrete AX210 has worked for a while
 
-> 鍙湪 CI 涓婃祴杩囷紝娌℃湁鐪熸満楠岃瘉銆?/ CI-tested only, not on hardware.
+> 只在 CI 上测过，没有真机验证。 / CI-tested only, not on hardware.
 
 ---
 
-## v0.1.37 (Hourly / Pre-release) 鈥?2026-11-24
+## v0.1.37 (Hourly / Pre-release) — 2026-11-24
 
-### 涓枃
-- **鏂板 MediaTek MT7902 鏀寔锛圼#34](https://github.com/zheznanohana/nekodrop/pull/34)锛屾劅璋?DaiJiequn锛?*锛歚nekodrop-radio-mt.exe` 鏄粠 Linux mt76/mt7921 绉绘鐨勭敤鎴锋€侀┍鍔紝鍜?Intel銆丷ealtek 涓€鏍烽€氳繃 register proxy 椹卞姩缃戝崱銆傝繖寮犲崱娌℃湁 station 妯″紡锛屾墍浠ユ寜銆屾寜闇€銆嶈繍琛岋細骞虫椂 Windows 姝ｅ父鐢?Wi-Fi锛屾湁 AirDrop 鏃舵墠鎺ョ銆備綔鑰呭湪涓€寮犲崱涓婂疄娴?iPhone 鈫?鐢佃剳鍙屽悜鍙敤锛屾帴鏀剁害 15 MB/s銆佸彂閫佺害 5 MB/s銆傚凡鐭ラ棶棰橈細2.4 GHz 涓婇渶瑕?ACK 鐨勫抚鍙戜笉鍑哄幓锛屾墍浠?2.4 GHz 涓婁笉绛?ACK锛圓irDrop 鏈韩浼氳浆鍒?5 GHz锛夈€傜洰鍓嶅彧娴嬭繃涓€寮?MT7902銆?
-- **淇 iPhone 鍒氬彂鐜扮數鑴戙€佺數鑴戝張浠庡垪琛ㄩ噷娑堝け锛圼#32](https://github.com/zheznanohana/nekodrop/issues/32)銆乕#35](https://github.com/zheznanohana/nekodrop/issues/35)锛?*锛氱綉鍗″惎鍔ㄦ椂锛屾墭鐩樼▼搴忓厛鍚姩 AirDrop 寮曟搸锛岃繃涓€涓ょ `awdl0` 鎵嶅缓濂姐€傛墭鐩樼▼搴忔瘡 5 绉掓鏌ヤ竴娆?`awdl0`锛屾妸銆屼箣鍓嶆病鏈夈€佺幇鍦ㄦ湁浜嗐€嶅綋鎴愩€屾崲浜嗕竴涓€嶏紝浜庢槸鎶婂垰寮€濮嬪伐浣滅殑寮曟搸鏉€鎺夐噸鍚€傝繖姝ｅソ鍙戠敓鍦?iPhone 鍒氬彂鐜扮數鑴戠殑閭ｅ嚑绉掞細寮曟搸閫€鍑烘椂鍙戝嚭 mDNS 涓嬬嚎鍖咃紝iPhone 鎶婄數鑴戝垹鎺夛紝瑕佸叧鎺夊垎浜潰鏉块噸寮€鎵嶈兘鍐嶇湅鍒般€備袱浠芥棩蹇楅噷閮借兘鐪嬪埌锛歚awdl0` 寤哄ソ绾?4 绉掑悗寮曟搸閲嶆柊鎵撳嚭 `ready`銆傚紩鎿庤嚜宸辨瘡绉掗兘浼氭鏌?`awdl0`锛屽嚭鐜板悗浼氳嚜宸卞紑濮嬫帴鏀讹紝鎵€浠ョ幇鍦ㄤ笉鍐嶉噸鍚畠銆?*鍙紪璇戞祴璇曡繃锛屾病鏈夌湡鏈洪獙璇併€?*
-- **缃戝崱鎵句笉鍒拌繛缁?DMA 鍐呭瓨鏃讹紝绛変竴浼氬効鍐嶉噸璇曪紙[#30](https://github.com/zheznanohana/nekodrop/issues/30)锛?*锛氫互鍓嶆瘡 2.7 绉掗噸璇曚竴娆★紝6 娆￠兘澶辫触鍚庡氨鎶婄綉鍗¤繕缁?Windows锛涜€屽悓涓€鍙扮數鑴戣繃 16 绉掓垨 90 绉掑啀鍚姩鏃堕兘鎴愬姛浜嗐€傜幇鍦ㄤ緷娆＄瓑 5銆?0銆?0銆?0銆?0 绉掑啀閲嶈瘯銆?*鍙紪璇戞祴璇曡繃锛屾病鏈夌湡鏈洪獙璇併€?*
-- **钃濈墮涓?Wi-Fi 鍧囪　鍏卞瓨杞锛孖ntel 缃戝崱濮嬬粓鎵撳紑锛圼#26](https://github.com/zheznanohana/nekodrop/pull/26)銆乕#4](https://github.com/zheznanohana/nekodrop/issues/4)銆乕#35](https://github.com/zheznanohana/nekodrop/issues/35)锛?*锛氱數鑴戦潬缃戝崱鑷甫鐨勮摑鐗欏彂鍑轰俊鏍囧彨閱掗檮杩戠殑 iPhone銆侫X200 涓婃墦寮€鍚庯紝璁惧浠庝竴涓ゅ垎閽熸壘涓嶅埌鍙樻垚鍑犵鍐呭嚭鐜帮紙鎰熻阿 XXD051030锛夛紱AX211 涓婃墦寮€鍚庝篃娌℃湁浜烘姤鍛婂彉宸€傝缃噷鐨勫紑鍏冲凡鍒犻櫎锛屾棫閰嶇疆閲岀殑鍊间細琚拷鐣ャ€?
-- **鎭㈠銆學i-Fi 鍜?AirDrop 涓嶅湪鍚屼竴淇￠亾鏃舵寜鑻规灉鐨勬柟寮忓垎鏃躲€嶅紑鍏崇殑璇存槑鏂囧瓧**锛?.1.35 鍘绘帀 A-MPDU 寮€鍏虫椂璇垹浜嗗畠鐨勬枃妗堬紝璁剧疆閲屾樉绀虹殑鏄敭鍚嶆湰韬€俒#35](https://github.com/zheznanohana/nekodrop/issues/35) 鐨?AX211 涓婏紝nekodrop 杩炵殑 Wi-Fi 鍦?56銆丄irDrop 鍦?149 鏃讹紝涓嶅紑瀹冧竴涓?AirDrop 甯ч兘鏀朵笉鍒帮紝寮€浜嗗氨姝ｅ父锛汻EADME 甯歌闂閲屽啓鏄庝簡浠€涔堟椂鍊欒鎵撳紑銆傚畠浠嶆槸瀹為獙鎬у紑鍏筹紝榛樿鍏抽棴锛圓X200 涓婁紶杈撻€熷害鏃跺揩鏃舵參锛夈€?
-- **淇鍗歌浇鍚庢畫鐣欏揩鎹锋柟寮忋€佸畨瑁呯洰褰曞拰銆屾坊鍔?鍒犻櫎绋嬪簭銆嶉噷鐨勬潯鐩紙[#38](https://github.com/zheznanohana/nekodrop/pull/38)锛屾劅璋?GGBond-cer锛?*锛氬嵏杞借剼鏈粨鏉熷畨瑁呯洰褰曢噷鐨勮繘绋嬫椂锛屾妸 Inno Setup 鑷繁鐨勫嵏杞界▼搴忎篃缁撴潫浜嗭紝瀹冨氨娌℃硶瀹屾垚鍚庨潰鐨勬竻鐞嗐€?
+### 中文
+- **新增 MediaTek MT7902 支持（[#34](https://github.com/zheznanohana/nekodrop/pull/34)，感谢 DaiJiequn）**：`nekodrop-radio-mt.exe` 是从 Linux mt76/mt7921 移植的用户态驱动，和 Intel、Realtek 一样通过 register proxy 驱动网卡。这张卡没有 station 模式，所以按「按需」运行：平时 Windows 正常用 Wi-Fi，有 AirDrop 时才接管。作者在一张卡上实测 iPhone ↔ 电脑双向可用，接收约 15 MB/s、发送约 5 MB/s。已知问题：2.4 GHz 上需要 ACK 的帧发不出去，所以 2.4 GHz 上不等 ACK（AirDrop 本身会转到 5 GHz）。目前只测过一张 MT7902。
+- **修复 iPhone 刚发现电脑、电脑又从列表里消失（[#32](https://github.com/zheznanohana/nekodrop/issues/32)、[#35](https://github.com/zheznanohana/nekodrop/issues/35)）**：网卡启动时，托盘程序先启动 AirDrop 引擎，过一两秒 `awdl0` 才建好。托盘程序每 5 秒检查一次 `awdl0`，把「之前没有、现在有了」当成「换了一个」，于是把刚开始工作的引擎杀掉重启。这正好发生在 iPhone 刚发现电脑的那几秒：引擎退出时发出 mDNS 下线包，iPhone 把电脑删掉，要关掉分享面板重开才能再看到。两份日志里都能看到：`awdl0` 建好约 4 秒后引擎重新打出 `ready`。引擎自己每秒都会检查 `awdl0`，出现后会自己开始接收，所以现在不再重启它。**只编译测试过，没有真机验证。**
+- **网卡找不到连续 DMA 内存时，等一会儿再重试（[#30](https://github.com/zheznanohana/nekodrop/issues/30)）**：以前每 2.7 秒重试一次，6 次都失败后就把网卡还给 Windows；而同一台电脑过 16 秒或 90 秒再启动时都成功了。现在依次等 5、10、20、30、30 秒再重试。**只编译测试过，没有真机验证。**
+- **蓝牙与 Wi-Fi 均衡共存转正，Intel 网卡始终打开（[#26](https://github.com/zheznanohana/nekodrop/pull/26)、[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#35](https://github.com/zheznanohana/nekodrop/issues/35)）**：电脑靠网卡自带的蓝牙发出信标叫醒附近的 iPhone。AX200 上打开后，设备从一两分钟找不到变成几秒内出现（感谢 XXD051030）；AX211 上打开后也没有人报告变差。设置里的开关已删除，旧配置里的值会被忽略。
+- **恢复「Wi-Fi 和 AirDrop 不在同一信道时按苹果的方式分时」开关的说明文字**：0.1.35 去掉 A-MPDU 开关时误删了它的文案，设置里显示的是键名本身。[#35](https://github.com/zheznanohana/nekodrop/issues/35) 的 AX211 上，nekodrop 连的 Wi-Fi 在 56、AirDrop 在 149 时，不开它一个 AirDrop 帧都收不到，开了就正常；README 常见问题里写明了什么时候该打开。它仍是实验性开关，默认关闭（AX200 上传输速度时快时慢）。
+- **修复卸载后残留快捷方式、安装目录和「添加/删除程序」里的条目（[#38](https://github.com/zheznanohana/nekodrop/pull/38)，感谢 GGBond-cer）**：卸载脚本结束安装目录里的进程时，把 Inno Setup 自己的卸载程序也结束了，它就没法完成后面的清理。
 
 ### English
-- **New: MediaTek MT7902 support ([#34](https://github.com/zheznanohana/nekodrop/pull/34), thanks to DaiJiequn)**: `nekodrop-radio-mt.exe` is a user-mode port of Linux mt76/mt7921 that drives the card through the register proxy, as the Intel and Realtek radios do. The card has no station mode, so it runs on demand: Windows keeps its Wi-Fi, and nekodrop takes the card only for AirDrop. Tested by the author on one card: iPhone 鈫?PC both ways, about 15 MB/s receiving and 5 MB/s sending. Known limit: on 2.4 GHz, frames that need an ACK never complete, so it sends without ACK there (AirDrop itself moves to 5 GHz). Only one MT7902 has been tested.
+- **New: MediaTek MT7902 support ([#34](https://github.com/zheznanohana/nekodrop/pull/34), thanks to DaiJiequn)**: `nekodrop-radio-mt.exe` is a user-mode port of Linux mt76/mt7921 that drives the card through the register proxy, as the Intel and Realtek radios do. The card has no station mode, so it runs on demand: Windows keeps its Wi-Fi, and nekodrop takes the card only for AirDrop. Tested by the author on one card: iPhone ↔ PC both ways, about 15 MB/s receiving and 5 MB/s sending. Known limit: on 2.4 GHz, frames that need an ACK never complete, so it sends without ACK there (AirDrop itself moves to 5 GHz). Only one MT7902 has been tested.
 - **Fixed the PC dropping out of the iPhone's list right after the iPhone found it ([#32](https://github.com/zheznanohana/nekodrop/issues/32), [#35](https://github.com/zheznanohana/nekodrop/issues/35))**: when the card starts, the tray app starts the AirDrop engine a second or two before `awdl0` exists. Its 5-second check took "no awdl0, now awdl0" for a new interface and restarted the engine that had just begun working, exactly while the iPhone was finding the PC: the engine's mDNS goodbye made the iPhone drop it until the share sheet was reopened. Both logs show the engine printing `ready` again about 4 s after `awdl0` appeared. The engine checks `awdl0` every second and starts receiving on its own, so it is no longer restarted then. **CI-tested only, not on hardware.**
 - **When the card finds no contiguous DMA memory, the restart waits ([#30](https://github.com/zheznanohana/nekodrop/issues/30))**: six restarts 2.7 s apart all failed and the card went back to Windows, while a start 16 s or 90 s later worked on the same PC. It now waits 5, 10, 20, 30 and 30 s. **CI-tested only, not on hardware.**
 - **Balanced Bluetooth coexistence graduates and is always on for Intel cards ([#26](https://github.com/zheznanohana/nekodrop/pull/26), [#4](https://github.com/zheznanohana/nekodrop/issues/4), [#35](https://github.com/zheznanohana/nekodrop/issues/35))**: the PC wakes nearby iPhones with a beacon from the card's own Bluetooth. On AX200, devices appeared within seconds instead of minutes (thanks to XXD051030); on AX211 nobody reported it worse. The switch is gone; an old config's value is ignored.
@@ -97,13 +106,13 @@
 
 ---
 
-## v0.1.36 (Hourly / Pre-release) 鈥?2026-11-23
+## v0.1.36 (Hourly / Pre-release) — 2026-11-23
 
-### 涓枃
-- **淇缃戝崱閲嶅惎鍚?AirDrop 鏁版嵁鍏ㄩ儴琚涪鎺夛紙[#30](https://github.com/zheznanohana/nekodrop/issues/30)锛?*锛歳adio 姣忔閲嶅惎锛堝垏淇￠亾銆佽繛 Wi-Fi锛夋椂 awdld 涔熶細閲嶅惎锛屾柊鐨?awdld 鍒涘缓 `awdl0` 铏氭嫙缃戝崱鏃讹紝鏃х殑閭ｄ釜鍙兘杩樻病瀹屽叏鍒犳帀锛學intun 杩斿洖 error 183锛堝凡瀛樺湪锛夈€俛wdld 浜庢槸鍦ㄦ病鏈?`awdl0` 鐨勬儏鍐典笅缁х画杩愯锛屾棩蹇楅噷鏄?`no host interface, AWDL data will be dropped`锛歩Phone 鑳界湅鍒扮數鑴戯紝浣?AirDrop 涓€涓暟鎹抚閮借繃涓嶅幓锛岀洿鍒颁笅涓€娆￠噸鍚€傜幇鍦ㄩ亣鍒?183 浼氭瘡 0.25 绉掗噸璇曪紝鏈€澶氱瓑 10 绉掋€?*鍙紪璇戞祴璇曡繃锛屾病鏈夌湡鏈洪獙璇併€?*
-- **淇 Realtek RTL8852CE 涓?iPhone 鎵撳紑 AirDrop 鏃朵笉浼氬敜閱掔綉鍗★紙[#32](https://github.com/zheznanohana/nekodrop/issues/32)锛?*锛歊TL8852CE 涓嶈兘鍜?Wi-Fi 鍚屾椂宸ヤ綔锛岄€変簡銆屽悓鏃躲€嶆ā寮忔椂瀹為檯鎸夈€屾寜闇€銆嶈繍琛岋紝浣嗘湇鍔″憡璇夊鎴风鐨勮繕鏄€屽悓鏃躲€嶏紝瀹㈡埛绔殑钃濈墮鍞ら啋鍙湪銆屾寜闇€銆嶆椂鎵嶈Е鍙戯紝鎵€浠ヤ粠鏉ヤ笉浼氬敜閱掋€傜幇鍦ㄦ湇鍔′細鍙﹀鎶ュ憡瀹為檯杩愯鐨勬ā寮忋€?*鍙紪璇戞祴璇曡繃锛屾病鏈夌湡鏈洪獙璇併€?*
-- **钃濈墮淇℃爣琚郴缁熶腑姝㈡椂鍐欐槑鍘熷洜骞堕噸璇曪紙[#30](https://github.com/zheznanohana/nekodrop/issues/30)銆乕#32](https://github.com/zheznanohana/nekodrop/issues/32)锛?*锛氭棩蹇楅噷 `Bluetooth did not start advertising, status Aborted` 鏃讹紝鐢佃剳鍙笉閱掗檮杩戠殑 iPhone锛宨Phone 鍙湁鑷繁鎵撳紑鍒嗕韩闈㈡澘鏃舵墠浼氬嚭鐜板湪鍒楄〃閲屻€傜幇鍦ㄤ細鍐嶈瘯涓ゆ锛屼粛鐒跺け璐ユ椂鏃ュ織浼氬甫涓?Windows 缁欑殑鍘熷洜锛堜緥濡?`RadioNotAvailable`銆乣ResourceInUse`锛夛紝鏂逛究瀹氫綅銆?
-- README 甯歌闂锛氬悓鏃舵ā寮忎笅娌℃湁 Windows 鏃犵嚎缃戝崱锛屼釜鍒妫€娴嬫棤绾跨綉鍗＄殑杞欢锛堜緥濡傛煇娓告垙鐨勪簩缁寸爜鐧诲綍锛夌敤涓嶄簡锛岃鍒囧埌銆屾寜闇€銆嶏紙[#33](https://github.com/zheznanohana/nekodrop/issues/33)锛夈€?
+### 中文
+- **修复网卡重启后 AirDrop 数据全部被丢掉（[#30](https://github.com/zheznanohana/nekodrop/issues/30)）**：radio 每次重启（切信道、连 Wi-Fi）时 awdld 也会重启，新的 awdld 创建 `awdl0` 虚拟网卡时，旧的那个可能还没完全删掉，Wintun 返回 error 183（已存在）。awdld 于是在没有 `awdl0` 的情况下继续运行，日志里是 `no host interface, AWDL data will be dropped`：iPhone 能看到电脑，但 AirDrop 一个数据帧都过不去，直到下一次重启。现在遇到 183 会每 0.25 秒重试，最多等 10 秒。**只编译测试过，没有真机验证。**
+- **修复 Realtek RTL8852CE 上 iPhone 打开 AirDrop 时不会唤醒网卡（[#32](https://github.com/zheznanohana/nekodrop/issues/32)）**：RTL8852CE 不能和 Wi-Fi 同时工作，选了「同时」模式时实际按「按需」运行，但服务告诉客户端的还是「同时」，客户端的蓝牙唤醒只在「按需」时才触发，所以从来不会唤醒。现在服务会另外报告实际运行的模式。**只编译测试过，没有真机验证。**
+- **蓝牙信标被系统中止时写明原因并重试（[#30](https://github.com/zheznanohana/nekodrop/issues/30)、[#32](https://github.com/zheznanohana/nekodrop/issues/32)）**：日志里 `Bluetooth did not start advertising, status Aborted` 时，电脑叫不醒附近的 iPhone，iPhone 只有自己打开分享面板时才会出现在列表里。现在会再试两次，仍然失败时日志会带上 Windows 给的原因（例如 `RadioNotAvailable`、`ResourceInUse`），方便定位。
+- README 常见问题：同时模式下没有 Windows 无线网卡，个别要检测无线网卡的软件（例如某游戏的二维码登录）用不了，请切到「按需」（[#33](https://github.com/zheznanohana/nekodrop/issues/33)）。
 
 ### English
 - **Fixed all AirDrop data being dropped after the radio restarts ([#30](https://github.com/zheznanohana/nekodrop/issues/30))**: awdld restarts with the radio (a channel move, a Wi-Fi join), and the new one could ask Wintun for `awdl0` while the old adapter was still going away: error 183 (already exists). awdld then ran on without `awdl0` (`no host interface, AWDL data will be dropped`): the iPhone saw the PC but no AirDrop data got through until the next restart. It now retries every 0.25 s for up to 10 s. **CI-tested only, not on hardware.**
@@ -113,63 +122,63 @@
 
 ---
 
-## v0.1.35 (Stable / 绋冲畾鐗? 鈥?2026-11-23
+## v0.1.35 (Stable / 稳定版) — 2026-11-23
 
-> 鑷?v0.1.33 绋冲畾鐗堜互鏉ワ細A-MPDU 鑱氬悎鍙戦€佽浆姝ｃ€佸缁堟墦寮€锛涗慨澶嶈繛 iPhone 鐑偣瑕佽瘯濂藉嚑娆★紙v0.1.34锛夈€侫-MPDU 鏈?AX201 鍜?AX200 鐨勭湡鏈烘暟鎹紱杩炵儹鐐圭殑淇鍙湪 CI 涓婃祴杩囥€?/ Since the v0.1.33 stable release: A-MPDU sending graduates and is always on; joining an iPhone hotspot no longer takes several tries (v0.1.34). A-MPDU has hardware data from an AX201 and an AX200; the hotspot fix is CI-tested only.
+> 自 v0.1.33 稳定版以来：A-MPDU 聚合发送转正、始终打开；修复连 iPhone 热点要试好几次（v0.1.34）。A-MPDU 有 AX201 和 AX200 的真机数据；连热点的修复只在 CI 上测过。 / Since the v0.1.33 stable release: A-MPDU sending graduates and is always on; joining an iPhone hotspot no longer takes several tries (v0.1.34). A-MPDU has hardware data from an AX201 and an AX200; the hotspot fix is CI-tested only.
 
-### 涓枃
-- **A-MPDU 鑱氬悎鍙戦€佽浆姝ｏ紝濮嬬粓鎵撳紑锛圼#4](https://github.com/zheznanohana/nekodrop/issues/4)锛?*锛氳缃噷鐨勩€岃仛鍚堝彂閫侊紙A-MPDU锛夈€嶅紑鍏冲垹闄わ紝鍙戠粰 iPhone 鏃舵€绘槸鎶婂甯ц仛鍚堝彂鍑恒€備緷鎹槸涓ゅ紶缃戝崱鐨勭湡鏈烘暟鎹€佷笖娌℃湁浜烘姤鍛婂畠璁╂儏鍐靛彉宸細AX201 涓?30.8 MB/s锛?.1.30锛夛紝AX200 涓?9鈥?5 MiB/s锛堟劅璋?GGBond-cer 鐨勫ぇ閲忔祴璇曪級銆侱MA 鍐呭瓨涓嶅鎴栬蛋鍐呮牳椹卞姩璺緞鏃朵粛鎸夊崟甯у彂閫侊紝鍜屼互鍓嶄竴鏍枫€侫X210銆丄X211 鍜?Realtek 缃戝崱杩樻病鏈?A-MPDU 鐨勫疄娴嬫暟鎹紝閬囧埌鍙戦€佸彉鎱㈡垨澶辫触璇烽檮璇婃柇鎶ュ憡鍙嶉銆傛棫閰嶇疆閲岀殑寮€鍏冲€间細琚拷鐣ャ€?
-- **淇杩?iPhone 鐑偣瑕佽瘯濂藉嚑娆★紙[#27](https://github.com/zheznanohana/nekodrop/issues/27)锛?.1.34锛?*锛氳涓嬫柟 v0.1.34銆?
-- README 绮剧畝锛屽苟鍐欐槑宸插湪鐪熸満涓婄‘璁ゅ彲鐢ㄧ殑缃戝崱鍜岄€熷害銆?
+### 中文
+- **A-MPDU 聚合发送转正，始终打开（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：设置里的「聚合发送（A-MPDU）」开关删除，发给 iPhone 时总是把多帧聚合发出。依据是两张网卡的真机数据、且没有人报告它让情况变差：AX201 上 30.8 MB/s（0.1.30），AX200 上 9–25 MiB/s（感谢 GGBond-cer 的大量测试）。DMA 内存不够或走内核驱动路径时仍按单帧发送，和以前一样。AX210、AX211 和 Realtek 网卡还没有 A-MPDU 的实测数据，遇到发送变慢或失败请附诊断报告反馈。旧配置里的开关值会被忽略。
+- **修复连 iPhone 热点要试好几次（[#27](https://github.com/zheznanohana/nekodrop/issues/27)，0.1.34）**：见下方 v0.1.34。
+- README 精简，并写明已在真机上确认可用的网卡和速度。
 
 ### English
-- **A-MPDU sending graduates and is always on ([#4](https://github.com/zheznanohana/nekodrop/issues/4))**: the "Aggregated sending (A-MPDU)" switch is gone; sends to an iPhone are always aggregated. Two cards measured it with nobody reporting it worse: 30.8 MB/s on an AX201 (0.1.30) and 9鈥?5 MiB/s on an AX200 (thanks to GGBond-cer's many tests). Without DMA room, or on the kernel-driver path, sending stays on single frames as before. The AX210, AX211 and Realtek cards have no A-MPDU measurements yet: if sending gets slower or fails, please post a diagnostic report. An old config's switch value is ignored.
+- **A-MPDU sending graduates and is always on ([#4](https://github.com/zheznanohana/nekodrop/issues/4))**: the "Aggregated sending (A-MPDU)" switch is gone; sends to an iPhone are always aggregated. Two cards measured it with nobody reporting it worse: 30.8 MB/s on an AX201 (0.1.30) and 9–25 MiB/s on an AX200 (thanks to GGBond-cer's many tests). Without DMA room, or on the kernel-driver path, sending stays on single frames as before. The AX210, AX211 and Realtek cards have no A-MPDU measurements yet: if sending gets slower or fails, please post a diagnostic report. An old config's switch value is ignored.
 - **Fixed joining an iPhone hotspot taking several tries ([#27](https://github.com/zheznanohana/nekodrop/issues/27), 0.1.34)**: see v0.1.34 below.
 - A shorter README that says which cards and speeds are confirmed on hardware.
 
 ---
 
-## v0.1.34 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.34 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **淇杩?iPhone 鐑偣瑕佽瘯濂藉嚑娆℃墠杩炰笂锛圼#27](https://github.com/zheznanohana/nekodrop/issues/27)锛?*锛歩Phone 鐑偣閲嶆柊鎵撳紑鍚庡彲鑳芥崲涓€涓?BSSID锛堟棤绾?MAC 鍦板潃锛夈€俷ekodrop 涓€鐩存嬁涓婁竴娆℃壂鎻忚涓嬬殑鏃у湴鍧€鍘昏璇侊紝閭ｄ釜鍦板潃宸茬粡娌′汉搴旂瓟锛氳璇佸抚涓€涓‘璁ら兘娌℃敹鍒帮紝涔熶粠娌″惉鍒板畠鐨勪俊鏍囥€傜洿鍒板悗鍙颁笅涓€娆℃壂鎻忕宸ф壂鍒版柊鍦板潃鎵嶈繛涓娿€傜幇鍦ㄦ壂鎻忕粨鏋滆秴杩?20 绉掓椂锛岃繛鎺ュ墠浼氬厛鎸夌綉缁滃悕閲嶆柊鎵竴娆★紱杩炴帴澶辫触銆佽€屾壂鎻忕粨鏋滃凡缁忔棫浜嗘椂锛屼篃浼氳嚜鍔ㄩ噸鎵啀杩炪€傝璇佸け璐ユ椂锛宺adio 鏃ュ織浼氭敞鏄庢湁娌℃湁鍚埌杩囪繖涓帴鍏ョ偣鐨勪俊鏍囥€?*鍙紪璇戞祴璇曡繃锛屾病鏈夌湡鏈洪獙璇併€?*
+### 中文
+- **修复连 iPhone 热点要试好几次才连上（[#27](https://github.com/zheznanohana/nekodrop/issues/27)）**：iPhone 热点重新打开后可能换一个 BSSID（无线 MAC 地址）。nekodrop 一直拿上一次扫描记下的旧地址去认证，那个地址已经没人应答：认证帧一个确认都没收到，也从没听到它的信标。直到后台下一次扫描碰巧扫到新地址才连上。现在扫描结果超过 20 秒时，连接前会先按网络名重新扫一次；连接失败、而扫描结果已经旧了时，也会自动重扫再连。认证失败时，radio 日志会注明有没有听到过这个接入点的信标。**只编译测试过，没有真机验证。**
 
 ### English
 - **Fixed joining an iPhone hotspot taking several tries ([#27](https://github.com/zheznanohana/nekodrop/issues/27))**: an iPhone hotspot can come back with a new BSSID. nekodrop kept authenticating to the address from the previous scan, which nobody answered (no frame acknowledged, no beacon ever heard), until a later background scan happened to catch the new one. When the scan is more than 20 s old, nekodrop now scans for the network by name before joining, and does so again after a failed join. The radio's authentication failure line now says when no beacon was heard from the access point. **Built and tested on CI only; not verified on hardware.**
 
 ---
 
-## v0.1.33 (Stable / 绋冲畾鐗? 鈥?2026-11-22
+## v0.1.33 (Stable / 稳定版) — 2026-11-22
 
-> 鑷?v0.1.30 绋冲畾鐗堜互鏉ョ殑鍙樺寲瑙佷笅鏂?v0.1.31鈥搗0.1.33銆傜湡鏈哄凡纭锛欰X211 涓?iPhone 鈫?鐢佃剳鎺ユ敹鎭㈠锛圼#9](https://github.com/zheznanohana/nekodrop/issues/9)锛宍FCS removed`锛夈€傚叾浣欐敼鍔ㄥ拰涓や釜鏂板疄楠屽紑鍏筹紙榛樿鍏抽棴锛夊皻鏃犵湡鏈烘暟鎹€?/ Changes since the v0.1.30 stable release are in v0.1.31鈥搗0.1.33 below. Confirmed on hardware: iPhone 鈫?PC receiving works again on AX211 ([#9](https://github.com/zheznanohana/nekodrop/issues/9), `FCS removed`). The other changes and the two new experimental switches (off by default) have no hardware data yet.
+> 自 v0.1.30 稳定版以来的变化见下方 v0.1.31–v0.1.33。真机已确认：AX211 上 iPhone → 电脑接收恢复（[#9](https://github.com/zheznanohana/nekodrop/issues/9)，`FCS removed`）。其余改动和两个新实验开关（默认关闭）尚无真机数据。 / Changes since the v0.1.30 stable release are in v0.1.31–v0.1.33 below. Confirmed on hardware: iPhone → PC receiving works again on AX211 ([#9](https://github.com/zheznanohana/nekodrop/issues/9), `FCS removed`). The other changes and the two new experimental switches (off by default) have no hardware data yet.
 
-### 涓枃
-- **鏂扮殑瀹為獙鎬у紑鍏炽€岃摑鐗欎笌 Wi-Fi 鍧囪　鍏卞瓨锛圛ntel锛夈€嶏紙榛樿鍏抽棴锛孾#26](https://github.com/zheznanohana/nekodrop/pull/26)锛屾劅璋?[@XXD051030](https://github.com/XXD051030)锛?*锛氱數鑴戝彂閫佹椂锛岄潬缃戝崱鑷甫鐨勮摑鐗欏彂鍑?AirDrop 淇℃爣锛岄檮杩戠殑 iPhone 鍜?Mac 鍚埌鍚庢墠浼氬嚭鐜板湪鍒楄〃閲屻€俽adio 涓€鐩磋鍥轰欢銆學i-Fi 浼樺厛銆嶏紝AWDL 鐩戝惉鏃惰繖涓俊鏍囧嚑涔庡彂涓嶅嚭鍘伙紝鎵€浠ユ壘璁惧缁忓父瑕佺瓑涓€涓ゅ垎閽熺敋鑷虫壘涓嶅埌锛圼#4](https://github.com/zheznanohana/nekodrop/issues/4)锛夈€傛墦寮€鍚庡浐浠跺潎琛″垎閰嶏紙鍜?ForbiddenItlwm 鐨?`itlawdlbtcoex=1` 鐩稿悓锛夛細鍦ㄤ竴鍙?AX200 涓娿€佹病寮€鍒嗕韩闈㈡澘鐨勬儏鍐典笅锛孧ac 9 娆￠兘鍦?2.3 绉掑唴鍑虹幇锛宨Phone 9 娆￠噷鍑虹幇 8 娆★紝涓綅鏁扮害 5 绉掋€傚彧浣滅敤浜?Intel 鐢ㄦ埛鎬?radio锛涘叧闂椂鍚姩鍙傛暟鍜屽彂缁欏浐浠剁殑鍛戒护涓庝箣鍓嶅畬鍏ㄤ竴鏍枫€傛湇鍔℃棩蹇椾細鍐欎竴琛?`bluetooth coexistence: mode N`銆?
+### 中文
+- **新的实验性开关「蓝牙与 Wi-Fi 均衡共存（Intel）」（默认关闭，[#26](https://github.com/zheznanohana/nekodrop/pull/26)，感谢 [@XXD051030](https://github.com/XXD051030)）**：电脑发送时，靠网卡自带的蓝牙发出 AirDrop 信标，附近的 iPhone 和 Mac 听到后才会出现在列表里。radio 一直让固件「Wi-Fi 优先」，AWDL 监听时这个信标几乎发不出去，所以找设备经常要等一两分钟甚至找不到（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）。打开后固件均衡分配（和 ForbiddenItlwm 的 `itlawdlbtcoex=1` 相同）：在一台 AX200 上、没开分享面板的情况下，Mac 9 次都在 2.3 秒内出现，iPhone 9 次里出现 8 次，中位数约 5 秒。只作用于 Intel 用户态 radio；关闭时启动参数和发给固件的命令与之前完全一样。服务日志会写一行 `bluetooth coexistence: mode N`。
 
 ### English
 - **New experimental switch "Balanced Bluetooth coexistence (Intel)" (off by default, [#26](https://github.com/zheznanohana/nekodrop/pull/26), thanks to [@XXD051030](https://github.com/XXD051030))**: to send, the PC wakes nearby iPhones and Macs with an AirDrop Bluetooth beacon from the card's own Bluetooth. The radio always set the firmware to "Wi-Fi first", so while AWDL listened that beacon barely got out and finding devices often took a minute or two, or never happened ([#4](https://github.com/zheznanohana/nekodrop/issues/4)). With the switch on the firmware balances the two (as ForbiddenItlwm's `itlawdlbtcoex=1`): on one AX200, with no share sheet open, the Mac appeared within 2.3 s in 9 of 9 tries and the iPhone in 8 of 9, median about 5 s. Intel user-mode radio only; off, the launch arguments and firmware commands are exactly as before. The service log gets a `bluetooth coexistence: mode N` line.
 
 ---
 
-## v0.1.32 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.32 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **鏂扮殑瀹為獙鎬у紑鍏炽€學i-Fi 鍜?AirDrop 涓嶅湪鍚屼竴淇￠亾鏃舵寜鑻规灉鐨勬柟寮忓垎鏃躲€嶏紙榛樿鍏抽棴锛孾#4](https://github.com/zheznanohana/nekodrop/issues/4)锛?*锛歯ekodrop 杩炵殑 5 GHz Wi-Fi 鍜?AirDrop 涓嶅湪鍚屼竴涓俊閬撴椂锛?4 鏄?Wi-Fi 鍦?40銆丄irDrop 鍦?149锛夛紝缃戝崱鍥轰欢浼氭寜鑷繁鐨勬椂閽熷湪涓や釜淇￠亾涔嬮棿鏉ュ洖鍒囷紝璺?iPhone 鐨?AWDL 鏃堕殭瀹屽叏瀵逛笉涓娿€傜數鑴戜笉鍦?149 鐨勬椂闂村拰 iPhone 涓嶅湪 149 鐨勬椂闂村彔鍦ㄤ竴璧凤紝鏈夋晥浼犺緭鏃堕棿鍙墿澶х害涓夊垎涔嬩竴锛岃繖鍜?#4 瀹炴祴鐨?8.7鈥?1.2 MiB/s 瀵瑰緱涓婏紙鍚屼竴淇￠亾鏃舵槸 30 MB/s锛夈€傛墦寮€鍚庣収 macOS 鐨勫仛娉曪細鎶婅矾鐢卞櫒鍐欒繘 AirDrop 骞垮憡鐨?16 涓椂闅欓噷锛堢┖闂叉椂绗?6銆?銆?4銆?5 涓紱浼犺緭鏃舵寜璺敱鍣ㄦ祦閲忕粰 1鈥? 涓級锛岃繖浜涙椂闅欓噷鐢佃剳涓嶅彂 AirDrop 鍚屾甯с€丄-MPDU 涔熸殏鍋滐紝璁?iPhone 鐭ラ亾鐢佃剳浠€涔堟椂鍊欏湪璺敱鍣ㄩ偅杈广€傚彧鍦?awdld 鐨?AW 璁℃暟鍜?iPhone 鍚屾鏃舵敼鍐欙紝鍚﹀垯涓嶅姩銆傜Щ妞嶈嚜 [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30)锛汸R #30 鏈韩涔熻繕娌℃祴鍑烘彁閫熸晥鏋滐紝**杩欐鍚屾牱娌℃湁鐪熸満鏁版嵁**銆傛湇鍔℃棩蹇楁瘡 5 绉掍細鏈変竴琛?`coex plan:` 缁熻銆?
-- **淇鍗歌浇鍚庡畨瑁呯洰褰曞垹涓嶆帀銆佸紩鎿庨噸鍚悗鐣欎笅瀛ゅ効杩涚▼锛圼#22](https://github.com/zheznanohana/nekodrop/issues/22)锛屾劅璋?GGBond-cer 鎵惧埌鏍瑰洜锛?*锛欰irDrop 寮曟搸鍙戦€佹椂鍚姩鐨勮摑鐗欎俊鏍囪剼鏈紙`airdrop-beacon.ps1`锛宍powershell.exe`锛夋妸瀹夎鐩綍涓嬬殑 `airdrop\` 褰撲綔宸ヤ綔鐩綍鍗犵潃锛岃€屼笖寮曟搸閲嶅惎鏃朵笉浼氳窡鐫€閫€鍑猴紝瓒婄Н瓒婂銆傚嵏杞借剼鏈寜璺緞鍜岃繘绋嬪悕閮芥壘涓嶅埌瀹冧滑锛宍airdrop\` 灏卞垹涓嶆帀銆傜幇鍦細淇℃爣鑴氭湰鍚姩鍚庣珛鍒荤寮€瀹夎鐩綍锛屽苟鍦ㄥ惎鍔ㄥ畠鐨勫紩鎿庨€€鍑哄悗鍑犵鍐呰嚜宸遍€€鍑猴紱瀹夎鍜屽嵏杞芥椂涔熶細缁撴潫鍛戒护琛岄噷甯﹀畨瑁呯洰褰曠殑杩涚▼銆?
+### 中文
+- **新的实验性开关「Wi-Fi 和 AirDrop 不在同一信道时按苹果的方式分时」（默认关闭，[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：nekodrop 连的 5 GHz Wi-Fi 和 AirDrop 不在同一个信道时（#4 是 Wi-Fi 在 40、AirDrop 在 149），网卡固件会按自己的时钟在两个信道之间来回切，跟 iPhone 的 AWDL 时隙完全对不上。电脑不在 149 的时间和 iPhone 不在 149 的时间叠在一起，有效传输时间只剩大约三分之一，这和 #4 实测的 8.7–11.2 MiB/s 对得上（同一信道时是 30 MB/s）。打开后照 macOS 的做法：把路由器写进 AirDrop 广告的 16 个时隙里（空闲时第 6、7、14、15 个；传输时按路由器流量给 1–6 个），这些时隙里电脑不发 AirDrop 同步帧、A-MPDU 也暂停，让 iPhone 知道电脑什么时候在路由器那边。只在 awdld 的 AW 计数和 iPhone 同步时改写，否则不动。移植自 [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30)；PR #30 本身也还没测出提速效果，**这次同样没有真机数据**。服务日志每 5 秒会有一行 `coex plan:` 统计。
+- **修复卸载后安装目录删不掉、引擎重启后留下孤儿进程（[#22](https://github.com/zheznanohana/nekodrop/issues/22)，感谢 GGBond-cer 找到根因）**：AirDrop 引擎发送时启动的蓝牙信标脚本（`airdrop-beacon.ps1`，`powershell.exe`）把安装目录下的 `airdrop\` 当作工作目录占着，而且引擎重启时不会跟着退出，越积越多。卸载脚本按路径和进程名都找不到它们，`airdrop\` 就删不掉。现在：信标脚本启动后立刻离开安装目录，并在启动它的引擎退出后几秒内自己退出；安装和卸载时也会结束命令行里带安装目录的进程。
 
 ### English
-- **New experimental switch "Apple-style time sharing when Wi-Fi and AirDrop use different channels" (off by default, [#4](https://github.com/zheznanohana/nekodrop/issues/4))**: with nekodrop's 5 GHz Wi-Fi on another channel than AirDrop (#4: Wi-Fi on 40, AirDrop on 149), the firmware switches between the two on its own clock, unaligned with the iPhone's AWDL entries. The PC's time away from 149 and the iPhone's add up, leaving about a third of the air for the transfer, which matches #4's 8.7鈥?1.2 MiB/s (30 MB/s on one channel). With the switch on, as macOS does, the router goes into AirDrop's 16 advertised entries (6, 7, 14 and 15 when idle; 1 to 6 while transferring, by the router's traffic), and the PC sends no AWDL sync frames and pauses A-MPDU sending in them, so the iPhone knows when the PC is with the router. Frames are rewritten only while awdld's AW counter is in step with the iPhone's. Ported from [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30), whose speed benefit is itself not yet measured; **no hardware data for this either**. The service log gets a `coex plan:` line every 5 s.
+- **New experimental switch "Apple-style time sharing when Wi-Fi and AirDrop use different channels" (off by default, [#4](https://github.com/zheznanohana/nekodrop/issues/4))**: with nekodrop's 5 GHz Wi-Fi on another channel than AirDrop (#4: Wi-Fi on 40, AirDrop on 149), the firmware switches between the two on its own clock, unaligned with the iPhone's AWDL entries. The PC's time away from 149 and the iPhone's add up, leaving about a third of the air for the transfer, which matches #4's 8.7–11.2 MiB/s (30 MB/s on one channel). With the switch on, as macOS does, the router goes into AirDrop's 16 advertised entries (6, 7, 14 and 15 when idle; 1 to 6 while transferring, by the router's traffic), and the PC sends no AWDL sync frames and pauses A-MPDU sending in them, so the iPhone knows when the PC is with the router. Frames are rewritten only while awdld's AW counter is in step with the iPhone's. Ported from [ForbiddenItlwm PR #30](https://github.com/retropineaple/ForbiddenItlwm/pull/30), whose speed benefit is itself not yet measured; **no hardware data for this either**. The service log gets a `coex plan:` line every 5 s.
 - **Fixed the install folder surviving an uninstall, and orphan processes after engine restarts ([#22](https://github.com/zheznanohana/nekodrop/issues/22), root cause found by GGBond-cer)**: the Bluetooth beacon script the AirDrop engine starts when sending (`airdrop-beacon.ps1`, `powershell.exe`) kept the install folder's `airdrop\` as its working directory and outlived engine restarts, piling up. The uninstaller found them neither by path nor by name, so `airdrop\` could not be removed. The beacon script now leaves the install folder at once and exits within seconds of the engine that started it; install and uninstall also end any process whose command line names the install folder.
 
 ---
 
-## v0.1.31 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.31 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **淇 AX211 / AX411 / Killer 1690 涓?iPhone銆丮ac 鐪嬩笉鍒拌繖鍙扮數鑴戯紙[#24](https://github.com/zheznanohana/nekodrop/issues/24)銆乕#25](https://github.com/zheznanohana/nekodrop/issues/25)锛?*锛歳adio 璁╁浐浠跺湪姣忎釜鏀跺埌鐨勫抚鍚庨潰闄勪笂 FCS锛堟牎楠屽拰锛夛紝鑰?RxFrame 绾﹀畾浜ょ粰 awdld 鐨勫抚涓嶅甫 FCS銆侫X210 绯诲垪杩欏嚑寮犲崱鐨勫浐浠剁‘瀹炰細闄勪笂锛宎wdld锛圤WL锛夌湅鍒?AWDL 鍔ㄤ綔甯ф渶鍚庝竴涓?TLV 鍚庨潰澶氬嚭 4 涓瓧鑺傦紝灏卞湪璁颁笅鈥滄敹鍒拌繃 MIF鈥濅箣鍓嶆妸鏁村抚涓㈡帀锛屼簬鏄?iPhone 涓€鐩存槸 `not valid yet`锛氱數鑴戜笉浼氳窡闅忓畠鐨勫悓姝ワ紝涔熶笉浼氳瀹冨垪涓烘帴鏀舵柟銆傚彂閫佷笉鍙楀奖鍝嶏紝鎵€浠モ€滆兘鍙戜笉鑳芥敹鈥濄€傜幇鍦?radio 鍙湪甯у熬 4 瀛楄妭纭疄绛変簬杩欎釜甯х殑 CRC-32 鏃舵墠鎶婂畠鍘绘帀锛堜笉甯?FCS 鐨勫抚琚鍒ょ殑姒傜巼鏄?2鈦宦陈诧級锛屽鎵€鏈夌綉鍗￠兘瀹夊叏銆?
-- **淇 A-MPDU 绗竴娆″彂閫佹垚鍔熷悗锛岀浜屾鍙戦€佸け璐ャ€乮Phone 浠庡垪琛ㄦ秷澶憋紙[#4](https://github.com/zheznanohana/nekodrop/issues/4)锛孉X200 瀹炴祴锛?*锛氬彂閫佺粨鏉熷悗 Block Ack 浼氳瘽涓€鐩村仠鍦?`agreed`銆傝繖鏈熼棿鐩戝惉鍙敹缁勬挱甯э紝iPhone 缁撴潫浼氳瘽鏃跺彂鏉ョ殑鍗曟挱 DELBA 琚浐浠朵涪鎺夛紝涓嬩竴娆″彂閫佷粛鎸夋棫浼氳瘽鍙?A-MPDU锛宨Phone 涓嶅啀鎺ユ敹锛屼簬鏄繛鎺ヨ鎷掞紙`WinError 10061`锛夛紝闅忓悗 `peer_gone`锛屽彧鏈夐噸鍚?radio 鎵嶈兘鎭㈠銆傜幇鍦ㄦ壒閲忓彂閫佺粨鏉熴€侀槦鍒楁竻绌?1.5 绉掑悗锛岀數鑴戜富鍔ㄥ彂 DELBA 缁撴潫浼氳瘽銆佹仮澶嶅畬鏁存帴鏀讹紝涓嬩竴娆″彂閫侀噸鏂板崗鍟嗭紙绾?0.3 绉掞級銆?
-- **璇婃柇**锛歳adio 鐨?`rx:` 缁熻琛屾柊澧?`FCS removed`銆乣MIF bad tail`锛坅wdld 浠嶄細涓㈡帀鐨?MIF锛夈€乣MIF without version`锛堢己灏?awdld 闇€瑕佺殑鐗堟湰 TLV锛変笁椤硅鏁帮紝鍓?3 涓熬閮ㄥ紓甯哥殑 MIF 浼氳涓嬫渶鍚?16 涓瓧鑺傘€?
-- **杩樻病鏈夊湪 AX211 鐪熸満涓婇獙璇?*锛岃 #24銆?25 鐨勭敤鎴峰府蹇欐祴璇曘€?
+### 中文
+- **修复 AX211 / AX411 / Killer 1690 上 iPhone、Mac 看不到这台电脑（[#24](https://github.com/zheznanohana/nekodrop/issues/24)、[#25](https://github.com/zheznanohana/nekodrop/issues/25)）**：radio 让固件在每个收到的帧后面附上 FCS（校验和），而 RxFrame 约定交给 awdld 的帧不带 FCS。AX210 系列这几张卡的固件确实会附上，awdld（OWL）看到 AWDL 动作帧最后一个 TLV 后面多出 4 个字节，就在记下“收到过 MIF”之前把整帧丢掉，于是 iPhone 一直是 `not valid yet`：电脑不会跟随它的同步，也不会被它列为接收方。发送不受影响，所以“能发不能收”。现在 radio 只在帧尾 4 字节确实等于这个帧的 CRC-32 时才把它去掉（不带 FCS 的帧被误判的概率是 2⁻³²），对所有网卡都安全。
+- **修复 A-MPDU 第一次发送成功后，第二次发送失败、iPhone 从列表消失（[#4](https://github.com/zheznanohana/nekodrop/issues/4)，AX200 实测）**：发送结束后 Block Ack 会话一直停在 `agreed`。这期间监听只收组播帧，iPhone 结束会话时发来的单播 DELBA 被固件丢掉，下一次发送仍按旧会话发 A-MPDU，iPhone 不再接收，于是连接被拒（`WinError 10061`），随后 `peer_gone`，只有重启 radio 才能恢复。现在批量发送结束、队列清空 1.5 秒后，电脑主动发 DELBA 结束会话、恢复完整接收，下一次发送重新协商（约 0.3 秒）。
+- **诊断**：radio 的 `rx:` 统计行新增 `FCS removed`、`MIF bad tail`（awdld 仍会丢掉的 MIF）、`MIF without version`（缺少 awdld 需要的版本 TLV）三项计数，前 3 个尾部异常的 MIF 会记下最后 16 个字节。
+- **还没有在 AX211 真机上验证**，请 #24、#25 的用户帮忙测试。
 
 ### English
 - **Fixed iPhone/Mac never listing the PC on AX211 / AX411 / Killer 1690 ([#24](https://github.com/zheznanohana/nekodrop/issues/24), [#25](https://github.com/zheznanohana/nekodrop/issues/25))**: the radio asks the firmware to append the FCS to received frames, while RxFrame promises awdld frames without it. These AX210-family cards do append it, and awdld (OWL) drops an AWDL action frame with 4 bytes after its last TLV before it records the MIF, so the iPhone stayed `not valid yet`: the PC never followed its sync and was never listed as a receiver. Sending was unaffected. The radio now removes the last 4 bytes only when they are the frame's valid CRC-32 (a frame without an FCS matches by chance with odds of 2^-32), which is safe on every card.
@@ -179,23 +188,23 @@
 
 ---
 
-## v0.1.30 (Stable / 绋冲畾鐗? 鈥?2026-11-22
+## v0.1.30 (Stable / 稳定版) — 2026-11-22
 
-### 涓枃
-- **馃殌 浼犺緭閫熷害鍗佸€嶇骇璺冨崌锛圓X201 骞跺彂妯″紡瀹炴祴楠岃瘉锛?*锛?
-  - **PC 鈫?iPhone 瀹炴祴杈惧埌 `30.8 MB/s`**锛?04.8 MB 鏂囦欢浠呯敤 **3.4 绉?*浼犲畬锛屽姣旀鍓嶅崟甯у彂閫佺殑 1鈥? MB/s 鎻愬崌 **10脳 浠ヤ笂**锛夈€傚紑鍚疄楠屾€?A-MPDU 鍚?**0.304 绉?*瀹屾垚 Block Ack 鎻℃墜锛屽崟娆¤仛鍚堥珮杈?**63 甯?*銆佺‘璁ょ巼 **99.69%**锛?1,451 / 81,707锛夛紝绋冲畾璺戞弧 **VHT 80 MHz 鍙屾祦锛?SS锛塎CS 9 + LDPC + SGI锛?66.7 Mbps锛?*銆?
-  - **iPhone 鈫?PC 瀹炴祴骞冲潎 `13.5 MB/s`锛堝悗鍗婃宄板€?~30 MB/s锛?*锛?04.8 MB 瀹夎鍖?**8.1 绉?*鏀跺畬钀界洏銆?
-- **閲嶇偣淇瀹為獙鎬?A-MPDU 鍗忓晢涓庤仛鍚堣矾寰勶紙[#4](https://github.com/zheznanohana/nekodrop/issues/4)銆乕#9](https://github.com/zheznanohana/nekodrop/issues/9)锛?*锛?
-  - 淇 0.1.28 瀵艰嚧 TX AddBA 涓€鐩村仠鍦?`asking`锛坄asks 80, agreed 0`锛夌殑鍥炲綊锛氭鍓嶅湪 `asking` 闃舵灏卞垏鍒扮粍鎾繃婊わ紝鎶?iPhone 杩斿洖鐨勫崟鎾?ADDBA Response 涓㈡帀浜嗐€傜幇鍦?`asking` 闃舵淇濇寔娣锋潅涓庣鐞嗗抚鎺ユ敹锛屼粎鍦?`agg_enable(true)` 鎷垮埌瀵圭鍚屾剰鍚庡師瀛愬垏鎹㈠埌 ForbiddenItlwm 鐨?BA 鐩戝惉鐘舵€侊紙AWDL BSSID + 鍩虹 ACK 閫熺巼 + 缁勬挱杩囨护锛夛紝閫€鍑烘椂绔嬪嵆鎭㈠銆?
-  - 淇 A-MPDU 鍝嶅簲璺緞锛坄handle_tx_resp`锛夊湪 `frame_count > 1` 鏃舵彁鍓嶅洖鏀堕槦鍒楃储寮曠殑闅愭偅锛堟敼涓轰粎鐢?`IWX_BA_NOTIF` 鍥炴敹锛夛紝骞舵竻闆?26 瀛楄妭 QoS 甯уご鍚庣殑 2 瀛楄妭瀵归綈濉厖銆?
-  - 鏇存縺杩涚殑 A-MPDU 瑙﹀彂涓庡崗鍟嗭細250 ms 鍐呮敹鍒?24 甯уぇ鍖呭嵆瑙﹀彂锛堟鍓嶄负 1 s / 200 甯э級锛屾瘡 100 ms 鍙戜竴娆?ADDBA锛堟渶澶?20 娆?/ 5 s 瓒呮椂鍗冲共鍑€鍥為€€鍗曞抚锛?0 s 鍚庡厑璁稿啀璇曪級锛宍asking` 鏈熼棿涓嶅啀寮€鍚彂閫侀棬鎺э紙閬垮厤 `gate holds` 鍫嗙Н涓庨樆濉炵鐞嗗抚锛夛紝鍥為€€鏃跺悓姝?`TXPATH_FLUSH` 娓呯┖鑱氬悎闃熷垪閬垮厤涓庡崟甯ч槦鍒椾贡搴忕珵浜夛紝鍚屾椂寮€鍚?20/40/80 MHz SGI 涓庡皧閲嶅绔崗鍟嗙獥鍙ｅぇ灏忋€?
-- **鏁翠綋鍙戦€佹彁閫燂紙A-MPDU 鍏?寮€鍧囩敓鏁堬級**锛欼ntel 鏃犵嚎鍙戦€佺獥鍙ｄ粠 48 鎻愬埌 64锛坄--tx-window 64`锛夛紱鍗曞抚閫熺巼闃舵鏀逛负 32 甯х獥鍙ｏ紙鐖崌蹇?2 鍊嶏級銆佷笂闄愭柊澧?VHT 80 MHz 2SS MCS 8锛屽苟鍚敤 VHT LDPC + SGI锛涗富寰幆姣忚疆璇诲彇绠￠亾甯ф暟涓婇檺浠?64 鎻愬埌 128锛沗--fast-unlock` 鍦ㄤ俊閬撳厑璁稿彂閫佸悗绔嬪埢鍋滄帀鍓╀綑鎵弿銆?
-- **璇婃柇鎶ュ憡淇濈暀姣忔鍙戦€佺殑 A-MPDU 蹇収锛圼#4](https://github.com/zheznanohana/nekodrop/issues/4)锛?*锛氬湪姣忔鎵归噺鍙戦€佺粨鏉熴€佸洖閫€鎴栨敹鍒?DELBA 鏃剁珛鍗冲啓鍏ヤ竴鏉?`aggregate:` 蹇収锛岃瘖鏂姤鍛婄殑 Bring-up 琛ㄤ紭鍏堝睍绀烘椿璺冩湡锛坄asking`/`agreed`锛夎褰曡€屼笉鍐嶈鏈熬 `idle` 瑕嗙洊銆?
+### 中文
+- **🚀 传输速度十倍级跃升（AX201 并发模式实测验证）**：
+  - **PC → iPhone 实测达到 `30.8 MB/s`**（104.8 MB 文件仅用 **3.4 秒**传完，对比此前单帧发送的 1–3 MB/s 提升 **10× 以上**）。开启实验性 A-MPDU 后 **0.304 秒**完成 Block Ack 握手，单次聚合高达 **63 帧**、确认率 **99.69%**（81,451 / 81,707），稳定跑满 **VHT 80 MHz 双流（2SS）MCS 9 + LDPC + SGI（866.7 Mbps）**。
+  - **iPhone → PC 实测平均 `13.5 MB/s`（后半段峰值 ~30 MB/s）**，104.8 MB 安装包 **8.1 秒**收完落盘。
+- **重点修复实验性 A-MPDU 协商与聚合路径（[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#9](https://github.com/zheznanohana/nekodrop/issues/9)）**：
+  - 修复 0.1.28 导致 TX AddBA 一直停在 `asking`（`asks 80, agreed 0`）的回归：此前在 `asking` 阶段就切到组播过滤，把 iPhone 返回的单播 ADDBA Response 丢掉了。现在 `asking` 阶段保持混杂与管理帧接收，仅在 `agg_enable(true)` 拿到对端同意后原子切换到 ForbiddenItlwm 的 BA 监听状态（AWDL BSSID + 基础 ACK 速率 + 组播过滤），退出时立即恢复。
+  - 修复 A-MPDU 响应路径（`handle_tx_resp`）在 `frame_count > 1` 时提前回收队列索引的隐患（改为仅由 `IWX_BA_NOTIF` 回收），并清零 26 字节 QoS 帧头后的 2 字节对齐填充。
+  - 更激进的 A-MPDU 触发与协商：250 ms 内收到 24 帧大包即触发（此前为 1 s / 200 帧），每 100 ms 发一次 ADDBA（最多 20 次 / 5 s 超时即干净回退单帧，60 s 后允许再试），`asking` 期间不再开启发送门控（避免 `gate holds` 堆积与阻塞管理帧），回退时同步 `TXPATH_FLUSH` 清空聚合队列避免与单帧队列乱序竞争，同时开启 20/40/80 MHz SGI 与尊重对端协商窗口大小。
+- **整体发送提速（A-MPDU 关/开均生效）**：Intel 无线发送窗口从 48 提到 64（`--tx-window 64`）；单帧速率阶梯改为 32 帧窗口（爬升快 2 倍）、上限新增 VHT 80 MHz 2SS MCS 8，并启用 VHT LDPC + SGI；主循环每轮读取管道帧数上限从 64 提到 128；`--fast-unlock` 在信道允许发送后立刻停掉剩余扫描。
+- **诊断报告保留每次发送的 A-MPDU 快照（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：在每次批量发送结束、回退或收到 DELBA 时立即写入一条 `aggregate:` 快照，诊断报告的 Bring-up 表优先展示活跃期（`asking`/`agreed`）记录而不再被末尾 `idle` 覆盖。
 
 ### English
-- **馃殌 10x+ Transfer Speed Leap (verified on AX201 Concurrent mode)**:
-  - **PC 鈫?iPhone measured at `30.8 MB/s`** (104.8 MB transferred in **3.4 s**, up **10x+** from 1鈥? MB/s single-frame TX). With experimental A-MPDU enabled, Block Ack negotiation completes in **0.304 s**, reaching **63-frame** aggregates with **99.69%** ACK rate (81,451 / 81,707) at full **VHT 80 MHz 2SS MCS 9 + LDPC + SGI (866.7 Mbps)**.
-  - **iPhone 鈫?PC measured at `13.5 MB/s` average (~30 MB/s peak)**, receiving the 104.8 MB installer in **8.1 s**.
+- **🚀 10x+ Transfer Speed Leap (verified on AX201 Concurrent mode)**:
+  - **PC → iPhone measured at `30.8 MB/s`** (104.8 MB transferred in **3.4 s**, up **10x+** from 1–3 MB/s single-frame TX). With experimental A-MPDU enabled, Block Ack negotiation completes in **0.304 s**, reaching **63-frame** aggregates with **99.69%** ACK rate (81,451 / 81,707) at full **VHT 80 MHz 2SS MCS 9 + LDPC + SGI (866.7 Mbps)**.
+  - **iPhone → PC measured at `13.5 MB/s` average (~30 MB/s peak)**, receiving the 104.8 MB installer in **8.1 s**.
 - **Major fix and tuning for experimental A-MPDU TX ([#4](https://github.com/zheznanohana/nekodrop/issues/4), [#9](https://github.com/zheznanohana/nekodrop/issues/9))**:
   - Fixed the 0.1.28 regression where TX AddBA stayed stuck in `asking` (`asks 80, agreed 0`): switching to group-only filtering during `asking` caused the firmware to drop unicast ADDBA Response management frames. Promiscuous/management receive now stays open throughout `asking`, switching atomically to ForbiddenItlwm's BA listener state (AWDL BSSID + basic ACK rates + group-only filter) inside `agg_enable(true)` only after the peer agrees, and restoring immediately on teardown.
   - Fixed `handle_tx_resp` for the aggregation queue so multi-frame A-MPDU responses (`frame_count > 1`) are reclaimed solely by `IWX_BA_NOTIF` (matching Linux iwlwifi / ForbiddenItlwm), and zeroed the 2-byte alignment padding after 26-byte QoS headers.
@@ -205,12 +214,12 @@
 
 ---
 
-## v0.1.29 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.29 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **鍐呯疆鏀寔 Realtek RTL8852CE锛坄10EC:C852`锛?*锛氬拰 Intel 缃戝崱涓€鏍锋寜 PCI ID 鑷姩璇嗗埆銆佽嚜鍔ㄦ帴绠★紝涓嶉渶瑕佸紑鍏炽€傜敤鐨勬槸 winawdl 鐨?radio锛堝熀浜?raph559/devourer 鐨?Windows PCIe 鍚庣锛夛紝鎵撳寘涓?`radio\nekodrop-radio-rtl.exe`銆傝繖寮犲崱鐨勯┍鍔ㄤ笉鏀寔鍚屾椂杩?Wi-Fi锛屾墍浠ユ寜闇€妯″紡杩愯銆?*杩樻病鏈夌湡鏈烘暟鎹?*銆?
-- **鑷姩璇嗗埆澶辫触鏃跺彲浠ユ墜鍔ㄩ€夋嫨缃戝崱**锛?璁剧疆 鈫?缃戝崱* 浼氬垪鍑烘湰鏈虹殑 Intel/Realtek 缃戝崱鍜屽彲閫夊瀷鍙凤紙Intel AX201/9560銆丄X200銆丄X210銆丄X211/AX411銆丷ealtek RTL8852CE锛夈€傛墜鍔ㄩ€夋嫨鍙椹卞姩鍖呴噷鍒楀嚭鐨勭‖浠?ID 鏈夋晥銆?
-- **缃戝崱鍚庣妯″潡鍖?*锛氭湇鍔＄鎸?`IRadioBackend` 鍚姩鍚勪釜缃戝崱鐨?radio锛涢€傞厤鏂扮綉鍗＄殑鎺ュ彛鍜屾楠ゅ啓鍦?[docs/ADDING-A-CARD.md](docs/ADDING-A-CARD.md)锛岄噷闈篃鍒椾簡涓嬩竴鎵瑰€欓€夌綉鍗″拰鍚勮嚜鍙互绉绘鐨勯┍鍔ㄦ潵婧愩€?
+### 中文
+- **内置支持 Realtek RTL8852CE（`10EC:C852`）**：和 Intel 网卡一样按 PCI ID 自动识别、自动接管，不需要开关。用的是 winawdl 的 radio（基于 raph559/devourer 的 Windows PCIe 后端），打包为 `radio\nekodrop-radio-rtl.exe`。这张卡的驱动不支持同时连 Wi-Fi，所以按需模式运行。**还没有真机数据**。
+- **自动识别失败时可以手动选择网卡**：*设置 → 网卡* 会列出本机的 Intel/Realtek 网卡和可选型号（Intel AX201/9560、AX200、AX210、AX211/AX411、Realtek RTL8852CE）。手动选择只对驱动包里列出的硬件 ID 有效。
+- **网卡后端模块化**：服务端按 `IRadioBackend` 启动各个网卡的 radio；适配新网卡的接口和步骤写在 [docs/ADDING-A-CARD.md](docs/ADDING-A-CARD.md)，里面也列了下一批候选网卡和各自可以移植的驱动来源。
 
 ### English
 - **Realtek RTL8852CE (`10EC:C852`) built in**: recognized and taken by its PCI ID like the Intel cards, no switch. It runs winawdl's radio on raph559/devourer's Windows PCIe backend, shipped as `radio\nekodrop-radio-rtl.exe`. Its driver has no station, so it runs on demand. **No hardware data yet**.
@@ -219,11 +228,11 @@
 
 ---
 
-## v0.1.28 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.28 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **淇锛氳繛鎺?Wi-Fi 璁よ瘉澶辫触鍚庣綉鍗″浐浠跺穿婧冿紙[#21](https://github.com/zheznanohana/nekodrop/issues/21)锛?*锛氱Щ闄?station 鍓嶆病鏈夊厛鍙栨秷浼氳瘽淇濇姢銆佹竻绌哄畠鐨勫彂閫侀槦鍒楋紝缁撴灉绉婚櫎鍛戒护瓒呮椂锛屽浐浠堕殢涔嬪穿婧冿紙LMAC 0x125F锛夛紝#21 閲岃繛缁彂鐢熶簡 3 娆°€傜幇鍦ㄦ寜 OpenBSD/itlwm 鐨勯『搴忔柇寮€锛氬彇娑堜細璇濅繚鎶?鈫?drain + TXPATH_FLUSH 鈫?绉婚櫎 station 鈫?binding 鈫?MAC 鈫?PHY銆?
-- **瀹為獙鎬?A-MPDU锛氫細璇濇湡闂存敼鐢?ForbiddenItlwm 鐨勭洃鍚厤缃紙[#4](https://github.com/zheznanohana/nekodrop/issues/4)銆乕#9](https://github.com/zheznanohana/nekodrop/issues/9)锛?*锛氬彂閫佸懡浠ゃ€丵oS 甯с€乻tation銆侀槦鍒楀拰閫熺巼鎺у埗閮藉凡缁忓拰 ForbiddenItlwm 閫愬瓧鑺備竴鑷达紝鍙墿浼氳瘽鏈熼棿鐨勭洃鍚?MAC 涓嶅悓銆傜幇鍦ㄥ湪 Block Ack 浼氳瘽鏈熼棿锛堟贩鏉傛ā寮忓叧闂椂锛夋敼鐢?AWDL BSSID銆佸熀纭€ ACK 閫熺巼鍜屽彧鏀剁粍鎾殑杩囨护鍣紝鍜?ForbiddenItlwm 鍦?Mac 鈫?iPhone 璺戝埌 23 MB/s 鏃剁殑閰嶇疆涓€鏍枫€傚彂鐜伴樁娈典笉鍙樸€侫-MPDU 浠嶉粯璁ゅ叧闂紝**杩樻病鏈夌湡鏈烘暟鎹?*銆?
+### 中文
+- **修复：连接 Wi-Fi 认证失败后网卡固件崩溃（[#21](https://github.com/zheznanohana/nekodrop/issues/21)）**：移除 station 前没有先取消会话保护、清空它的发送队列，结果移除命令超时，固件随之崩溃（LMAC 0x125F），#21 里连续发生了 3 次。现在按 OpenBSD/itlwm 的顺序断开：取消会话保护 → drain + TXPATH_FLUSH → 移除 station → binding → MAC → PHY。
+- **实验性 A-MPDU：会话期间改用 ForbiddenItlwm 的监听配置（[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#9](https://github.com/zheznanohana/nekodrop/issues/9)）**：发送命令、QoS 帧、station、队列和速率控制都已经和 ForbiddenItlwm 逐字节一致，只剩会话期间的监听 MAC 不同。现在在 Block Ack 会话期间（混杂模式关闭时）改用 AWDL BSSID、基础 ACK 速率和只收组播的过滤器，和 ForbiddenItlwm 在 Mac → iPhone 跑到 23 MB/s 时的配置一样。发现阶段不变。A-MPDU 仍默认关闭，**还没有真机数据**。
 
 ### English
 - **Fix: firmware crash after a failed Wi-Fi authentication ([#21](https://github.com/zheznanohana/nekodrop/issues/21))**: the station was removed without cancelling its session protection or flushing its queue; REMOVE_STA timed out and the firmware asserted (LMAC 0x125F), three times in a row in #21. Teardown now follows OpenBSD/itlwm: cancel session protection, drain + TXPATH_FLUSH, then station, binding, MAC, PHY.
@@ -231,13 +240,13 @@
 
 ---
 
-## v0.1.27 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.27 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **淇锛氫紶杈撻€斾腑琚垏淇￠亾鎵撴柇锛圼#9](https://github.com/zheznanohana/nekodrop/issues/9)锛?*锛歩Phone 鍏憡鍒殑淇￠亾鍚庯紝鏈嶅姟浼氱瓑鍒?10 绉掓病鏈夋暟鎹啀鍒囪繃鍘伙紝浣嗕互鍓嶆渶澶氬彧绛?120 绉掞紝绛夋弧灏变笉绠℃湁娌℃湁鏁版嵁鐩存帴鍒囥€?9 閲屼竴涓?537 MB 鐨勫彂閫佸湪淇￠亾 44 涓婅窇寰楀ソ濂界殑锛?.8 MB/s锛夛紝120 绉掑悗琚垏鍒?149锛屽湪 37.7% 澶勪互 TLS EOF 鏂紑銆傜幇鍦ㄥ彧瑕佽繕鏈夋暟鎹氨涓€鐩寸瓑锛沬Phone 鍙堟姤鍥炲綋鍓嶄俊閬撴椂鍙栨秷鍒囨崲锛涘悓鏃跺彧淇濈暀涓€涓垏鎹换鍔°€?
-- **淇锛氭洿鏂版椂 `libcrypto-3.dll` 澶嶅埗澶辫触锛圼#22](https://github.com/zheznanohana/nekodrop/issues/22)锛?*锛氬畨瑁呰剼鏈粨鏉?`nekodrop.exe` 鏃讹紝瀹冨惎鍔ㄧ殑 AirDrop 寮曟搸锛坄python.exe`锛夎繕鍗犵潃鏂囦欢銆傜幇鍦ㄤ細绛夋湇鍔＄湡姝ｅ仠涓嬶紝缁撴潫鎵€鏈変粠瀹夎鐩綍杩愯鐨勮繘绋嬶紝澶嶅埗澶辫触浼氶噸璇曪紝鏈€鍚庡け璐ユ椂浼氳鏄庢槸鍝釜杩涚▼鍗犵潃銆?
-- **鍗歌浇涓嶅啀闈欓粯鐣欎笅娈嬬暀锛圼#22](https://github.com/zheznanohana/nekodrop/issues/22)锛?*锛氭瘡涓€姝ョ殑澶辫触閮戒細璁拌繘 `%ProgramData%\nekodrop-uninstall.log`锛涗細鍒犻櫎 `nekodrop` TAP 缃戝崱锛堜繚鐣?TAP 椹卞姩锛夊拰 `%LocalAppData%\nekodrop`锛涙湇鍔＄▼搴忕己澶辨椂鏀圭敤 `restore.ps1` 褰掕繕缃戝崱銆?
-- 鏋勫缓鏃朵細鐢?PowerShell 5.1 瑙ｆ瀽鎵€鏈夊畨瑁呭櫒鑴氭湰锛岃娉曢敊璇細璁╂瀯寤哄け璐ャ€?
+### 中文
+- **修复：传输途中被切信道打断（[#9](https://github.com/zheznanohana/nekodrop/issues/9)）**：iPhone 公告别的信道后，服务会等到 10 秒没有数据再切过去，但以前最多只等 120 秒，等满就不管有没有数据直接切。#9 里一个 537 MB 的发送在信道 44 上跑得好好的（1.8 MB/s），120 秒后被切到 149，在 37.7% 处以 TLS EOF 断开。现在只要还有数据就一直等；iPhone 又报回当前信道时取消切换；同时只保留一个切换任务。
+- **修复：更新时 `libcrypto-3.dll` 复制失败（[#22](https://github.com/zheznanohana/nekodrop/issues/22)）**：安装脚本结束 `nekodrop.exe` 时，它启动的 AirDrop 引擎（`python.exe`）还占着文件。现在会等服务真正停下，结束所有从安装目录运行的进程，复制失败会重试，最后失败时会说明是哪个进程占着。
+- **卸载不再静默留下残留（[#22](https://github.com/zheznanohana/nekodrop/issues/22)）**：每一步的失败都会记进 `%ProgramData%\nekodrop-uninstall.log`；会删除 `nekodrop` TAP 网卡（保留 TAP 驱动）和 `%LocalAppData%\nekodrop`；服务程序缺失时改用 `restore.ps1` 归还网卡。
+- 构建时会用 PowerShell 5.1 解析所有安装器脚本，语法错误会让构建失败。
 
 ### English
 - **Fix: sends cut by a channel move ([#9](https://github.com/zheznanohana/nekodrop/issues/9))**: after the iPhone named another channel, the service waited for 10 s without data but gave up after 120 s and moved anyway. In #9 a 537 MB send running at 1.8 MB/s on channel 44 was moved to 149 after 120 s and died with TLS EOF at 37.7%. Now it waits as long as data flows, cancels the move when the iPhone names our channel again, and runs one mover at a time.
@@ -247,15 +256,15 @@
 
 ---
 
-## v0.1.26 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.26 (Hourly / Pre-release) — 2026-11-22
 
-鏈増鏉ヨ嚜銆宯ekodrop 鑷富杩涘寲銆嶇 6 杞細Gemini 鎻愭 鈫?Claude 瀹炵幇 鈫?Codex QA 閫氳繃锛岄闄╃瓑绾?EXPERIMENTAL銆?/ From self-evolution round 6: proposal by Gemini, implementation by Claude, Codex QA passed, risk EXPERIMENTAL.
+本版来自「nekodrop 自主进化」第 6 轮：Gemini 提案 → Claude 实现 → Codex QA 通过，风险等级 EXPERIMENTAL。 / From self-evolution round 6: proposal by Gemini, implementation by Claude, Codex QA passed, risk EXPERIMENTAL.
 
-### 涓枃
-- **鏂扮殑瀹為獙鎬у紑鍏炽€屾洿蹇В閿佽鍔?5 GHz 淇￠亾銆嶏紙榛樿鍏抽棴锛孾#11](https://github.com/zheznanohana/nekodrop/issues/11)锛?*锛氱綉鍗′笉鎺ュ彈鍥藉鐮佹椂锛?11 鐨?AX210 + TW锛夛紝5 GHz AirDrop 淇￠亾涓€寮€濮嬫槸琚姩鐨勶紝鍦ㄥ惉鍒?iPhone 鎴栭檮杩戣矾鐢卞櫒涔嬪墠鐢佃剳涓€甯ч兘涓嶅彂锛?11 閲屾瘡娆￠噸鍚绛夌害 60 绉掋€傛墦寮€鍚庝細鍦?1.5銆?2銆?0 绉掑悇鎵竴娆?11 涓父鐢ㄤ俊閬擄紙鍘熸潵鏄?10 绉掓壂涓€娆″叏閮ㄤ俊閬擄級锛岃缃戝崱鎸夎嚜宸辩殑瑙勫垯浠庨檮杩戣矾鐢卞櫒瀛﹀埌鍥藉鐮併€傝鎷掔粷鐨勫浗瀹剁爜浼氬湪 iPhone 鎶ュ嚭鍚屼竴鍥藉鏃跺啀闂竴娆°€備笉浼氬湪琚姩淇￠亾涓婂己琛屽彂灏勩€傚叧闂椂鎵弿鏃舵満鍜屼互鍓嶅畬鍏ㄤ竴鏍枫€?*杩樻病鏈夌湡鏈烘暟鎹?*锛屾湁鐢ㄦ埛璇佹槑娌￠棶棰樺悗浼氭敼鎴愬缁堟墦寮€銆?
-- **鍙戦€佺粺璁℃敼姝?*锛歚tx: N submitted` 鍙粺璁?AirDrop 鐨勫抚锛屽彂缁欒矾鐢卞櫒鐨勫抚绉诲埌 `wifi:` 閭ｄ竴琛屻€備互鍓嶅湪銆屽悓鏃惰仈缃戙€嶆ā寮忎笅 submitted 姣?done 澶氬嚭涓€澶ф埅锛岀湅涓婂幓鍍忎涪鍖咃紝鍏跺疄涓嶆槸銆?
-- **鍙戠幇鑰楁椂璇婃柇**锛歳adio 鏃ュ織鏂板銆岀涓€娆℃敹鍒?AWDL 甯?/ MIF / 鍙戠粰鏈満鐨勫抚鐢ㄤ簡澶氬皯绉掋€嶏紝璇婃柇鎶ュ憡閲屾湁瀵瑰簲鐨勬椂闂磋〃锛圼#4](https://github.com/zheznanohana/nekodrop/issues/4)銆乕#11](https://github.com/zheznanohana/nekodrop/issues/11)锛夈€?
-- 璇婃柇鎶ュ憡涓嶅啀鎶娿€屾洿蹇彂閫併€嶆樉绀烘垚鍏抽棴锛?.1.25 璧峰畠濮嬬粓鎵撳紑锛夈€?
+### 中文
+- **新的实验性开关「更快解锁被动 5 GHz 信道」（默认关闭，[#11](https://github.com/zheznanohana/nekodrop/issues/11)）**：网卡不接受国家码时（#11 的 AX210 + TW），5 GHz AirDrop 信道一开始是被动的，在听到 iPhone 或附近路由器之前电脑一帧都不发，#11 里每次重启要等约 60 秒。打开后会在 1.5、12、30 秒各扫一次 11 个常用信道（原来是 10 秒扫一次全部信道），让网卡按自己的规则从附近路由器学到国家码。被拒绝的国家码会在 iPhone 报出同一国家时再问一次。不会在被动信道上强行发射。关闭时扫描时机和以前完全一样。**还没有真机数据**，有用户证明没问题后会改成始终打开。
+- **发送统计改正**：`tx: N submitted` 只统计 AirDrop 的帧，发给路由器的帧移到 `wifi:` 那一行。以前在「同时联网」模式下 submitted 比 done 多出一大截，看上去像丢包，其实不是。
+- **发现耗时诊断**：radio 日志新增「第一次收到 AWDL 帧 / MIF / 发给本机的帧用了多少秒」，诊断报告里有对应的时间表（[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#11](https://github.com/zheznanohana/nekodrop/issues/11)）。
+- 诊断报告不再把「更快发送」显示成关闭（0.1.25 起它始终打开）。
 
 ### English
 - **New experimental switch "Faster unlock of a passive 5 GHz channel" (off by default, [#11](https://github.com/zheznanohana/nekodrop/issues/11))**: where the card refuses the country (#11: AX210, TW), the 5 GHz AirDrop channel starts passive and the PC sends nothing until it hears an iPhone or a router; #11 waited ~60 s after each restart. With the switch on, the radio scans the eleven common channels at 1.5, 12 and 30 s (instead of all channels once at 10 s) so the card learns the country from nearby routers by its own rules, and asks again for a refused country when an iPhone names it. It never transmits on a passive channel. Off, the scan timing is exactly as before. **No hardware data yet**; it becomes always-on once users confirm it causes no problems.
@@ -265,11 +274,11 @@
 
 ---
 
-## v0.1.25 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.25 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **銆屾洿蹇彂閫佸埌 iPhone銆嶆敼涓哄缁堟墦寮€锛岃缃噷鐨勫紑鍏冲凡鍒犻櫎**锛氬悓鏃跺湪閫旂殑 AWDL 甯т粠 8 涓彁楂樺埌 48 涓€傝繖涓紑鍏充粠 0.1.9 璧峰氨鏈夛紝鑷充粖娌℃湁浠讳綍缃戝崱鎶ュ憡瀹冭鎯呭喌鍙樺樊锛欰X211 涓?537 MB 浠?3.4 MB/s 瀹屾暣浼犲畬銆佹病鏈夋斁寮冪殑甯э紙[#9](https://github.com/zheznanohana/nekodrop/issues/9)锛夛紝AX210 鐣ュ揩锛圼#14](https://github.com/zheznanohana/nekodrop/issues/14)锛夛紝AX200 閫熷害涓嶅彉锛圼#4](https://github.com/zheznanohana/nekodrop/issues/4)锛夈€備箣鍓嶆病寮€杩囩殑鐢ㄦ埛鍗囩骇鍚庡氨浼氱敤涓婂畠銆?
-- 銆岃仛鍚堝彂閫侊紙A-MPDU锛夈€嶄粛鏈夐棶棰橈紙鍥轰欢鍙彂鍗曞抚锛夛紝淇濈暀寮€鍏筹紝榛樿鍏抽棴銆?
+### 中文
+- **「更快发送到 iPhone」改为始终打开，设置里的开关已删除**：同时在途的 AWDL 帧从 8 个提高到 48 个。这个开关从 0.1.9 起就有，至今没有任何网卡报告它让情况变差：AX211 上 537 MB 以 3.4 MB/s 完整传完、没有放弃的帧（[#9](https://github.com/zheznanohana/nekodrop/issues/9)），AX210 略快（[#14](https://github.com/zheznanohana/nekodrop/issues/14)），AX200 速度不变（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）。之前没开过的用户升级后就会用上它。
+- 「聚合发送（A-MPDU）」仍有问题（固件只发单帧），保留开关，默认关闭。
 
 ### English
 - **"Faster sending to iPhone" is always on and its switch is gone**: up to 48 AWDL frames in flight instead of 8. It was a switch since 0.1.9 and no card reported it making things worse: AX211 sent 537 MB at 3.4 MB/s with no frames given up ([#9](https://github.com/zheznanohana/nekodrop/issues/9)), AX210 a little faster ([#14](https://github.com/zheznanohana/nekodrop/issues/14)), AX200 the same speed ([#4](https://github.com/zheznanohana/nekodrop/issues/4)). Users who never turned it on get it after updating.
@@ -277,13 +286,13 @@
 
 ---
 
-## v0.1.24 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.24 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **淇锛氬紑鍚疄楠屾€?A-MPDU 鍚庢壘涓嶅埌 iPhone锛?.1.22 璧风殑鍥炲綊锛孾#4](https://github.com/zheznanohana/nekodrop/issues/4)锛?*锛?.1.22 鍦?A-MPDU 妯″紡涓嬫妸鐩戝惉鐨?BSSID 鏀规垚浜?AWDL BSSID 骞跺姞浜?ACK 閫熺巼锛?.1.23 鍙堝湪浼氳瘽鏈熼棿鎶婃帴鏀惰繃婊ゆ敹绐勫埌鍙敹缁勬挱銆侫X200 瀹炴祴 0.1.23 寮€ A-MPDU 鍚?3 鍒嗗崐閽熼兘娌″彂鐜拌澶囷紙PSF 璁℃暟鍋滀綇銆乣0 addressed to us`锛夛紝鑰?0.1.20 鍚屾牱寮€鐫€ A-MPDU 杩樿兘鍙戠幇銆傜幇鍦?MAC 涓婁笅鏂囨仮澶嶅埌 0.1.20 鐨勬牱瀛愩€傞粯璁よ矾寰勶紙A-MPDU 鍏抽棴锛変粠娌＄敤杩囪繖涓ゅ鏀瑰姩锛屼笉鍙楀奖鍝嶃€?
-- **淇锛氥€屾寜闇€銆嶆ā寮忎笅鍦?nekodrop 閲岃繛鎺?Wi-Fi 浼氱櫧鐧介噸鍚棤绾匡紙[#11](https://github.com/zheznanohana/nekodrop/issues/11)锛?*锛氬彧鏈夈€屽悓鏃惰仈缃戝拰 AirDrop銆嶆ā寮忎細鍦?AirDrop 鏃佽竟杩?Wi-Fi銆備互鍓嶅湪鍏朵粬妯″紡涓嬬偣杩炴帴锛屾湇鍔′細閲嶅惎 radio 浣嗕粈涔堜篃杩炰笉涓婏紝姣忕偣涓€娆?AirDrop 鍙戠幇灏变粠澶村紑濮嬨€傜幇鍦ㄤ細鐩存帴鎻愮ず闇€瑕佸垏鎹㈡ā寮忋€?
-- **璁剧疆绐楀彛鏍囬鏄剧ず鐗堟湰鍙?*锛圼#11](https://github.com/zheznanohana/nekodrop/issues/11)锛夈€?
-- 鍙﹀鍖呭惈 0.1.23 涔嬪悗鍚堝叆鐨勶細AirDrop 寮曟搸鍙戦€佷紭鍖栵紙64 KiB DVZip 鍧椼€佽嚜閫傚簲涓嶅帇缂╃洿浼犮€? MiB 濂楁帴瀛楃紦鍐层€乣TCP_NODELAY`锛夛紝瀹夎鍣ㄦ寜鍘傚晢璇嗗埆缃戝崱銆乣restore.ps1` 涓嶅啀鍋囪 Intel銆?
+### 中文
+- **修复：开启实验性 A-MPDU 后找不到 iPhone（0.1.22 起的回归，[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：0.1.22 在 A-MPDU 模式下把监听的 BSSID 改成了 AWDL BSSID 并加了 ACK 速率，0.1.23 又在会话期间把接收过滤收窄到只收组播。AX200 实测 0.1.23 开 A-MPDU 后 3 分半钟都没发现设备（PSF 计数停住、`0 addressed to us`），而 0.1.20 同样开着 A-MPDU 还能发现。现在 MAC 上下文恢复到 0.1.20 的样子。默认路径（A-MPDU 关闭）从没用过这两处改动，不受影响。
+- **修复：「按需」模式下在 nekodrop 里连接 Wi-Fi 会白白重启无线（[#11](https://github.com/zheznanohana/nekodrop/issues/11)）**：只有「同时联网和 AirDrop」模式会在 AirDrop 旁边连 Wi-Fi。以前在其他模式下点连接，服务会重启 radio 但什么也连不上，每点一次 AirDrop 发现就从头开始。现在会直接提示需要切换模式。
+- **设置窗口标题显示版本号**（[#11](https://github.com/zheznanohana/nekodrop/issues/11)）。
+- 另外包含 0.1.23 之后合入的：AirDrop 引擎发送优化（64 KiB DVZip 块、自适应不压缩直传、2 MiB 套接字缓冲、`TCP_NODELAY`），安装器按厂商识别网卡、`restore.ps1` 不再假设 Intel。
 
 ### English
 - **Fix: no devices found with experimental A-MPDU on (regression since 0.1.22, [#4](https://github.com/zheznanohana/nekodrop/issues/4))**: 0.1.22 gave the A-MPDU listener AWDL's BSSID and ACK rates, and 0.1.23 narrowed its receive filter to group frames during a session. On an AX200, 0.1.23 found nothing for 3.5 minutes with A-MPDU on (PSF count frozen, `0 addressed to us`) while 0.1.20 still found the iPhone. The MAC context is back to 0.1.20's. The default path (A-MPDU off) never used either change.
@@ -293,19 +302,19 @@
 
 ---
 
-## v0.1.23 (Hourly / Pre-release) 鈥?2026-11-22
+## v0.1.23 (Hourly / Pre-release) — 2026-11-22
 
-### 涓枃
-- **搴曞眰浼犺緭鎻愰€燂紙Intel 瀹為獙鎬?A-MPDU TX + 鍏ㄧ綉鍗￠€氱敤 Named Pipe 鎵瑰鐞嗭級**锛?
-  - 淇 `IwxDevice::transmit_agg()` 姣忓抚鍚屾鏁查棬閾冪殑闂锛氭敼涓烘壒閲忓叆闃燂紙`kick = false`锛? 鏁存壒鍗曟 `kick_agg()`锛屾秷闄ゆ瘡甯?20鈥?0 碌s 鐨勫悓姝?UMDF IOCTL 寮€閿€锛堥伩鍏嶉タ姝诲浐浠?SCD 鑱氬悎璋冨害鍣級銆?
-  - `agg_setup()` 琛ュ厖 TLC `LDPC` 涓庡弻澶╃嚎 `STBC` 鏍囧織锛圴HT 80 MHz MCS 9 蹇呴渶锛夛紝瀵归綈涓婃父 `ForbiddenItlwm`銆?
-  - 寮€鍚?`--aggregate` 骞跺叧闂贩鏉傛ā寮忔椂灏嗙洃鍚繃婊ゆ帺鐮佷弗鏍兼敹缂╀负 `IWX_MAC_FILTER_ACCEPT_GRP`锛岄伩鍏嶅共鎵扮‖浠?Block Ack 璁拌处锛堥粯璁ら潪鑱氬悎璺緞 100% 涓嶅彉锛夈€?
-  - 鑱氬悎闃熷垪鍦ㄩ€斾笂闄愭彁鍗囪嚦 `min(128, ring - 16)`锛?2000 鏃?128 甯?/ AX210 鏃?112 甯э級锛屽苟鍦ㄦ敹鍒板绔?DELBA 鏃跺厛鍙?`IWX_TXPATH_FLUSH` 鍐插埛 `sta_id=3` 闃叉 SSN 閿欎綅銆?
-  - `PipeServer` 鏂板 RX 甯ф壒閲忓悎骞跺啓鍏ワ紙`queue_send` / `flush_send`锛屽崟鎵硅揪 32 KiB 鎴栨瘡杞?`dev.poll()` 缁撴潫缁熶竴涓€娆?`WriteFile`锛夛紝骞跺皢绠￠亾缂撳啿鎵╄嚦 256 KiB锛屽ぇ骞呴檷浣庨珮鍚炲悙涓嬬殑绯荤粺璋冪敤寮€閿€锛堥€傜敤浜庢墍鏈夌綉鍗′笌妯″紡锛夈€?
-- **澶氬巶鍟嗛┍鍔ㄥ眰鍩虹锛坄driver/regproxy`锛?*锛?
-  - `regproxy.c` 鍗囩骇涓鸿嚜鍔ㄩ€夋嫨**鏈€澶х殑** Memory BAR锛堚墺 8 KiB锛夛紝浣垮崟涓€椹卞姩鍘熺敓鍏煎 Intel锛圔AR0 8 KiB锛夈€丷ealtek RTL8852CE/BE锛圔AR2 1 MiB锛変笌 MediaTek MT7921/MT7922锛圔AR0 1 MiB锛夛紝Intel 琛屼负瀹屽叏涓嶅彉銆?
-- **鏂囨。涓庡吋瀹圭煩闃?*锛?
-  - 鏂板鏈洿鏂版棩蹇?`CHANGELOG.md`锛屼互鍙婄嫭绔嬬殑涓嫳鍙岃璺ㄥ搧鐗岀綉鍗″吋瀹规€ф枃妗?[`docs/COMPATIBILITY.zh-CN.md`](docs/COMPATIBILITY.zh-CN.md) / [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)銆?
+### 中文
+- **底层传输提速（Intel 实验性 A-MPDU TX + 全网卡通用 Named Pipe 批处理）**：
+  - 修复 `IwxDevice::transmit_agg()` 每帧同步敲门铃的问题：改为批量入队（`kick = false`）+ 整批单次 `kick_agg()`，消除每帧 20–40 µs 的同步 UMDF IOCTL 开销（避免饿死固件 SCD 聚合调度器）。
+  - `agg_setup()` 补充 TLC `LDPC` 与双天线 `STBC` 标志（VHT 80 MHz MCS 9 必需），对齐上游 `ForbiddenItlwm`。
+  - 开启 `--aggregate` 并关闭混杂模式时将监听过滤掩码严格收缩为 `IWX_MAC_FILTER_ACCEPT_GRP`，避免干扰硬件 Block Ack 记账（默认非聚合路径 100% 不变）。
+  - 聚合队列在途上限提升至 `min(128, ring - 16)`（22000 族 128 帧 / AX210 族 112 帧），并在收到对端 DELBA 时先发 `IWX_TXPATH_FLUSH` 冲刷 `sta_id=3` 防止 SSN 错位。
+  - `PipeServer` 新增 RX 帧批量合并写入（`queue_send` / `flush_send`，单批达 32 KiB 或每轮 `dev.poll()` 结束统一一次 `WriteFile`），并将管道缓冲扩至 256 KiB，大幅降低高吞吐下的系统调用开销（适用于所有网卡与模式）。
+- **多厂商驱动层基础（`driver/regproxy`）**：
+  - `regproxy.c` 升级为自动选择**最大的** Memory BAR（≥ 8 KiB），使单一驱动原生兼容 Intel（BAR0 8 KiB）、Realtek RTL8852CE/BE（BAR2 1 MiB）与 MediaTek MT7921/MT7922（BAR0 1 MiB），Intel 行为完全不变。
+- **文档与兼容矩阵**：
+  - 新增本更新日志 `CHANGELOG.md`，以及独立的中英双语跨品牌网卡兼容性文档 [`docs/COMPATIBILITY.zh-CN.md`](docs/COMPATIBILITY.zh-CN.md) / [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)。
 
 ### English
 - **Radio throughput improvements (Intel experimental A-MPDU TX + universal Named Pipe RX batching)**:
@@ -315,20 +324,20 @@
   - Raised A-MPDU in-flight cap to `min(128, ring - 16)` and added `IWX_TXPATH_FLUSH` (`agg_flush()`) on DELBA before renegotiating to prevent SSN desync.
   - Added batched RX pipe writes (`PipeServer::queue_send` / `flush_send`, 32 KiB auto-flush + post-`dev.poll()` flush) and raised the Named Pipe buffer to 256 KiB for all cards and modes.
 - **Multi-vendor register proxy (`driver/regproxy`)**:
-  - Updated `regproxy.c` to select the largest memory BAR (鈮?8 KiB), supporting Intel (8 KiB BAR0), Realtek RTL8852CE/BE (1 MiB BAR2), and MediaTek MT7921/MT7922 (1 MiB BAR0) with zero change on Intel hardware.
+  - Updated `regproxy.c` to select the largest memory BAR (≥ 8 KiB), supporting Intel (8 KiB BAR0), Realtek RTL8852CE/BE (1 MiB BAR2), and MediaTek MT7921/MT7922 (1 MiB BAR0) with zero change on Intel hardware.
 - **Documentation**:
   - Added `CHANGELOG.md` and standalone multi-vendor compatibility matrices [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) / [`docs/COMPATIBILITY.zh-CN.md`](docs/COMPATIBILITY.zh-CN.md).
 
 ---
 
-## v0.1.22 (Stable / 棣栦釜绋冲畾鐗? 鈥?2026-11-22
+## v0.1.22 (Stable / 首个稳定版) — 2026-11-22
 
 > SHA-256: `5d7545d61b8c546828bba2ad4fe13bd101cacfeaa7cf9b3853cf004eac9e77cf`
 
-### 涓枃
-- **瀹㈡埛绔?UI锛?11锛?*锛氫慨澶?Windows 娣辫壊妯″紡涓嬩富绐楀彛涓庡彂閫佺獥鍙ｉ檮杩戣澶囧悕榛戝瓧鐪嬩笉娓咃紱淇瀵圭 `model` 涓虹┖鏃?iPad / Mac 浠嶆樉绀烘墜鏈哄浘鏍囥€?
-- **瀹為獙鎬?A-MPDU 鍙戦€侊紙#4锛?*锛氬紑鍚?`--aggregate` 鏃朵负鐩戝惉 MAC 璁剧疆 AWDL BSSID 涓庡熀纭€ ACK 閫熺巼锛涙敹绱?TLC 楂?MCS 鎺╃爜锛涙柊澧炶仛鍚堝崟甯х姸鎬佽瘖鏂棩蹇楀強鏃?Block Ack 鑷姩鍥為€€鏅€氬崟甯ч槦鍒椾繚鎶わ紙`iwx_selftest` 瑕嗙洊锛夈€?
-- **妯″潡鍖栧缃戝崱鏋舵瀯**锛氭柊澧?`iwxradio/src/radio_backend.h` 鍚庣鑳藉姏濂戠害涓庣紪璇戞湡鏍￠獙锛岀Щ闄?`KernelDevice` 鐨?Intel 绌烘々锛屾柊澧?`radio_backend_test.h` 绂荤嚎娴嬭瘯銆?
+### 中文
+- **客户端 UI（#11）**：修复 Windows 深色模式下主窗口与发送窗口附近设备名黑字看不清；修复对端 `model` 为空时 iPad / Mac 仍显示手机图标。
+- **实验性 A-MPDU 发送（#4）**：开启 `--aggregate` 时为监听 MAC 设置 AWDL BSSID 与基础 ACK 速率；收紧 TLC 高 MCS 掩码；新增聚合单帧状态诊断日志及无 Block Ack 自动回退普通单帧队列保护（`iwx_selftest` 覆盖）。
+- **模块化多网卡架构**：新增 `iwxradio/src/radio_backend.h` 后端能力契约与编译期校验，移除 `KernelDevice` 的 Intel 空桩，新增 `radio_backend_test.h` 离线测试。
 
 ### English
 - **Client UI (#11)**: Fixed black device names in Windows dark mode in Main/Send windows; fixed iPad/Mac icon fallback when `model` is null.
@@ -337,39 +346,39 @@
 
 ---
 
-## v0.1.21 鈥?2026-11-22
+## v0.1.21 — 2026-11-22
 
 > SHA-256: `58c72b9a0fe73dbe481edfbfbdf4a6a6b7ddbe1e49436cbec6e83801bdb1cd41`
 
-- 鏂板 `app/service/CardCatalog.cs` 缁熶竴缃戝崱妗ｆ涓庤兘鍔涙娊璞★紝瑙ｈ€?`Card.cs` / `Supervisor.cs` 鐨?Intel 纭紪鐮侊紝骞跺皢 `NekoDropService.exe --selftest` 鎺ュ叆姣忔 CI 鏋勫缓銆?/ Introduced `CardCatalog.cs` multi-vendor adapter profiles & capability abstractions, decoupling `Card.cs` and `Supervisor.cs`, wired `NekoDropService.exe --selftest` into CI.
+- 新增 `app/service/CardCatalog.cs` 统一网卡档案与能力抽象，解耦 `Card.cs` / `Supervisor.cs` 的 Intel 硬编码，并将 `NekoDropService.exe --selftest` 接入每次 CI 构建。 / Introduced `CardCatalog.cs` multi-vendor adapter profiles & capability abstractions, decoupling `Card.cs` and `Supervisor.cs`, wired `NekoDropService.exe --selftest` into CI.
 
 ---
 
-## v0.1.20 鈥?2026-11-22
+## v0.1.20 — 2026-11-22
 
 > SHA-256: `16a19a5dd1790e7ef35601bb77fb4b6ff21caece31bc44c00e2ccbb5163c2e25`
 
-- 淇 `#4` 浠ｇ悊鐜涓嬫鏌ユ洿鏂拌Е鍙?GitHub API HTTP 403 闄愭祦锛堟柊澧炴湰鍦?`ETag` / `304` 缂撳瓨銆?5s 瓒呮椂銆乣releases.atom` 鍥為€€鍙婅缃〉銆屾墦寮€涓嬭浇椤点€嶆寜閽級銆?/ Fixed #4 update check HTTP 403 rate-limit behind proxies (local `ETag` cache, 15s timeout, `releases.atom` fallback, Open Releases button).
-- `installer/report.ps1` 鏂板鍏ㄥ搧鐗屾棤绾跨綉鍗¤瘑鍒垎绫讳笌 `-SelfTest`锛屾柊澧?`docs/HARDWARE.md` 澶氱綉鍗℃灦鏋勬枃妗ｃ€?/ Added multi-vendor Wi-Fi classification & `-SelfTest` to `installer/report.ps1`, plus `docs/HARDWARE.md`.
+- 修复 `#4` 代理环境下检查更新触发 GitHub API HTTP 403 限流（新增本地 `ETag` / `304` 缓存、15s 超时、`releases.atom` 回退及设置页「打开下载页」按钮）。 / Fixed #4 update check HTTP 403 rate-limit behind proxies (local `ETag` cache, 15s timeout, `releases.atom` fallback, Open Releases button).
+- `installer/report.ps1` 新增全品牌无线网卡识别分类与 `-SelfTest`，新增 `docs/HARDWARE.md` 多网卡架构文档。 / Added multi-vendor Wi-Fi classification & `-SelfTest` to `installer/report.ps1`, plus `docs/HARDWARE.md`.
 
 ---
 
-## v0.1.19 鈥?2026-11-22
+## v0.1.19 — 2026-11-22
 
-> SHA-256: `6bba6037bb649b57c11aa3edeec5614a04864fbf798d3b28e647f3325ab12f4f`锛堝凡鍦?#11 AX210 鐪熸満楠岃瘉锛?
+> SHA-256: `6bba6037bb649b57c11aa3edeec5614a04864fbf798d3b28e647f3325ab12f4f`（已在 #11 AX210 真机验证）
 
-- 淇 `#11`锛歚nekodrop` TAP 缃戝崱璺冪偣鐢?`75` 鎻愬崌鑷?`500`锛屼笉鍐嶆姠鍗犵瑪璁版湰鏈夌嚎浠ュお缃戦粯璁よ矾鐢憋紱淇琚姩淇￠亾 30 绉掕鍒ら噸鍚惊鐜€?/ Fixed #11: raised TAP metric `75 鈫?500` so Ethernet keeps routing priority; fixed 30s passive-channel bounce loop (hardware-verified on AX210).
-
----
-
-## v0.1.18 鈥?2026-11-21
-
-> SHA-256: `3c02105f7b4f7d3607e19cc46b9e217e0d08a4643f35852f8c7a3e7f3a1f58d1`锛堝喎鍚姩宸插湪 #4 AX200 鐪熸満楠岃瘉锛?
-
-- 淇 `#4` 鍐峰惎鍔ㄥ崱浣?6 鍒嗛挓闂锛堝喎鍚姩 `radio ready` 瀹炴祴闄嶈嚦 2.1 绉掞級锛涗慨澶?`#20` Win10 娈嬬暀骞界伒 `Not Present` TAP 閫傞厤鍣紱纭 `#18` Win10 22H2 鍙屽悜鍙敤銆?/ Fixed #4 6-minute cold-boot stall (verified 2.1s on AX200); fixed #20 Win10 phantom TAP adapter; confirmed #18 Win10 22H2 working.
+- 修复 `#11`：`nekodrop` TAP 网卡跃点由 `75` 提升至 `500`，不再抢占笔记本有线以太网默认路由；修复被动信道 30 秒误判重启循环。 / Fixed #11: raised TAP metric `75 → 500` so Ethernet keeps routing priority; fixed 30s passive-channel bounce loop (hardware-verified on AX210).
 
 ---
 
-## v0.1.0 鈥?v0.1.17 (2026-11-17 鈥?2026-11-21)
+## v0.1.18 — 2026-11-21
 
-- 鍒濆鍙戝竷涓庢棭鏈熷疄鏈洪獙璇侀噷绋嬬锛欼ntel AX201 / AX200 / AX210 / AX211 鍙屽悜 AirDrop + Wi-Fi 鍏卞瓨銆乄indows 10 UMDF 2.31 鍏煎锛?3/#12/#18锛夈€丄X210 鏃?PNVM DMA 棰勭暀涓?`nic_config` 淇锛?2/#7/#8锛夈€?28 椤?TX 鐜笌鑷姩鎵╁睍 AWE 姹狅紙#11锛夈€佷竴閿瘖鏂姤鍛?`report.ps1`锛坴0.1.7锛夈€佸疄楠屾€ч珮閫熷彂閫?`--tx-window 48`锛?9 瀹炴祴鎻愰€?+41%锛変笌瀹為獙鎬?A-MPDU 鍙戦€佸垵鐗堬紙v0.1.15锛夈€?
+> SHA-256: `3c02105f7b4f7d3607e19cc46b9e217e0d08a4643f35852f8c7a3e7f3a1f58d1`（冷启动已在 #4 AX200 真机验证）
+
+- 修复 `#4` 冷启动卡住 6 分钟问题（冷启动 `radio ready` 实测降至 2.1 秒）；修复 `#20` Win10 残留幽灵 `Not Present` TAP 适配器；确认 `#18` Win10 22H2 双向可用。 / Fixed #4 6-minute cold-boot stall (verified 2.1s on AX200); fixed #20 Win10 phantom TAP adapter; confirmed #18 Win10 22H2 working.
+
+---
+
+## v0.1.0 – v0.1.17 (2026-11-17 – 2026-11-21)
+
+- 初始发布与早期实机验证里程碑：Intel AX201 / AX200 / AX210 / AX211 双向 AirDrop + Wi-Fi 共存、Windows 10 UMDF 2.31 兼容（#3/#12/#18）、AX210 族 PNVM DMA 预留与 `nic_config` 修复（#2/#7/#8）、128 项 TX 环与自动扩展 AWE 池（#11）、一键诊断报告 `report.ps1`（v0.1.7）、实验性高速发送 `--tx-window 48`（#9 实测提速 +41%）与实验性 A-MPDU 发送初版（v0.1.15）。

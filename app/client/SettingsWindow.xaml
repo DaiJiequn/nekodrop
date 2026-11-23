@@ -112,9 +112,14 @@
                 <StackPanel>
                   <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{local:T set.hotkey}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center"/>
-                    <Border BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1" CornerRadius="4" Padding="6,1" Margin="8,0,0,0">
-                      <TextBlock Text="Win + Shift + D" FontFamily="Consolas" FontSize="11"/>
-                    </Border>
+                    <!-- Click, then press the new keys (Esc cancels) -->
+                    <Button x:Name="HotkeyRecorder" Style="{StaticResource WinButton}" Padding="8,2" Margin="8,0,0,0" MinWidth="110"
+                            Click="HotkeyRecorder_Click" PreviewKeyDown="HotkeyRecorder_KeyDown" LostKeyboardFocus="HotkeyRecorder_LostFocus"
+                            ToolTip="{local:T set.hotkeyRecordTip}">
+                      <TextBlock x:Name="HotkeyText" FontFamily="Consolas" FontSize="11"/>
+                    </Button>
+                    <Button Style="{StaticResource QuietButton}" Content="{local:T set.hotkeyReset}" Click="HotkeyReset_Click"
+                            Padding="6,2" Margin="4,0,0,0"/>
                   </StackPanel>
                   <TextBlock Text="{local:T set.hotkeyHint}" Style="{StaticResource Sub12}" Margin="0,2,0,0"/>
                 </StackPanel>

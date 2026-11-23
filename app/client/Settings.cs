@@ -27,8 +27,10 @@ public sealed class Settings
     public bool PreviewUpdates { get; set; } = true;
     /// <summary>This PC's icon on the radar: "auto" (a laptop when there is a battery), "desktop" or "laptop".</summary>
     public string HubIcon { get; set; } = "auto";
-    /// <summary>Win+Shift+D opens the send window (with Explorer's selection) or the main window.</summary>
+    /// <summary>The global shortcut (Win+Shift+D unless recorded otherwise) opens the send window (with Explorer's selection) or the main window.</summary>
     public bool Hotkey { get; set; } = true;
+    /// <summary>The global shortcut's keys, as the user recorded them ("Ctrl+Alt+K").</summary>
+    public string HotkeyKeys { get; set; } = NekoDrop.Hotkey.Default;
     /// <summary>Nearby devices as a "radar" or a "list".</summary>
     public string DeviceView { get; set; } = "radar";
     /// <summary>

@@ -42,7 +42,7 @@
 
 ## 界面截图
 
-Windows 11 风格的自绘窗口：附近的 iPhone 和 Mac 显示在雷达上（也可以切换成列表），标题栏里有状态和快捷开关，设置分四个标签页，主题色只有一种、可以切换（也可以选多彩），支持浅色和深色。
+一个从托盘旁边弹出的小面板（点托盘图标或按快捷键打开，点别处自动收起）：附近的 iPhone 和 Mac 显示在雷达上（也可以切换成列表），标题栏里有状态和快捷开关，设置分四个标签页，主题色只有一种、可以切换（也可以选多彩），支持浅色和深色。接收文件时「本机」外圈转动显示进度，保存完成后变绿打勾。全局快捷键默认 Win+Shift+D，可以在设置里录入自己的组合键。
 
 <table>
   <tr>
@@ -51,7 +51,7 @@ Windows 11 风格的自绘窗口：附近的 iPhone 和 Mac 显示在雷达上�
     <td align="center"><img src="docs/screenshots/send.png" width="230" alt="发送窗口"><br><sub>文件右键 →「用 nekodrop 发送」</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/settings.png" width="280" alt="设置"><br><sub>设置：主题色、Win+Shift+D</sub></td>
+    <td align="center"><img src="docs/screenshots/settings.png" width="280" alt="设置"><br><sub>设置：主题色、自定义快捷键</sub></td>
     <td align="center"><img src="docs/screenshots/wifi.png" width="250" alt="Wi-Fi 窗口"><br><sub>nekodrop 自己的 Wi-Fi</sub></td>
     <td align="center"><img src="docs/screenshots/tray.png" width="260" alt="托盘菜单"><br><sub>托盘菜单</sub></td>
   </tr>
@@ -158,7 +158,7 @@ nekodrop 启动一分钟后检查 GitHub 上有没有新版本，之后每 6 小
 | 想做什么 | 怎么做 |
 |---|---|
 | 接收 | 保持 **允许接收** 勾选。在 iPhone 上点 分享 → AirDrop，选你电脑的名字 |
-| 发送 | 右键文件 → **用 nekodrop 发送** → 选设备；也可以把文件拖到主窗口 |
+| 发送 | 右键文件 → **用 nekodrop 发送** → 选设备；也可以在资源管理器里选中文件后按快捷键（默认 Win+Shift+D） |
 | 换 Wi-Fi | 托盘 → **Wi-Fi…**，选网络、输入密码、点连接 |
 | 连隐藏网络 | **Wi-Fi…** → *隐藏网络*，输入网络名和密码 |
 | 酒店 Wi-Fi 登录 | 直接连接，登录页会自动在浏览器里打开 |

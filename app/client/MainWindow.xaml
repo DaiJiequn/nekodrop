@@ -6,7 +6,7 @@
         Title="nekodrop" Width="420" Height="700"
         WindowStartupLocation="Manual" ResizeMode="NoResize" ShowInTaskbar="False" AllowDrop="True"
         Foreground="{DynamicResource Text}" FontFamily="{DynamicResource UiFont}" FontSize="13">
-  <Grid>
+  <Grid x:Name="Root">
     <Grid.RowDefinitions>
       <RowDefinition Height="40"/>
       <RowDefinition Height="Auto"/>

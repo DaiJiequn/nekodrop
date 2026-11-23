@@ -106,10 +106,29 @@ public sealed class RadarPanel : Panel
             SetBubbleAbove(InternalChildren[i], above);
             PlaceBubble(InternalChildren[i], above);
             // The icon is at the top of the box: its center is padding and half an icon down.
-            InternalChildren[i].Arrange(new Rect(p.X - RadarGeometry.NodeWidth / 2, p.Y - 4 - RadarGeometry.Node / 2,
-                                                 RadarGeometry.NodeWidth, RadarGeometry.NodeHeight));
+            var child = InternalChildren[i];
+            var at = new Point(p.X - RadarGeometry.NodeWidth / 2, p.Y - 4 - RadarGeometry.Node / 2);
+            child.Arrange(new Rect(at, new Size(RadarGeometry.NodeWidth, RadarGeometry.NodeHeight)));
+            Glide(child, at);
         }
         return final;
+    }
+
+    readonly System.Runtime.CompilerServices.ConditionalWeakTable<UIElement, object> _was = new();
+
+    /// <summary>A device whose place changed (another came or went) slides there from where it was.</summary>
+    void Glide(UIElement child, Point at)
+    {
+        if (_was.TryGetValue(child, out var old) && old is Point from && (from - at).Length > 0.5 && !Motion.Reduced)
+        {
+            var move = child.RenderTransform as TranslateTransform ?? new TranslateTransform();
+            child.RenderTransform = move;
+            var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+            var t = TimeSpan.FromMilliseconds(380);
+            move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(from.X - at.X + move.X, 0, t) { EasingFunction = ease });
+            move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(from.Y - at.Y + move.Y, 0, t) { EasingFunction = ease });
+        }
+        _was.AddOrUpdate(child, at);
     }
 }
 
@@ -122,7 +141,7 @@ public sealed class ProgressRing : FrameworkElement
 {
     public static readonly DependencyProperty ProgressProperty = DependencyProperty.Register(
         nameof(Progress), typeof(double), typeof(ProgressRing),
-        new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender, (d, _) => ((ProgressRing)d).Spin()));
+        new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender, (d, e) => ((ProgressRing)d).Moved((double)e.OldValue, (double)e.NewValue)));
     public static readonly DependencyProperty StrokeProperty = DependencyProperty.Register(
         nameof(Stroke), typeof(Brush), typeof(ProgressRing),
         new FrameworkPropertyMetadata(Brushes.DodgerBlue, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -134,6 +153,12 @@ public sealed class ProgressRing : FrameworkElement
         new FrameworkPropertyMetadata(3.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public double Progress { get => (double)GetValue(ProgressProperty); set => SetValue(ProgressProperty, value); }
+
+    /// <summary>The share drawn: follows Progress linearly over a quarter second, so the arc never jumps.</summary>
+    static readonly DependencyProperty ShownProperty = DependencyProperty.Register(
+        "Shown", typeof(double), typeof(ProgressRing), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    double Shown => (double)GetValue(ShownProperty);
+
     public Brush Stroke { get => (Brush)GetValue(StrokeProperty); set => SetValue(StrokeProperty, value); }
     public Brush? Track { get => (Brush?)GetValue(TrackProperty); set => SetValue(TrackProperty, value); }
     public double Thickness { get => (double)GetValue(ThicknessProperty); set => SetValue(ThicknessProperty, value); }
@@ -149,6 +174,13 @@ public sealed class ProgressRing : FrameworkElement
     }
 
     bool Waiting => Progress <= 0;
+
+    void Moved(double from, double to)
+    {
+        Spin();
+        if (Motion.Reduced || to <= 0 || to < from) { BeginAnimation(ShownProperty, null); SetValue(ShownProperty, to); return; }
+        BeginAnimation(ShownProperty, new DoubleAnimation(to, TimeSpan.FromMilliseconds(250)), HandoffBehavior.SnapshotAndReplace);
+    }
 
     void Spin()
     {
@@ -172,7 +204,7 @@ public sealed class ProgressRing : FrameworkElement
         var r = (size - Thickness) / 2;
         var c = new Point(ActualWidth / 2, ActualHeight / 2);
         if (Track is not null) dc.DrawEllipse(null, new Pen(Track, Thickness), c, r, r);
-        var share = Waiting ? 0.22 : Math.Min(1, Progress);
+        var share = Waiting ? 0.22 : Math.Min(1, Math.Max(0.001, Shown));
         var pen = new Pen(Stroke, Thickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         if (share >= 0.999) { dc.DrawEllipse(null, pen, c, r, r); return; }
         var end = -Math.PI / 2 + 2 * Math.PI * share;
@@ -258,4 +290,49 @@ public static class Motion
     /// <summary>Set by --snapshot: the build machine has animations off, and the pictures should show the ripple.</summary>
     public static bool ForceOn { get; set; }
     public static bool Reduced => !ForceOn && !SystemParameters.ClientAreaAnimation;
+
+    static readonly IEasingFunction Out = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+    /// <summary>Fades in while sliding up by <paramref name="rise"/> pixels (a panel opening, a view switching).</summary>
+    public static void FadeIn(UIElement e, double rise, double ms = 220)
+    {
+        if (Reduced) return;
+        var t = TimeSpan.FromMilliseconds(ms);
+        var move = e.RenderTransform as TranslateTransform ?? new TranslateTransform();
+        e.RenderTransform = move;
+        e.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, t) { EasingFunction = Out });
+        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(rise, 0, t) { EasingFunction = Out });
+    }
+
+    /// <summary>Fades out while sliding down, then runs <paramref name="done"/>.</summary>
+    public static void FadeOut(UIElement e, double fall, Action done, double ms = 140)
+    {
+        if (Reduced) { done(); return; }
+        var t = TimeSpan.FromMilliseconds(ms);
+        var move = e.RenderTransform as TranslateTransform ?? new TranslateTransform();
+        e.RenderTransform = move;
+        var fade = new DoubleAnimation(1, 0, t) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn } };
+        fade.Completed += (_, _) =>
+        {
+            done();
+            e.BeginAnimation(UIElement.OpacityProperty, null);
+            move.BeginAnimation(TranslateTransform.YProperty, null);
+        };
+        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(0, fall, t));
+        e.BeginAnimation(UIElement.OpacityProperty, fade);
+    }
+
+    /// <summary>A short swell and settle (1 → 1.15 → 1), for a moment worth noticing.</summary>
+    public static void Pop(FrameworkElement e)
+    {
+        if (Reduced) return;
+        var s = e.RenderTransform as ScaleTransform ?? new ScaleTransform();
+        e.RenderTransform = s;
+        e.RenderTransformOrigin = new Point(0.5, 0.5);
+        var a = new DoubleAnimationUsingKeyFrames { Duration = TimeSpan.FromMilliseconds(420) };
+        a.KeyFrames.Add(new EasingDoubleKeyFrame(1.15, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(160)), Out));
+        a.KeyFrames.Add(new EasingDoubleKeyFrame(1, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(420)), new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 }));
+        s.BeginAnimation(ScaleTransform.ScaleXProperty, a);
+        s.BeginAnimation(ScaleTransform.ScaleYProperty, a);
+    }
 }

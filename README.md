@@ -42,7 +42,7 @@
 
 ## Screenshots
 
-A Windows 11 window with its own title bar: nearby iPhones and Macs on a radar (or as a list), the status and quick controls in the title bar, settings in four tabs, one accent colour you can switch (or colourful), light and dark.
+A small panel that slides up beside the tray (click the tray icon, or press the shortcut) and goes away when you click elsewhere: nearby iPhones and Macs on a radar (or as a list), the status and quick controls in the title bar, settings in four tabs, one accent colour you can switch (or colourful), light and dark. While files come in, a progress ring turns around "This PC", which turns green with a check mark when they are saved. The global shortcut is Win+Shift+D unless you record your own in Settings.
 
 <table>
   <tr>
@@ -51,7 +51,7 @@ A Windows 11 window with its own title bar: nearby iPhones and Macs on a radar (
     <td align="center"><img src="docs/screenshots/send.png" width="230" alt="Send window"><br><sub>Right-click a file → Send with nekodrop</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/settings.png" width="280" alt="Settings"><br><sub>Settings: accent colour, Win+Shift+D</sub></td>
+    <td align="center"><img src="docs/screenshots/settings.png" width="280" alt="Settings"><br><sub>Settings: accent colour, your own shortcut</sub></td>
     <td align="center"><img src="docs/screenshots/wifi.png" width="250" alt="Wi-Fi window"><br><sub>nekodrop's own Wi-Fi</sub></td>
     <td align="center"><img src="docs/screenshots/tray.png" width="260" alt="Tray menu"><br><sub>Tray menu</sub></td>
   </tr>
@@ -158,7 +158,7 @@ Use *Settings → Apps → nekodrop → Uninstall*, or run `uninstall.ps1` in th
 | I want to… | Do this |
 |---|---|
 | Receive | Keep **Allow receiving** on. On the iPhone, tap Share → AirDrop and pick your PC's name |
-| Send | Right-click files → **Send with nekodrop** → pick a device. Or drag files onto the main window |
+| Send | Right-click files → **Send with nekodrop** → pick a device. Or select files in Explorer and press the shortcut (Win+Shift+D by default) |
 | Change Wi-Fi | Tray → **Wi-Fi…**: pick a network, enter the password, Connect |
 | Hidden network | **Wi-Fi…** → *Hidden network*: type the SSID and password |
 | Sign in to hotel Wi-Fi | Connect; the sign-in page opens in your browser by itself |

@@ -204,11 +204,18 @@ public partial class MainWindow : Window
     /// <summary>Hides the panel (it is kept, with what it shows).</summary>
     public void Shut()
     {
+        if (_closing) return;
         StatusPopup.IsOpen = false;
         ShutAt = DateTime.UtcNow;
-        Hide();
-        A.WindowClosed();
+        _closing = true;
+        // Slides down and fades, then hides.
+        Motion.FadeOut(Root, 14, () => { _closing = false; Hide(); A.WindowClosed(); });
     }
+
+    bool _closing;
+
+    /// <summary>Comes out: its content rises and fades in from the taskbar's side.</summary>
+    public void Reveal() => Motion.FadeIn(Root, 18, 260);
 
     /// <summary>
     /// In the bottom-right corner of the work area of the screen under the
