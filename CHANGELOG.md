@@ -6,6 +6,24 @@
 
 ---
 
+## v0.1.37 (Hourly / Pre-release) — 2026-11-24
+
+### 中文
+- **修复 iPhone 刚发现电脑、电脑又从列表里消失（[#32](https://github.com/zheznanohana/nekodrop/issues/32)、[#35](https://github.com/zheznanohana/nekodrop/issues/35)）**：网卡启动时，托盘程序先启动 AirDrop 引擎，过一两秒 `awdl0` 才建好。托盘程序每 5 秒检查一次 `awdl0`，把「之前没有、现在有了」当成「换了一个」，于是把刚开始工作的引擎杀掉重启。这正好发生在 iPhone 刚发现电脑的那几秒：引擎退出时发出 mDNS 下线包，iPhone 把电脑删掉，要关掉分享面板重开才能再看到。两份日志里都能看到：`awdl0` 建好约 4 秒后引擎重新打出 `ready`。引擎自己每秒都会检查 `awdl0`，出现后会自己开始接收，所以现在不再重启它。**只编译测试过，没有真机验证。**
+- **网卡找不到连续 DMA 内存时，等一会儿再重试（[#30](https://github.com/zheznanohana/nekodrop/issues/30)）**：以前每 2.7 秒重试一次，6 次都失败后就把网卡还给 Windows；而同一台电脑过 16 秒或 90 秒再启动时都成功了。现在依次等 5、10、20、30、30 秒再重试。**只编译测试过，没有真机验证。**
+- **蓝牙与 Wi-Fi 均衡共存转正，Intel 网卡始终打开（[#26](https://github.com/zheznanohana/nekodrop/pull/26)、[#4](https://github.com/zheznanohana/nekodrop/issues/4)、[#35](https://github.com/zheznanohana/nekodrop/issues/35)）**：电脑靠网卡自带的蓝牙发出信标叫醒附近的 iPhone。AX200 上打开后，设备从一两分钟找不到变成几秒内出现（感谢 XXD051030）；AX211 上打开后也没有人报告变差。设置里的开关已删除，旧配置里的值会被忽略。
+- **恢复「Wi-Fi 和 AirDrop 不在同一信道时按苹果的方式分时」开关的说明文字**：0.1.35 去掉 A-MPDU 开关时误删了它的文案，设置里显示的是键名本身。[#35](https://github.com/zheznanohana/nekodrop/issues/35) 的 AX211 上，nekodrop 连的 Wi-Fi 在 56、AirDrop 在 149 时，不开它一个 AirDrop 帧都收不到，开了就正常；README 常见问题里写明了什么时候该打开。它仍是实验性开关，默认关闭（AX200 上传输速度时快时慢）。
+- **修复卸载后残留快捷方式、安装目录和「添加/删除程序」里的条目（[#38](https://github.com/zheznanohana/nekodrop/pull/38)，感谢 GGBond-cer）**：卸载脚本结束安装目录里的进程时，把 Inno Setup 自己的卸载程序也结束了，它就没法完成后面的清理。
+
+### English
+- **Fixed the PC dropping out of the iPhone's list right after the iPhone found it ([#32](https://github.com/zheznanohana/nekodrop/issues/32), [#35](https://github.com/zheznanohana/nekodrop/issues/35))**: when the card starts, the tray app starts the AirDrop engine a second or two before `awdl0` exists. Its 5-second check took "no awdl0, now awdl0" for a new interface and restarted the engine that had just begun working, exactly while the iPhone was finding the PC: the engine's mDNS goodbye made the iPhone drop it until the share sheet was reopened. Both logs show the engine printing `ready` again about 4 s after `awdl0` appeared. The engine checks `awdl0` every second and starts receiving on its own, so it is no longer restarted then. **CI-tested only, not on hardware.**
+- **When the card finds no contiguous DMA memory, the restart waits ([#30](https://github.com/zheznanohana/nekodrop/issues/30))**: six restarts 2.7 s apart all failed and the card went back to Windows, while a start 16 s or 90 s later worked on the same PC. It now waits 5, 10, 20, 30 and 30 s. **CI-tested only, not on hardware.**
+- **Balanced Bluetooth coexistence graduates and is always on for Intel cards ([#26](https://github.com/zheznanohana/nekodrop/pull/26), [#4](https://github.com/zheznanohana/nekodrop/issues/4), [#35](https://github.com/zheznanohana/nekodrop/issues/35))**: the PC wakes nearby iPhones with a beacon from the card's own Bluetooth. On AX200, devices appeared within seconds instead of minutes (thanks to XXD051030); on AX211 nobody reported it worse. The switch is gone; an old config's value is ignored.
+- **The "Apple-style time sharing when Wi-Fi and AirDrop use different channels" switch has its text back**: it was removed by mistake with the A-MPDU switch in 0.1.35, so the checkbox showed its key. On [#35](https://github.com/zheznanohana/nekodrop/issues/35)'s AX211, with nekodrop's Wi-Fi on 56 and AirDrop on 149, the PC heard no AirDrop frame without it and worked with it; the README troubleshooting table says when to turn it on. It stays experimental and off by default (speeds went both up and down on an AX200).
+- **Fixed the uninstaller leaving shortcuts, the install folder and the Add/Remove Programs entry behind ([#38](https://github.com/zheznanohana/nekodrop/pull/38), thanks to GGBond-cer)**: the script's sweep of processes running from the install folder also killed Inno Setup's own uninstaller, which then could not finish.
+
+---
+
 ## v0.1.36 (Hourly / Pre-release) — 2026-11-23
 
 ### 中文
