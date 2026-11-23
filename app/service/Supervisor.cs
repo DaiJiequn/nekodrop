@@ -42,6 +42,8 @@ public sealed class Supervisor : IDisposable
     DateTime _lastUse = DateTime.UtcNow, _lastData = DateTime.UtcNow, _startedAt;
     long _rxToUs;
     int _restarts;
+    /// <summary>When the next restart may run after the radio found no contiguous DMA memory (#30).</summary>
+    DateTime _retryAt = DateTime.MinValue;
     CancellationTokenSource _cts = new();
 
     public RadioState State { get; private set; } = RadioState.Off;
@@ -304,6 +306,7 @@ public sealed class Supervisor : IDisposable
             if (_wanted && State is RadioState.On or RadioState.Starting) return;
             _wanted = true;
             _restarts = 0;
+            _retryAt = DateTime.MinValue;
         }
         Say($"starting: {why}");
         // The peer's last channel even without a country (#4: the country only
@@ -691,6 +694,22 @@ public sealed class Supervisor : IDisposable
             if ((radioDown || awdldDown || startStuck) && (State != RadioState.Starting || startStuck) &&
                 _launchGate.CurrentCount > 0)
             {
+                // Out of contiguous DMA memory (#30): six restarts 2.7 s apart all failed
+                // the same way, while a start 16 s or 90 s later worked. Back off 5, 10, 20,
+                // 30, 30 s before each restart, so Windows has time to free memory; every
+                // other failure restarts at once as before.
+                if ((_detail ?? "").Contains("out of DMA memory") && _restarts < 5)
+                {
+                    if (_retryAt == DateTime.MinValue)
+                    {
+                        var wait = TimeSpan.FromSeconds(Math.Min(30, 5 << _restarts));
+                        _retryAt = DateTime.UtcNow + wait;
+                        Say($"the radio found no contiguous DMA memory; trying again in {wait.TotalSeconds:0} s");
+                        continue;
+                    }
+                    if (DateTime.UtcNow < _retryAt) continue;
+                }
+                _retryAt = DateTime.MinValue;
                 if (++_restarts > 5)
                 {
                     Say("the radio keeps failing; giving the card back");
