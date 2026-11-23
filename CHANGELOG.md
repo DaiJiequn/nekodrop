@@ -9,12 +9,16 @@
 ## v0.1.38 (Hourly / Pre-release) — 2026-11-24
 
 ### 中文
-- **Realtek RTL8852CE 不再一直待在 2.4 GHz（[#32](https://github.com/zheznanohana/nekodrop/issues/32)）**：nekodrop 让每张网卡先在 6 信道启动，等 radio 报告 iPhone 用的 5 GHz 信道（`event: peer-channel 44` 或 `149`）后再搬过去。Intel 和 MediaTek 的 radio 都会报，RTL8852CE 的不会，所以它一直停在 2.4 GHz 的 6 信道、20 MHz 上，而 iPhone 在这个信道上只待很少的时隙：#32 里电脑发 1 MB 要 30 秒左右，还经常失败。winawdl 上游让这张卡跑在 44 信道，发送 9–14 MB/s。现在构建时给 RTL8852CE 的 radio 打补丁，按 Intel 那边同样的规则，从 iPhone 的 AWDL 帧里读出它的 5 GHz 信道并报告，服务就会搬过去，并记住下次直接从那里启动。之前说「这张卡的 radio 没有速率控制和聚合发送」是错的，它其实都有，慢是因为信道。**只编译测试过，没有真机验证。**
-- **搬信道前等传输结束，对 Realtek 和 MediaTek 也生效**：服务原本靠 Intel radio 的 `rx:` 统计行判断有没有在传数据，另外两家的 radio 不打这一行，所以搬信道不会等传输结束。现在也看 awdld 的 AWDL 数据计数。
+- 修复 Realtek RTL8852CE 一直停在 2.4 GHz、传输很慢的 bug（[#32](https://github.com/zheznanohana/nekodrop/issues/32)）
+- 修复 Realtek / MediaTek 网卡传输中途搬信道断开的 bug
+- 更正文档：AX210 独立网卡早已可用
 
 ### English
-- **The Realtek RTL8852CE no longer stays on 2.4 GHz ([#32](https://github.com/zheznanohana/nekodrop/issues/32))**: nekodrop starts every card on channel 6 and moves once the radio reports the iPhone's 5 GHz channel (`event: peer-channel 44` or `149`). The Intel and MediaTek radios report it; the RTL8852CE's did not, so it stayed on 2.4 GHz channel 6 at 20 MHz, where the iPhone spends few slots: in #32, 1 MB to an iPhone took about 30 s and often failed. winawdl runs this card on channel 44 at 9-14 MB/s sending. A build-time patch now has the RTL8852CE radio read the iPhone's 5 GHz channel from its AWDL frames by the same rule as the Intel radio and report it, so the service moves there and starts there next time. What we said before, that this radio has no rate control or aggregated sending, was wrong: it has both; the channel made it slow. **CI-tested only, not on hardware.**
-- **A channel move waits for a transfer to end on Realtek and MediaTek cards too**: the service judged transfers by the Intel radio's `rx:` line, which the other two radios do not print, so a move did not wait. It now also watches awdld's AWDL data counter.
+- Fixed the Realtek RTL8852CE staying on 2.4 GHz and transferring slowly ([#32](https://github.com/zheznanohana/nekodrop/issues/32))
+- Fixed Realtek / MediaTek cards changing channel in the middle of a transfer
+- Docs: the discrete AX210 has worked for a while
+
+> 只在 CI 上测过，没有真机验证。 / CI-tested only, not on hardware.
 
 ---
 
