@@ -335,14 +335,17 @@ public sealed class App : Application
                 root.UpdateLayout();
             }
             Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-            var visual = new System.Windows.Media.DrawingVisual();
-            using (var dc = visual.RenderOpen())
-            {
-                if (w is not TrayMenu) dc.DrawRectangle((System.Windows.Media.Brush)Resources["MicaSolid"], null, new Rect(0, 0, width, height));
-                dc.DrawRectangle(new System.Windows.Media.VisualBrush(root), null, new Rect(0, 0, width, height));
-            }
+            // The background, then the content as laid out (a VisualBrush would stretch
+            // it to the picture when the layout is taller than the window).
             var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap((int)width, (int)height, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-            bmp.Render(visual);
+            if (w is not TrayMenu)
+            {
+                var back = new System.Windows.Media.DrawingVisual();
+                using (var dc = back.RenderOpen())
+                    dc.DrawRectangle((System.Windows.Media.Brush)Resources["MicaSolid"], null, new Rect(0, 0, width, height));
+                bmp.Render(back);
+            }
+            bmp.Render(root);
             var png = new System.Windows.Media.Imaging.PngBitmapEncoder();
             png.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
             using (var fs = File.Create(Path.Combine(dir, name + ".png"))) png.Save(fs);
