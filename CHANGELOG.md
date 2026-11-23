@@ -1,8 +1,24 @@
 # Changelog / 更新日志
 
 > Release channels / 发布通道：
-> - **Stable（稳定版 / Latest）**：长期保留、经过稳定基线锁定的版本（客户端默认仅接收稳定版更新）。当前稳定版为 **`v0.1.33`**（首个稳定基线为 `v0.1.22`）。
-> - **Hourly（每时预览版 / Pre-release）**：持续迭代的自动构建预览版（客户端勾选「预览版更新」可收到）；GitHub Releases 仅滚动保留最新 4 个每时版 + 稳定版（最多 5 个 Release），历史 Git Tag 全部保留。
+> - **Stable（稳定版 / Latest）**：长期保留、经过稳定基线锁定的版本。当前稳定版为 **`v0.1.35`**（首个稳定基线为 `v0.1.22`）。
+> - **Hourly（每时预览版 / Pre-release）**：持续迭代的预览版（客户端默认也会收到；取消勾选「包括预览版」就只收稳定版）；GitHub Releases 仅滚动保留最新 4 个每时版 + 稳定版（最多 5 个 Release），历史 Git Tag 全部保留。
+
+---
+
+## v0.1.35 (Stable / 稳定版) — 2026-11-23
+
+> 自 v0.1.33 稳定版以来：A-MPDU 聚合发送转正、始终打开；修复连 iPhone 热点要试好几次（v0.1.34）。A-MPDU 有 AX201 和 AX200 的真机数据；连热点的修复只在 CI 上测过。 / Since the v0.1.33 stable release: A-MPDU sending graduates and is always on; joining an iPhone hotspot no longer takes several tries (v0.1.34). A-MPDU has hardware data from an AX201 and an AX200; the hotspot fix is CI-tested only.
+
+### 中文
+- **A-MPDU 聚合发送转正，始终打开（[#4](https://github.com/zheznanohana/nekodrop/issues/4)）**：设置里的「聚合发送（A-MPDU）」开关删除，发给 iPhone 时总是把多帧聚合发出。依据是两张网卡的真机数据、且没有人报告它让情况变差：AX201 上 30.8 MB/s（0.1.30），AX200 上 9–25 MiB/s（感谢 GGBond-cer 的大量测试）。DMA 内存不够或走内核驱动路径时仍按单帧发送，和以前一样。AX210、AX211 和 Realtek 网卡还没有 A-MPDU 的实测数据，遇到发送变慢或失败请附诊断报告反馈。旧配置里的开关值会被忽略。
+- **修复连 iPhone 热点要试好几次（[#27](https://github.com/zheznanohana/nekodrop/issues/27)，0.1.34）**：见下方 v0.1.34。
+- README 精简，并写明已在真机上确认可用的网卡和速度。
+
+### English
+- **A-MPDU sending graduates and is always on ([#4](https://github.com/zheznanohana/nekodrop/issues/4))**: the "Aggregated sending (A-MPDU)" switch is gone; sends to an iPhone are always aggregated. Two cards measured it with nobody reporting it worse: 30.8 MB/s on an AX201 (0.1.30) and 9–25 MiB/s on an AX200 (thanks to GGBond-cer's many tests). Without DMA room, or on the kernel-driver path, sending stays on single frames as before. The AX210, AX211 and Realtek cards have no A-MPDU measurements yet: if sending gets slower or fails, please post a diagnostic report. An old config's switch value is ignored.
+- **Fixed joining an iPhone hotspot taking several tries ([#27](https://github.com/zheznanohana/nekodrop/issues/27), 0.1.34)**: see v0.1.34 below.
+- A shorter README that says which cards and speeds are confirmed on hardware.
 
 ---
 
