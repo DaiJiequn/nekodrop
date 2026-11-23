@@ -40,6 +40,23 @@
 - **自动恢复**：后台服务盯着 radio、AWDL 守护进程和 AirDrop 引擎，哪个停了就重启哪个。开机自动启动。
 - **托盘程序**：中英双语，浅色界面，有系统通知和设置窗口。
 
+## 界面截图
+
+Windows 11 风格的自绘窗口：附近的 iPhone 和 Mac 显示在雷达上（也可以切换成列表），标题栏里有状态和快捷开关，设置分四个标签页，主题色只有一种、可以切换（也可以选多彩），支持浅色和深色。
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/main-radar.png" width="280" alt="主窗口：雷达"><br><sub>雷达：等待、发送中、已发送、被拒绝</sub></td>
+    <td align="center"><img src="docs/screenshots/main-list-dark.png" width="280" alt="主窗口：列表（深色）"><br><sub>列表（深色）</sub></td>
+    <td align="center"><img src="docs/screenshots/send.png" width="230" alt="发送窗口"><br><sub>文件右键 →「用 nekodrop 发送」</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/settings.png" width="280" alt="设置"><br><sub>设置：主题色、Win+Shift+D</sub></td>
+    <td align="center"><img src="docs/screenshots/wifi.png" width="250" alt="Wi-Fi 窗口"><br><sub>nekodrop 自己的 Wi-Fi</sub></td>
+    <td align="center"><img src="docs/screenshots/tray.png" width="260" alt="托盘菜单"><br><sub>托盘菜单</sub></td>
+  </tr>
+</table>
+
 ## 实机测试
 
 以下都是作者在自己的笔记本上实际测过的，不是纸上谈兵：

@@ -40,6 +40,23 @@
 - **Recover by itself.** A service watches the radio, the AWDL daemon and the AirDrop engine and restarts whatever stops. It starts with Windows.
 - **Tray app in Chinese and English**, with a light UI, system notifications and a settings window.
 
+## Screenshots
+
+A Windows 11 window with its own title bar: nearby iPhones and Macs on a radar (or as a list), the status and quick controls in the title bar, settings in four tabs, one accent colour you can switch (or colourful), light and dark.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/main-radar.png" width="280" alt="Main window: radar"><br><sub>Radar: waiting, sending, sent, declined</sub></td>
+    <td align="center"><img src="docs/screenshots/main-list-dark.png" width="280" alt="Main window: list, dark"><br><sub>List, dark</sub></td>
+    <td align="center"><img src="docs/screenshots/send.png" width="230" alt="Send window"><br><sub>Right-click a file → Send with nekodrop</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/settings.png" width="280" alt="Settings"><br><sub>Settings: accent colour, Win+Shift+D</sub></td>
+    <td align="center"><img src="docs/screenshots/wifi.png" width="250" alt="Wi-Fi window"><br><sub>nekodrop's own Wi-Fi</sub></td>
+    <td align="center"><img src="docs/screenshots/tray.png" width="260" alt="Tray menu"><br><sub>Tray menu</sub></td>
+  </tr>
+</table>
+
 ## Tested on real hardware
 
 Everything below was tested by the author on their own laptop, not just in theory:

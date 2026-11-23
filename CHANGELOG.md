@@ -6,6 +6,26 @@
 
 ---
 
+## v0.1.39 (Hourly / Pre-release) — 2026-11-24
+
+### 中文
+- 全新界面：自绘标题栏、雷达 / 列表切换、四个标签页的设置、新的 Wi-Fi 窗口和托盘菜单（[#36](https://github.com/zheznanohana/nekodrop/issues/36)）
+- 新增全局快捷键 Win+Shift+D：选中文件时直接发送，否则打开主窗口
+- 新增主题色切换：多彩、跟随系统，或蓝、靛、青、玫红
+- 新增标题栏状态面板：允许接收、切换联网方式
+- 新增文件可逐个移除、新版本横幅、各种状态下的操作按钮（重试、启动服务、前往设置等）
+
+### English
+- New interface: own title bars, radar / list view, settings in four tabs, new Wi-Fi window and tray menu ([#36](https://github.com/zheznanohana/nekodrop/issues/36))
+- New global shortcut Win+Shift+D: sends the files selected in Explorer, or opens the main window
+- New accent colour choice: colourful, same as Windows, or blue, indigo, teal, rose
+- New status panel in the title bar: allow receiving, switch the network mode
+- New: remove files one by one, an update bar, and actions for each state (retry, start the service, choose the card…)
+
+> 只在 CI 上测过（界面截图来自 CI），没有真机验证。 / CI-tested only (screenshots from CI), not on hardware.
+
+---
+
 ## v0.1.38 (Hourly / Pre-release) — 2026-11-24
 
 ### 中文
