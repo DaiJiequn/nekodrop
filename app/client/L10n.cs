@@ -166,6 +166,8 @@ public static class L
         ["wifi.switchMode"] = ("切换为「同时上网和传文件」", "Switch to Wi-Fi and AirDrop together"),
         ["wifi.openLogin"] = ("打开登录页", "Open sign-in page"),
         ["wifi.disconnect"] = ("断开连接", "Disconnect"),
+        ["set.colourful"] = ("多彩模式", "Colourful"),
+        ["set.colourfulHint"] = ("被拒绝、失败等状态用各自的颜色显示", "Declined and failed show in their own colours"),
         ["main.deviceTip"] = ("点击发送下面的文件", "Click to send the files below"),
         ["main.files"] = ("要发送的文件", "Files to send"),
         ["main.clear"] = ("清空", "Clear"),

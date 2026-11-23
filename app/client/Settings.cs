@@ -29,7 +29,10 @@ public sealed class Settings
     public bool Hotkey { get; set; } = true;
     /// <summary>Nearby devices as a "radar" or a "list".</summary>
     public string DeviceView { get; set; } = "radar";
-    /// <summary>The accent colour: "" follows Windows, otherwise blue, indigo, teal or rose.</summary>
+    /// <summary>
+    /// The accent colour: "" follows Windows, blue, indigo, teal or rose; or
+    /// "colourful", Windows' accent with each state in its own colour.
+    /// </summary>
     public string Accent { get; set; } = "";
     /// <summary>A version the user chose to skip.</summary>
     public string SkipVersion { get; set; } = "";

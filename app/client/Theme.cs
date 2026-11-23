@@ -27,9 +27,18 @@ public static class Theme
 
     public static bool Dark { get; private set; }
 
-    public static ResourceDictionary Build(string chosen = "", bool? forceDark = null)
+    /// <summary>The accent setting for colourful: Windows' accent, each state in its own colour.</summary>
+    public const string Colourful = "colourful";
+
+    /// <summary>
+    /// The colours. In the default one-colour look, only the accent (and green
+    /// for success, red for real errors) is used; colourful shows a declined
+    /// send in amber and a failed one in red, as the design drew them.
+    /// </summary>
+    public static ResourceDictionary Build(string chosen = "", bool? forceDark = null, bool colourful = false)
     {
         var dark = Dark = forceDark ?? Native.AppsUseDarkTheme();
+        colourful |= chosen == Colourful;
         Color accent, onAccent;
         if (Accents.FirstOrDefault(a => a.Key == chosen) is { } set)
         {
@@ -53,6 +62,7 @@ public static class Theme
         var card = dark ? A(Colors.White, 0.065) : A(Colors.White, 0.80);
         var cardHover = dark ? A(Colors.White, 0.11) : A(Colors.White, 0.96);
         var success = dark ? C(0xFF6CCB5F) : C(0xFF0F7B0F);
+        var amber = dark ? C(0xFFFCE100) : C(0xFF9D5D00);
         var error = dark ? C(0xFFFF99A4) : C(0xFFC42B1C);
 
         return new ResourceDictionary
@@ -76,8 +86,12 @@ public static class Theme
             // neutral grey, and only real errors are red.
             ["Success"] = B(success),
             ["SuccessBg"] = B(dark ? A(success, 0.15) : C(0xFFDFF6DD)),
-            ["Warn"] = B(text2),
-            ["WarnBg"] = B(card),
+            ["Warn"] = B(colourful ? amber : text2),
+            ["WarnBg"] = B(colourful ? (dark ? A(amber, 0.14) : C(0xFFFFF4CE)) : card),
+            // A device's send that was declined or failed (the radar and the list).
+            ["Declined"] = B(colourful ? amber : text3),
+            ["Failed"] = B(colourful ? error : text3),
+            ["FailedText"] = B(colourful ? error : text2),
             ["Error"] = B(error),
             ["ErrorBg"] = B(dark ? A(error, 0.16) : C(0xFFFDE7E9)),
             // Older names still used by some windows
@@ -87,7 +101,7 @@ public static class Theme
             ["CardStroke"] = B(border),
             ["Divider"] = B(border),
             ["DropWell"] = B(card),
-            ["Caution"] = B(text2),
+            ["Caution"] = B(colourful ? amber : text2),
             ["Critical"] = B(error),
             ["UiFont"] = new FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"),
             ["IconFont"] = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"),

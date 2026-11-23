@@ -252,7 +252,8 @@ public sealed class App : Application
     {
         var lang = Array.IndexOf(_startArgs, "--lang");
         if (lang >= 0 && lang + 1 < _startArgs.Length) L.Use(_startArgs[lang + 1]);
-        _theme = Theme.Build(Settings.Accent, _startArgs.Contains("--dark") ? true : _startArgs.Contains("--light") ? false : null);
+        _theme = Theme.Build(Settings.Accent, _startArgs.Contains("--dark") ? true : _startArgs.Contains("--light") ? false : null,
+                             _startArgs.Contains("--colourful"));
         Resources.MergedDictionaries.Add(_theme);
         EnsureStyles();
         Directory.CreateDirectory(dir);

@@ -63,16 +63,32 @@ public partial class SettingsWindow : Window
 
     // ------------------------------------------------------------- accent
 
-    /// <summary>"Same as Windows" and the four accents of the design, one at a time.</summary>
+    /// <summary>
+    /// One choice in one row: colourful first (each state in its own colour on
+    /// Windows' accent), then "same as Windows" and the four accents of the design.
+    /// </summary>
     void BuildAccents(string chosen)
     {
+        var rainbow = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+        foreach (var (hex, at) in new[] { ("#0067C0", 0.0), ("#0F7B0F", 0.35), ("#FCE100", 0.65), ("#C42B1C", 1.0) })
+            rainbow.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString(hex)!, at));
+        AccentPanel.Children.Add(new RadioButton
+        {
+            Style = (Style)FindResource("Swatch"),
+            Tag = Theme.Colourful,
+            GroupName = "accent",
+            Background = rainbow,
+            ToolTip = L.T("set.colourful") + " · " + L.T("set.colourfulHint"),
+            IsChecked = chosen == Theme.Colourful,
+            Margin = new Thickness(0, 0, 10, 0),
+        });
         var system = new RadioButton
         {
             Style = (Style)FindResource("Segment"),
             Content = L.T("set.accent.system"),
             Tag = null,
             GroupName = "accent",
-            IsChecked = Theme.Accents.All(a => a.Key != chosen),
+            IsChecked = chosen != Theme.Colourful && Theme.Accents.All(a => a.Key != chosen),
             Margin = new Thickness(0, 0, 8, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };

@@ -87,6 +87,7 @@
               </StackPanel>
             </DockPanel>
           </Border>
+
           <Border Style="{StaticResource CardPad}">
             <StackPanel>
               <DockPanel>

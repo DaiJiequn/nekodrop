@@ -34,9 +34,10 @@ jobs:
         shell: pwsh
         run: |
           $exe = 'build\stage\nekodrop.exe'
-          foreach ($v in @(@('light', 'zh'), @('dark', 'zh'), @('light', 'en'))) {
+          foreach ($v in @(@('light', 'zh'), @('dark', 'zh'), @('light', 'en'), @('colourful', 'zh'))) {
             $out = "build\snapshots\$($v[0])-$($v[1])"
-            $p = Start-Process $exe -ArgumentList '--snapshot', $out, "--$($v[0])", '--lang', $v[1] -PassThru
+            $look = if ($v[0] -eq 'colourful') { @('--light', '--colourful') } else { @("--$($v[0])") }
+            $p = Start-Process $exe -ArgumentList (@('--snapshot', $out) + $look + @('--lang', $v[1])) -PassThru
             if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "snapshot $($v -join '-') hung" }
             $png = @(Get-ChildItem $out -Filter *.png -ErrorAction SilentlyContinue)
             "$out`: $($png.Name -join ', ')"
