@@ -227,6 +227,7 @@ Design notes: [docs/DESIGN.md](docs/DESIGN.md) (driver, DMA, risks) · [docs/CLI
 | The PC shows up twice on the iPhone | A cached record from an earlier run. Toggle AirDrop on the iPhone |
 | No internet | Tray → **Wi-Fi…**: check you're connected. The network may need a sign-in page or be WPA3-only/802.1X (see above) |
 | The Windows Wi-Fi icon disappeared | Expected in *together* mode: nekodrop owns the card. Use **Wi-Fi…**, or switch to *on demand* |
+| An app or game refuses to log in / shows no QR code in *together* mode | Some apps want to see a Windows Wi-Fi adapter, and in *together* mode there is none (nekodrop's adapter is a wired-type one). Switch to *on demand* for those apps ([#33](../../issues/33)) |
 | Something else | Open an [issue](../../issues) with the [diagnostic report](#reporting-a-problem-the-diagnostic-report) |
 
 ## Building from source
