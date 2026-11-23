@@ -86,6 +86,9 @@ public sealed class AppModel : Observable
     public ObservableCollection<Request> Requests { get; } = [];
     public ObservableCollection<string> Files { get; } = [];
     public ObservableCollection<Received> ReceivedFiles { get; } = [];
+    /// <summary>Files sent to this PC were saved: the radar's hub turns green for a moment.</summary>
+    public event EventHandler? Stored;
+    public void RaiseStored() => Stored?.Invoke(this, EventArgs.Empty);
     string _status = L.T("status.connecting"), _detail = "";
     bool _looking, _radioOn, _allow = true, _updatePreview;
     string _air = "service_stopped", _mode = "", _ssid = "", _update = "";

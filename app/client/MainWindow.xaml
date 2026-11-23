@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:NekoDrop"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="nekodrop" Width="560" Height="800" MinWidth="480" MinHeight="600"
-        WindowStartupLocation="CenterScreen" AllowDrop="True"
+        Title="nekodrop" Width="420" Height="700"
+        WindowStartupLocation="Manual" ResizeMode="NoResize" ShowInTaskbar="False" AllowDrop="True"
         Foreground="{DynamicResource Text}" FontFamily="{DynamicResource UiFont}" FontSize="13">
   <Grid>
     <Grid.RowDefinitions>
@@ -21,7 +21,7 @@
           <Button x:Name="WifiButton" Style="{StaticResource TitleButton}" Width="Auto" Padding="8,0" Click="Wifi_Click" ToolTip="Wi-Fi">
             <StackPanel Orientation="Horizontal">
               <TextBlock Style="{StaticResource Icon}" Text="&#xE701;" FontSize="13" Margin="0,0,6,0"/>
-              <TextBlock x:Name="WifiText" FontSize="12" MaxWidth="90" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+              <TextBlock x:Name="WifiText" FontSize="12" MaxWidth="80" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
           <Button Style="{StaticResource TitleButton}" Click="Settings_Click" ToolTip="{local:T main.settings}"
@@ -29,9 +29,6 @@
             <TextBlock Style="{StaticResource Icon}" Text="&#xE713;" FontSize="14"/>
           </Button>
           <Border Width="1" Height="14" Background="{DynamicResource Border}" Margin="4,0"/>
-          <Button Style="{StaticResource TitleButton}" Click="Minimize_Click" AutomationProperties.Name="Minimize">
-            <TextBlock Style="{StaticResource Icon}" Text="&#xE921;" FontSize="10"/>
-          </Button>
           <Button Style="{StaticResource TitleButton}" Click="Close_Click" AutomationProperties.Name="Close">
             <TextBlock Style="{StaticResource Icon}" Text="&#xE8BB;" FontSize="10"/>
           </Button>
@@ -100,9 +97,9 @@
 
     <!-- Content -->
     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-      <StackPanel Margin="20,16,20,16">
+      <StackPanel Margin="16,12,16,12">
         <!-- Nearby devices -->
-        <local:RadarView Height="470"/>
+        <local:RadarView Height="440"/>
 
         <!-- Files to send: dashed while empty -->
         <Grid Margin="0,14,0,0">
@@ -114,11 +111,10 @@
                 <Button Style="{StaticResource WinButton}" Content="{local:T main.add}" Click="Add_Click"/>
                 <Button x:Name="ClearButton" Style="{StaticResource QuietButton}" Content="{local:T main.clear}" Click="Clear_Click" Margin="4,0,0,0"/>
               </StackPanel>
-              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Style="{StaticResource Icon}" Text="&#xE8A5;" Foreground="{DynamicResource Text2}" Margin="0,0,8,0"/>
-                <TextBlock Text="{local:T main.dropHint}" FontSize="12" Foreground="{DynamicResource Text2}" TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center"/>
-              </StackPanel>
+              <TextBlock DockPanel.Dock="Left" Style="{StaticResource Icon}" Text="&#xE8A5;" Foreground="{DynamicResource Text2}" Margin="0,0,8,0"
+                         VerticalAlignment="Center"/>
+              <TextBlock Text="{local:T main.dropHint}" FontSize="12" Foreground="{DynamicResource Text2}" TextWrapping="Wrap"
+                         VerticalAlignment="Center" Margin="0,0,8,0"/>
             </DockPanel>
             <DockPanel x:Name="FilesRow" Margin="0,10,0,0">
               <TextBlock x:Name="FilesCount" DockPanel.Dock="Right" Style="{StaticResource Dim11}" VerticalAlignment="Bottom" Margin="8,0,0,4"/>
@@ -178,7 +174,7 @@
     </ScrollViewer>
 
     <!-- Footer: where received files go -->
-    <Border Grid.Row="3" Background="{DynamicResource Card}" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="20,0">
+    <Border Grid.Row="3" Background="{DynamicResource Card}" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="16,0">
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
           <Button Style="{StaticResource LinkButton}" Content="{local:T main.change}" Click="ChangeFolder_Click"/>
@@ -187,7 +183,7 @@
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <TextBlock Style="{StaticResource Icon}" Text="&#xE8B7;" FontSize="13" Foreground="{DynamicResource Text2}" Margin="0,0,8,0"/>
           <TextBlock x:Name="FolderText" FontSize="12" Foreground="{DynamicResource Text2}" TextTrimming="CharacterEllipsis"
-                     VerticalAlignment="Center" MaxWidth="330"/>
+                     VerticalAlignment="Center" MaxWidth="200"/>
         </StackPanel>
       </DockPanel>
     </Border>

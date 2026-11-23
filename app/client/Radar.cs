@@ -16,7 +16,7 @@ public readonly record struct RadarGeometry(Point Center, double Orbit, double I
     /// <summary>A device's icon (its circle), in pixels.</summary>
     public const double Node = 50;
     /// <summary>A device's whole box: 4 px padding, icon, name and status below it.</summary>
-    public const double NodeWidth = 112, NodeHeight = 4 + Node + 4 + 16 + 15 + 4;
+    public const double NodeWidth = 112, NodeHeight = 4 + Node + 4 + 18 + 17 + 6; // CJK lines need the extra pixels
     /// <summary>"This PC" in the middle.</summary>
     public const double Hub = 58;
     /// <summary>More devices than this go to the list.</summary>
@@ -32,8 +32,8 @@ public readonly record struct RadarGeometry(Point Center, double Orbit, double I
         var byWidth = stage.Width / 2 - NodeWidth / 2 - 8;
         var byTop = stage.Height / 2 - Node / 2 - 8;
         var byBottom = (stage.Height / 2 - (NodeHeight - Node / 2) - 8) / 0.93;
-        // Never so small that the icons touch the hub.
-        var orbit = Math.Max(Hub / 2 + Node / 2 + 12, Math.Min(byWidth, Math.Min(byTop, byBottom)));
+        // Never so small that the top device's name reaches the hub.
+        var orbit = Math.Max(Hub / 2 + NodeHeight - Node / 2 + 12, Math.Min(byWidth, Math.Min(byTop, byBottom)));
         // Two guide rings as in the design (154 and 248 px there): the orbit and one inside it.
         return new RadarGeometry(center, orbit, orbit * 0.62, orbit * 1.05);
     }
@@ -78,7 +78,7 @@ public sealed class RadarPanel : Panel
     static void PlaceBubble(UIElement child, bool above)
     {
         if (child is not ContentPresenter cp || cp.ContentTemplate is not { } template) return;
-        if (template.FindName("bubble", cp) is UIElement bubble) Canvas.SetTop(bubble, above ? -74 : 92);
+        if (template.FindName("bubble", cp) is UIElement bubble) Canvas.SetTop(bubble, above ? -74 : 98);
         if (template.FindName("notchUp", cp) is UIElement up) up.Visibility = above ? Visibility.Collapsed : Visibility.Visible;
         if (template.FindName("notchDown", cp) is UIElement down) down.Visibility = above ? Visibility.Visible : Visibility.Collapsed;
     }

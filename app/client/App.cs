@@ -183,8 +183,11 @@ public sealed class App : Application
         // Left: the main window. Right: the design's menu at the pointer.
         _tray.MouseClick += (_, a) =>
         {
-            if (a.Button == Forms.MouseButtons.Left) ShowWindow();
-            else if (a.Button == Forms.MouseButtons.Right) ShowTrayMenu();
+            if (a.Button == Forms.MouseButtons.Right) ShowTrayMenu();
+            else if (a.Button != Forms.MouseButtons.Left) return;
+            // A click on the icon of an open panel closes it (a double click keeps it open).
+            else if (_window is { IsVisible: true } w && DateTime.UtcNow - w.ShownAt > NekoDrop.MainWindow.Grace) w.Shut();
+            else ShowWindow();
         };
     }
 
@@ -273,7 +276,7 @@ public sealed class App : Application
         Model.Devices.Add(new Device { Id = "d", Name = "iPhone 15 Pro Max", Model = "iPhone16,2", State = "declined", Status = L.T("send.declined") });
         var asking = new Request { Id = "r", Sender = "iPhone", Model = "iPhone15,2", What = L.F("what.photos", 3) };
         Model.Requests.Add(asking);
-        Model.Devices[0].Ask = asking; // the bubble under its icon and the arrow towards this PC
+        Model.Devices[0].Ask = asking; // the bubble under its icon
         Model.ReceivedFiles.Add(new Received { Name = "IMG_0042.HEIC", Path = "", From = "iPhone" });
         Model.ReceivedFiles.Add(new Received { Name = L.F("what.videos", 1), Path = "", From = "MacBook Air", Failed = true });
         Model.Files.Add(@"C:\Users\me\Pictures\IMG_2048.HEIC");
@@ -306,6 +309,8 @@ public sealed class App : Application
             ("wifi", () => { var w = new WifiWindow(); w.Render(wifiState); return w; }, 0),
             ("wifi-windows", () => { var w = new WifiWindow(); wifiState["mode"] = "ondemand"; w.Render(wifiState); return w; }, 0),
             ("tray", () => { var m = new TrayMenu(); m.Loaded += (_, _) => m.OpenModes(); return m; }, 0),
+            ("main-receiving", () => { Settings.DeviceView = "radar"; asking.Receiving = true; asking.Progress = 0.6; return Main("ready"); }, 0),
+            ("main-done", () => { asking.Receiving = false; var w = Main("ready"); w.Loaded += (_, _) => Dispatcher.BeginInvoke(Model.RaiseStored); return w; }, 0),
             ("main-empty", () => { Settings.DeviceView = "radar"; Model.Devices.Clear(); Model.Requests.Clear(); return Main("ready"); }, 0),
             ("main-starting", () => Main("starting"), 0),
             ("main-standby", () => Main("standby"), 0),
@@ -379,7 +384,7 @@ public sealed class App : Application
         if (_send is null)
         {
             var w = new SendWindow();
-            w.Closed += (_, _) => { if (_send == w) _send = null; if (_window is null) Engine.Look(false); };
+            w.Closed += (_, _) => { if (_send == w) _send = null; if (_window is not { IsVisible: true }) Engine.Look(false); };
             _send = w;
         }
         _send.Refresh();
@@ -458,7 +463,7 @@ public sealed class App : Application
         L.Use(Settings.Language);
 
         try { Shell.Register(Settings.StartWithWindows); } catch (Exception) { }
-        if (_window is not null) { var w = _window; _window = null; w.Close(); ShowWindow(); }
+        if (_window is not null) { var w = _window; var shown = w.IsVisible; _window = null; w.Close(); if (shown) ShowWindow(); }
     }
 
     public void SetDiscoverable(bool on)
@@ -479,6 +484,10 @@ public sealed class App : Application
             w.Closed += (_, _) => { if (_window == w) _window = null; };
             _window = w;
         }
+        // A click on the tray icon while the panel is open first takes the
+        // focus from it (it goes away); that click means "close", not "open again".
+        else if (!_window.IsVisible && (DateTime.UtcNow - _window.ShutAt).TotalMilliseconds < 400) return;
+        _window.DockRight();
         _window.Show();
         if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
         _window.Activate();
@@ -748,7 +757,7 @@ public sealed class App : Application
                  * looking: the old one's devices go, and an open window looks
                  * again (#9: the send window stayed empty after a move to 149). */
                 foreach (var stale in Model.Devices.Where(x => !x.Busy).ToList()) Model.Devices.Remove(stale);
-                if (_send is not null || _window is not null) Engine.Look(true);
+                if (_send is not null || _window is { IsVisible: true }) Engine.Look(true);
                 break;
             case "receiving":
                 /* Not receiving (ports or mDNS held, a socket error): the watchdog starts over after a while. */
@@ -802,6 +811,7 @@ public sealed class App : Application
                         var name = f is JsonObject fo ? (string?)fo["name"] ?? "" : (string?)f ?? "";
                         Model.ReceivedFiles.Insert(0, new Received { Name = name, Path = Path.Combine(folder, name), From = from });
                     }
+                Model.RaiseStored();
                 Shell.DoneToast(id, L.F("done.received", from), L.F("done.savedTo", folder), folder);
                 break;
             }

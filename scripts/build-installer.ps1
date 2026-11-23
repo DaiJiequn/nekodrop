@@ -1,4 +1,4 @@
-# Builds every part of nekodrop, stages it in build\stage, and makes
+﻿# Builds every part of nekodrop, stages it in build\stage, and makes
 # build\nekodrop-<version>-setup.exe with Inno Setup 6 (or a zip without it).
 #   radio\    nekodrop-radio.exe (Intel) + Intel firmware, nekodrop-radio-rtl.exe (RTL8852CE),
 #             nekodrop-radio-mt.exe (MT7902) + MediaTek firmware
@@ -167,7 +167,7 @@ if ($iscc) {
   if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
   Get-ChildItem "$repo\build\nekodrop-*-setup.exe" | Select-Object Name, Length
 } else {
-  $zip = "$repo\build\nekodrop-2.0.0-windows-x64.zip"
+  $zip = "$repo\build\nekodrop-2.0.1-windows-x64.zip"
   Compress-Archive "$stage\*" $zip -Force
   "Inno Setup not found: made $zip instead (unzip, then run install.ps1 as administrator)."
 }

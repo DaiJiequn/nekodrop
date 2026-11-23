@@ -9,16 +9,26 @@
       <Setter Property="Foreground" Value="{DynamicResource Text}"/>
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="AllowDrop" Value="True"/>
-      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <!-- The focus ring only when moving with the keyboard, not after a click -->
+      <Setter Property="FocusVisualStyle">
+        <Setter.Value>
+          <Style>
+            <Setter Property="Control.Template">
+              <Setter.Value>
+                <ControlTemplate>
+                  <Border CornerRadius="10" BorderThickness="2" BorderBrush="{DynamicResource Accent}"/>
+                </ControlTemplate>
+              </Setter.Value>
+            </Setter>
+          </Style>
+        </Setter.Value>
+      </Setter>
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="b" Background="Transparent" CornerRadius="10" BorderThickness="0" BorderBrush="{DynamicResource Accent}">
+            <Border Background="Transparent" CornerRadius="10">
               <ContentPresenter/>
             </Border>
-            <ControlTemplate.Triggers>
-              <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="b" Property="BorderThickness" Value="2"/></Trigger>
-            </ControlTemplate.Triggers>
           </ControlTemplate>
         </Setter.Value>
       </Setter>
@@ -155,7 +165,7 @@
 
         <!-- The request: wants to send…, accept / decline; then receiving with a bar -->
         <Canvas x:Name="bubbleHost" Visibility="Collapsed" Panel.ZIndex="5">
-          <Grid x:Name="bubble" Canvas.Left="-14" Canvas.Top="92">
+          <Grid x:Name="bubble" Canvas.Left="-14" Canvas.Top="98">
             <Path x:Name="notchUp" Data="M0,6 L6,0 L12,6" Fill="{DynamicResource MicaSolid}" Stroke="{DynamicResource Accent}" StrokeThickness="1"
                   HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-5,0,0" Panel.ZIndex="1"/>
             <Path x:Name="notchDown" Data="M0,0 L6,6 L12,0" Fill="{DynamicResource MicaSolid}" Stroke="{DynamicResource Accent}" StrokeThickness="1"
@@ -169,14 +179,6 @@
                     <Button Style="{StaticResource SmallPrimary}" Content="{local:T accept}" Tag="{Binding Id}" Click="Accept_Click" Margin="0,0,3,0"/>
                     <Button Style="{StaticResource SmallButton}" Content="{local:T decline}" Tag="{Binding Id}" Click="Decline_Click" Margin="3,0,0,0"/>
                   </UniformGrid>
-                </StackPanel>
-                <StackPanel x:Name="receiving" VerticalAlignment="Center" Visibility="Collapsed">
-                  <TextBlock FontSize="11" FontWeight="SemiBold" TextAlignment="Center" Foreground="{DynamicResource Accent}"
-                             Text="{Binding Progress, StringFormat={}{0:P0}}"/>
-                  <Border Height="4" CornerRadius="2" Background="{DynamicResource Border}" Margin="6,7,6,0">
-                    <local:Bar Progress="{Binding Progress}" Fill="{DynamicResource Accent}"/>
-                  </Border>
-                  <TextBlock Text="{local:T req.receiving}" Style="{StaticResource Dim11}" TextAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
               </Grid>
             </Border>
@@ -235,9 +237,13 @@
           </DataTrigger.EnterActions>
           <DataTrigger.ExitActions><StopStoryboard BeginStoryboardName="askPulse"/></DataTrigger.ExitActions>
         </DataTrigger>
+        <!-- Accepted: the bubble closes; this PC's ring shows the progress -->
         <DataTrigger Binding="{Binding Ask.Receiving}" Value="True">
-          <Setter TargetName="asking" Property="Visibility" Value="Collapsed"/>
-          <Setter TargetName="receiving" Property="Visibility" Value="Visible"/>
+          <Setter TargetName="bubbleHost" Property="Visibility" Value="Collapsed"/>
+          <Setter TargetName="AskGlow" Property="Visibility" Value="Hidden"/>
+          <Setter TargetName="status" Property="Visibility" Value="Visible"/>
+          <Setter TargetName="status" Property="Text" Value="{local:T req.receiving}"/>
+          <Setter TargetName="status" Property="Foreground" Value="{DynamicResource Accent}"/>
         </DataTrigger>
       </DataTemplate.Triggers>
     </DataTemplate>
@@ -323,8 +329,6 @@
         <!-- Radar -->
         <Grid x:Name="RadarLayer" SizeChanged="RadarLayer_SizeChanged">
           <Canvas x:Name="Rings" IsHitTestVisible="False"/>
-          <!-- Arrows between this PC and the devices it sends to or hears from (drawn by code) -->
-          <Canvas x:Name="Arrows" IsHitTestVisible="False"/>
           <ItemsControl x:Name="RadarItems" ItemTemplate="{StaticResource RadarNode}" Focusable="False">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><local:RadarPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             <ItemsControl.ItemContainerStyle>

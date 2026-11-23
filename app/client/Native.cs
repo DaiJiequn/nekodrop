@@ -78,7 +78,63 @@ public static class Native
             UseAeroCaptionButtons = false,
         });
         w.SetResourceReference(System.Windows.Controls.Control.BackgroundProperty, "MicaSolid");
-        w.SourceInitialized += (_, _) => { if (ApplyMica(w)) w.Background = System.Windows.Media.Brushes.Transparent; };
+        w.SourceInitialized += (_, _) =>
+        {
+            NoSystemButtons(w);
+            FitWorkArea(w);
+            if (ApplyMica(w)) w.Background = System.Windows.Media.Brushes.Transparent;
+        };
+    }
+
+    const int GWL_STYLE = -16;
+    const int WS_SYSMENU = 0x00080000;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    static extern int GetWindowLong(IntPtr hwnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
+    static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+
+    /// <summary>
+    /// With the DWM frame over the whole window (Mica), Windows draws its own
+    /// minimize / maximize / close buttons over the design's, a second set in
+    /// the corner. Without the system menu style it draws none; the window
+    /// still minimizes from the taskbar and closes with Alt+F4.
+    /// </summary>
+    static void NoSystemButtons(Window w)
+    {
+        var hwnd = new WindowInteropHelper(w).EnsureHandle();
+        SetWindowLong(hwnd, GWL_STYLE, GetWindowLong(hwnd, GWL_STYLE) & ~WS_SYSMENU);
+    }
+
+    /// <summary>The work area (no taskbar) of the screen under the mouse, in WPF units.</summary>
+    public static Rect WorkArea(Window w)
+    {
+        var area = System.Windows.Forms.Screen.FromPoint(System.Windows.Forms.Cursor.Position).WorkingArea;
+        var m = PresentationSource.FromVisual(w)?.CompositionTarget?.TransformFromDevice ?? System.Windows.Media.Matrix.Identity;
+        var tl = m.Transform(new Point(area.Left, area.Top));
+        var br = m.Transform(new Point(area.Right, area.Bottom));
+        return new Rect(tl, br);
+    }
+
+    /// <summary>
+    /// A window taller or wider than the screen (a laptop at 150 % has 720
+    /// units) is cut off at the bottom: shrink it to the work area, centred.
+    /// </summary>
+    static void FitWorkArea(Window w)
+    {
+        if (w.Left < -10000) return; // drawn off screen for a snapshot
+        var a = WorkArea(w);
+        var fit = false;
+        if (w.Height > a.Height - 16) { w.Height = a.Height - 16; fit = true; }
+        if (w.Width > a.Width - 16) { w.Width = a.Width - 16; fit = true; }
+        if (w.MinHeight > w.Height) w.MinHeight = w.Height;
+        if (w.MinWidth > w.Width) w.MinWidth = w.Width;
+        if (fit && w.WindowStartupLocation == WindowStartupLocation.CenterScreen)
+        {
+            w.Left = a.Left + (a.Width - w.Width) / 2;
+            w.Top = a.Top + (a.Height - w.Height) / 2;
+        }
     }
 
     /// <summary>The user's accent color (DWM colorization), opaque.</summary>

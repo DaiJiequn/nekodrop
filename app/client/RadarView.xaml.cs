@@ -29,9 +29,14 @@ public partial class RadarView : UserControl
     readonly Grid _hub = new();
     readonly Ellipse _hubSpinner = new() { StrokeThickness = 2.5, StrokeDashArray = [2.4, 2.4], Visibility = Visibility.Collapsed };
     readonly TextBlock _hubLabel = new();
+    // Around this PC while files come in: the receiving progress.
+    readonly ProgressRing _hubRing = new() { Thickness = 3, Margin = new Thickness(-5), Visibility = Visibility.Collapsed, IsHitTestVisible = false };
+    readonly HashSet<Request> _watched = [];
+    readonly Ellipse _hubDisc = new() { StrokeThickness = 1.5 };
+    readonly TextBlock _hubIcon = new();
+    System.Windows.Threading.DispatcherTimer? _doneTimer;
     // A soft light behind the hub that breathes while AirDrop listens.
     readonly Ellipse _halo = new() { RenderTransformOrigin = new Point(0.5, 0.5), RenderTransform = new ScaleTransform(1, 1), Opacity = 0 };
-    readonly HashSet<INotifyPropertyChanged> _watched = [];
     bool _rippling, _breathing, _hintShown;
 
     public RadarView()
@@ -53,13 +58,18 @@ public partial class RadarView : UserControl
         {
             A.Model.Devices.CollectionChanged += OnDevices;
             A.Model.PropertyChanged += OnModel;
+            A.Model.Requests.CollectionChanged += OnRequests;
+            A.Model.Stored += OnStored;
             Update();
+            OnRequests(null, null);
         };
         Unloaded += (_, _) =>
         {
             A.Model.Devices.CollectionChanged -= OnDevices;
             A.Model.PropertyChanged -= OnModel;
-            foreach (var w in _watched) w.PropertyChanged -= OnDevice;
+            A.Model.Requests.CollectionChanged -= OnRequests;
+            A.Model.Stored -= OnStored;
+            foreach (var r in _watched) r.PropertyChanged -= OnRequest;
             _watched.Clear();
             Ripple(false);
             Breathe(false);
@@ -84,24 +94,22 @@ public partial class RadarView : UserControl
     void BuildHub()
     {
         _hub.Width = _hub.Height = RadarGeometry.Hub;
-        var disc = new Ellipse { StrokeThickness = 1.5 };
-        disc.SetResourceReference(Shape.FillProperty, "AccentSubtle");
-        disc.SetResourceReference(Shape.StrokeProperty, "Accent");
-        var icon = new TextBlock
-        {
-            Text = HubLaptop() ? "\uE7F8" : "\uE7F4", // a laptop or a desktop monitor
-            FontSize = 20,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var disc = _hubDisc;
+        var icon = _hubIcon;
+        icon.FontSize = 20;
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
+        icon.VerticalAlignment = VerticalAlignment.Center;
         icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
-        icon.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+        HubLook(false);
         _hubSpinner.SetResourceReference(Shape.StrokeProperty, "Accent");
         _halo.SetResourceReference(Shape.FillProperty, "AccentSubtle");
         _hubSpinner.RenderTransformOrigin = new Point(0.5, 0.5);
         _hubSpinner.RenderTransform = new RotateTransform();
         _hub.Children.Add(disc);
         _hub.Children.Add(_hubSpinner);
+        _hubRing.SetResourceReference(ProgressRing.StrokeProperty, "Accent");
+        _hubRing.SetResourceReference(ProgressRing.TrackProperty, "Border");
+        _hub.Children.Add(_hubRing);
         _hub.Children.Add(icon);
         _hubLabel.Text = L.T("radar.thisPc");
         _hubLabel.FontSize = 11;
@@ -125,10 +133,45 @@ public partial class RadarView : UserControl
 
     void OnDevices(object? s, NotifyCollectionChangedEventArgs e) => Update();
 
-    void OnDevice(object? s, PropertyChangedEventArgs e)
+    void OnRequests(object? s, NotifyCollectionChangedEventArgs? e)
     {
-        if (e.PropertyName is nameof(Device.State) or nameof(Device.Ask) or nameof(Request.Receiving))
-            Dispatcher.BeginInvoke(DrawArrows);
+        foreach (var r in A.Model.Requests) if (_watched.Add(r)) r.PropertyChanged += OnRequest;
+        foreach (var r in _watched.Where(r => !A.Model.Requests.Contains(r)).ToList()) { r.PropertyChanged -= OnRequest; _watched.Remove(r); }
+        HubReceiving();
+    }
+
+    void OnRequest(object? s, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(Request.Receiving) or nameof(Request.Progress)) Dispatcher.BeginInvoke(HubReceiving);
+    }
+
+    /// <summary>This PC as usual (accent, laptop or desktop), or done receiving (green, a check mark).</summary>
+    void HubLook(bool done)
+    {
+        _hubIcon.Text = done ? "" : HubLaptop() ? "" : ""; // a check, a laptop or a desktop monitor
+        _hubIcon.SetResourceReference(TextBlock.ForegroundProperty, done ? "Success" : "Accent");
+        _hubDisc.SetResourceReference(Shape.StrokeProperty, done ? "Success" : "Accent");
+        _hubDisc.SetResourceReference(Shape.FillProperty, done ? "SuccessBg" : "AccentSubtle");
+        _hubDisc.StrokeThickness = done ? 2.5 : 1.5;
+    }
+
+    /// <summary>Files sent to this PC are saved: green with a check mark for three seconds.</summary>
+    void OnStored(object? s, EventArgs e) => Dispatcher.BeginInvoke(() =>
+    {
+        _hubRing.Visibility = Visibility.Collapsed;
+        HubLook(true);
+        _doneTimer?.Stop();
+        _doneTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _doneTimer.Tick += (_, _) => { _doneTimer!.Stop(); HubLook(false); HubReceiving(); };
+        _doneTimer.Start();
+    });
+
+    /// <summary>This PC turns a progress ring while it receives (the first transfer under way).</summary>
+    void HubReceiving()
+    {
+        var r = A.Model.Requests.FirstOrDefault(x => x.Receiving);
+        _hubRing.Visibility = r is null ? Visibility.Collapsed : Visibility.Visible;
+        if (r is not null) _hubRing.Progress = r.Progress;
     }
 
     void OnModel(object? s, PropertyChangedEventArgs e)
@@ -186,7 +229,6 @@ public partial class RadarView : UserControl
         Ripple(air == "ready" && visible && !Motion.Reduced);
         Breathe(air == "ready" && visible && !Motion.Reduced);
         Spin(air == "starting" && visible);
-        DrawArrows();
     }
 
     void ShowBlocked(string air)
@@ -242,9 +284,8 @@ public partial class RadarView : UserControl
         foreach (var r in _ripples) Circle(r, g.Outer);
         Circle(_hub, RadarGeometry.Hub / 2);
         Canvas.SetLeft(_hubLabel, center.X - _hubLabel.Width / 2);
-        Canvas.SetTop(_hubLabel, center.Y + RadarGeometry.Hub / 2 + 4);
+        Canvas.SetTop(_hubLabel, center.Y + RadarGeometry.Hub / 2 + 9); // clear of the receiving ring
         Circle(_halo, RadarGeometry.Hub / 2 + 14);
-        DrawArrows();
     }
 
     /// <summary>
@@ -273,78 +314,6 @@ public partial class RadarView : UserControl
         scale.BeginAnimation(ScaleTransform.ScaleYProperty, Breath(0.86, 1.14));
         _halo.BeginAnimation(OpacityProperty, Breath(0.95, 0.35));
         foreach (var ring in new[] { _inner, _orbit }) ring.BeginAnimation(OpacityProperty, Breath(0.65, 1));
-    }
-
-    /// <summary>
-    /// A line from this PC to each device it sends to (from the device when it
-    /// sends to us), with a small chevron at the head: flowing dots while the
-    /// other side has not answered, solid while files move, green once sent,
-    /// grey when declined or failed.
-    /// </summary>
-    void DrawArrows()
-    {
-        Arrows.Children.Clear();
-        foreach (var d in A.Model.Devices)
-        {
-            if (_watched.Add(d)) d.PropertyChanged += OnDevice;
-            if (d.Ask is { } r && _watched.Add(r)) r.PropertyChanged += OnDevice;
-        }
-        var size = new Size(RadarLayer.ActualWidth, RadarLayer.ActualHeight);
-        if (size.Width <= 0 || A.Model.Air != "ready" || RadarLayer.Visibility != Visibility.Visible) return;
-        var g = RadarGeometry.For(size);
-        var n = A.Model.Devices.Count;
-        for (var i = 0; i < n; i++)
-        {
-            var d = A.Model.Devices[i];
-            var (incoming, waiting, brush) = d.Ask is { } ask
-                ? (true, !ask.Receiving, "Accent")
-                : d.State switch
-                {
-                    "asking" => (false, true, "Accent"),
-                    "sending" => (false, false, "Accent"),
-                    "sent" => (false, false, "Success"),
-                    "declined" or "failed" => (false, false, "Text3"),
-                    _ => (false, false, ""),
-                };
-            if (brush == "") continue;
-            var icon = g.IconCenter(i, n);
-            var v = icon - g.Center;
-            v.Normalize();
-            var near = g.Center + v * (RadarGeometry.Hub / 2 + 8);
-            var far = icon - v * (RadarGeometry.Node / 2 + 8);
-            var (tail, head) = incoming ? (far, near) : (near, far);
-            var dim = brush == "Text3";
-
-            var line = new Line { X1 = tail.X, Y1 = tail.Y, X2 = head.X, Y2 = head.Y, StrokeThickness = 2, Opacity = dim ? 0.55 : 0.9,
-                                  StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round };
-            line.SetResourceReference(Shape.StrokeProperty, brush);
-            if (waiting || dim)
-            {
-                line.StrokeDashCap = PenLineCap.Round;
-                line.StrokeDashArray = [0, 3]; // dots 6 px apart
-                if (waiting && !Motion.Reduced)
-                    line.BeginAnimation(Shape.StrokeDashOffsetProperty,
-                        new DoubleAnimation(0, -3, TimeSpan.FromSeconds(0.45)) { RepeatBehavior = RepeatBehavior.Forever });
-            }
-            Arrows.Children.Add(line);
-
-            // The chevron: two 7 px strokes back from the head at 32 degrees.
-            var back = tail - head;
-            back.Normalize();
-            Vector Turn(Vector u, double deg)
-            {
-                var a = deg * Math.PI / 180;
-                return new Vector(u.X * Math.Cos(a) - u.Y * Math.Sin(a), u.X * Math.Sin(a) + u.Y * Math.Cos(a));
-            }
-            var chevron = new System.Windows.Shapes.Path
-            {
-                Data = new PathGeometry([new PathFigure(head + Turn(back, 32) * 7, [new LineSegment(head, true), new LineSegment(head + Turn(back, -32) * 7, true)], false)]),
-                StrokeThickness = 2, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
-                StrokeLineJoin = PenLineJoin.Round, Opacity = line.Opacity,
-            };
-            chevron.SetResourceReference(Shape.StrokeProperty, brush);
-            Arrows.Children.Add(chevron);
-        }
     }
 
     /// <summary>

@@ -23,7 +23,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        Native.Chrome(this);
+        Native.Chrome(this, caption: 0); // docked to the screen's edge: nothing to drag
+        // A tool, not an app of its own: it slides out at the right edge of
+        // the screen and goes away when something else is clicked.
+        // Only when another program takes the focus: opening settings, Wi-Fi
+        // or the tray menu (windows of nekodrop) keeps it out.
+        Application.Current.Deactivated += OnAppDeactivated;
         DataContext = A.Model;
         ReceivedList.ItemsSource = A.Model.ReceivedFiles;
         A.Model.Files.CollectionChanged += OnFiles;
@@ -36,6 +41,7 @@ public partial class MainWindow : Window
             A.Model.Files.CollectionChanged -= OnFiles;
             A.Model.ReceivedFiles.CollectionChanged -= OnReceived;
             A.Model.PropertyChanged -= OnModel;
+            Application.Current.Deactivated -= OnAppDeactivated;
             A.WindowClosed();
         };
         FolderChanged();
@@ -147,7 +153,7 @@ public partial class MainWindow : Window
     void Add_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new Microsoft.Win32.OpenFileDialog { Multiselect = true, Title = L.T("pick.files") };
-        if (dlg.ShowDialog(this) == true)
+        if (Modal(() => dlg.ShowDialog(this)) == true)
             foreach (var f in dlg.FileNames) if (!A.Model.Files.Contains(f)) A.Model.Files.Add(f);
     }
 
@@ -163,8 +169,69 @@ public partial class MainWindow : Window
     void Settings_Click(object sender, RoutedEventArgs e) => A.ShowSettings("general");
     void Wifi_Click(object sender, RoutedEventArgs e) => A.ShowWifi();
     void Report_Click(object sender, RoutedEventArgs e) { StatusPopup.IsOpen = false; App.RunReport(); }
-    void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
-    void Close_Click(object sender, RoutedEventArgs e) => Close();
+    void Close_Click(object sender, RoutedEventArgs e) => Shut();
+
+    bool _dialog;
+
+    /// <summary>
+    /// Another program took the focus: go away, except just after opening.
+    /// A double click on the tray icon, or Explorer taking the focus back
+    /// after starting nekodrop from a shortcut, would otherwise close it at once.
+    /// </summary>
+    void OnAppDeactivated(object? sender, EventArgs e)
+    {
+        if (_dialog || !IsVisible) return;
+        var left = Grace - (DateTime.UtcNow - ShownAt);
+        if (left <= TimeSpan.Zero) { Shut(); return; }
+        // Take the focus back once things settle, so a later click elsewhere still closes it.
+        var t = new System.Windows.Threading.DispatcherTimer { Interval = left };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            if (IsVisible && !Application.Current.Windows.OfType<Window>().Any(w => w.IsActive)) Activate();
+        };
+        t.Start();
+    }
+
+    public static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(600);
+
+    /// <summary>When it last came out.</summary>
+    public DateTime ShownAt { get; private set; }
+
+    /// <summary>When it last went away, so a click on the tray icon that took the focus from it does not bring it straight back.</summary>
+    public DateTime ShutAt { get; private set; }
+
+    /// <summary>Hides the panel (it is kept, with what it shows).</summary>
+    public void Shut()
+    {
+        StatusPopup.IsOpen = false;
+        ShutAt = DateTime.UtcNow;
+        Hide();
+        A.WindowClosed();
+    }
+
+    /// <summary>
+    /// In the bottom-right corner of the work area of the screen under the
+    /// mouse, next to the tray like Windows' own flyouts; shorter on a small screen.
+    /// </summary>
+    public void DockRight()
+    {
+        new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
+        var a = Native.WorkArea(this);
+        const double gap = 12, tall = 700;
+        Height = Math.Min(tall, a.Height - 2 * gap);
+        Left = a.Right - Width - gap;
+        Top = a.Bottom - Height - gap;
+        ShownAt = DateTime.UtcNow;
+    }
+
+    /// <summary>A file or folder dialog takes the focus without the panel going away.</summary>
+    T Modal<T>(Func<T> show)
+    {
+        _dialog = true;
+        try { return show(); }
+        finally { _dialog = false; Activate(); }
+    }
 
     async void UpdateNow_Click(object sender, RoutedEventArgs e)
     {
@@ -184,7 +251,7 @@ public partial class MainWindow : Window
     void ChangeFolder_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new Microsoft.Win32.OpenFolderDialog { Title = L.T("pick.folder"), InitialDirectory = A.Settings.SaveFolder };
-        if (dlg.ShowDialog(this) != true) return;
+        if (Modal(() => dlg.ShowDialog(this)) != true) return;
         A.Settings.SaveFolder = dlg.FolderName;
         A.Settings.Save();
         A.Engine.Apply(A.Settings);
