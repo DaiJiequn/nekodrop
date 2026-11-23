@@ -58,6 +58,13 @@ struct StaParams {
   unsigned width = 20;  /* PHY width while associated */
   uint16_t beacon_int = 100;
   bool ht = false, vht = false, mimo = false;
+  /* The AP's own capabilities from its beacon, for backends whose firmware
+   * picks the rate (HT capability info, A-MPDU parameters, VHT capability
+   * info and RX MCS map). */
+  uint16_t ap_ht_cap = 0;
+  uint8_t ap_ampdu = 0;
+  uint32_t ap_vht_cap = 0;
+  uint16_t ap_vht_mcs = 0xffff;
 };
 
 struct TxStats {
