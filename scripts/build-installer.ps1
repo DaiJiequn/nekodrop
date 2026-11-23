@@ -1,6 +1,7 @@
 # Builds every part of nekodrop, stages it in build\stage, and makes
 # build\nekodrop-<version>-setup.exe with Inno Setup 6 (or a zip without it).
-#   radio\    nekodrop-radio.exe (Intel) + Intel firmware, nekodrop-radio-rtl.exe (RTL8852CE)
+#   radio\    nekodrop-radio.exe (Intel) + Intel firmware, nekodrop-radio-rtl.exe (RTL8852CE),
+#             nekodrop-radio-mt.exe (MT7902) + MediaTek firmware
 #   awdl\     awdld.exe (winawdl's AWDL daemon, OWL) + wintun.dll
 #   airdrop\  winawdl's AirDrop engine (Python, MIT)
 #   python\   the Python embeddable distribution
@@ -29,6 +30,12 @@ Copy-Item "$repo\build\iwxradio\firmware\*" "$stage\radio\firmware\"
 $rtlRadio = "$repo\build\rtlradio\winawdl_radio.exe"
 if (-not (Test-Path $rtlRadio)) { throw "RTL radio binary missing: $rtlRadio" }
 Copy-Item $rtlRadio "$stage\radio\nekodrop-radio-rtl.exe"
+
+'radio (MediaTek MT7902)'
+& "$PSScriptRoot\build-radio-mt.ps1" | Out-Null
+$mtBuild = "$repo\build\mtradio"
+Copy-Item "$mtBuild\nekodrop-radio-mt.exe" "$stage\radio\"
+Copy-Item "$mtBuild\firmware\WIFI_RAM_CODE_MT7902_1.bin", "$mtBuild\firmware\WIFI_MT7902_patch_mcu_1_1_hdr.bin" "$stage\radio\firmware\"
 
 'awdl'
 & "$PSScriptRoot\build-awdl.ps1" -MinGW "$repo\third_party\winlibs\mingw64\bin" | Out-Null
@@ -146,6 +153,8 @@ Copy-Item "$repo\third_party\winawdl\LICENSE" "$stage\licenses\winawdl-MIT.txt"
 Copy-Item "$repo\third_party\winawdl\awdl\LICENSE" "$stage\licenses\awdld-GPL-3.0.txt"
 Copy-Item "$repo\third_party\winawdl\airdrop\LICENSE" "$stage\licenses\airdrop-engine-MIT.txt"
 Copy-Item "$repo\LICENSE" "$stage\licenses\nekodrop-GPL-2.0.txt"
+Copy-Item "$mtBuild\firmware\LICENCE.mediatek" "$stage\licenses\mediatek-firmware.txt"
+Copy-Item "$repo\mtradio\LICENSE.mt76" "$stage\licenses\mt76-BSD-3-Clause.txt"
 Copy-Item "$repo\third_party\winawdl\deps\wintun\LICENSE.txt" "$stage\licenses\wintun.txt"
 $devourerLicense = @("$repo\third_party\winawdl\upstream\devourer\LICENSE", "$repo\third_party\winawdl\radio\LICENSE") |
   Where-Object { Test-Path $_ } | Select-Object -First 1

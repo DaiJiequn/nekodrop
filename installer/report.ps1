@@ -52,6 +52,8 @@ $WifiChips = @{
   # Realtek (Linux rtw88/rtw89 device IDs). RTL8852CE is natively supported
   # via nekodrop's built-in devourer backend (on-demand AirDrop).
   '10EC:C852' = @('supported-rtl', 'Realtek RTL8852CE')
+  # MediaTek MT7902: built-in mt76 port (nekodrop-radio-mt.exe, on-demand AirDrop).
+  '14C3:7902' = @('supported-mtk', 'MediaTek MT7902')
   '10EC:8852' = @('rtl', 'Realtek RTL8852AE')
   '10EC:A85A' = @('rtl', 'Realtek RTL8852AE')
   '10EC:B852' = @('rtl', 'Realtek RTL8852BE')
@@ -71,7 +73,6 @@ $WifiChips = @{
   '14C3:7925' = @('mtk', 'MediaTek MT7925')
   '14C3:0717' = @('mtk', 'MediaTek MT7925 (AMD RZ717)')
   '14C3:7927' = @('mtk', 'MediaTek MT7927 (Wi-Fi 7)')
-  '14C3:7902' = @('mtk', 'MediaTek MT7902')
   '14C3:7663' = @('mtk', 'MediaTek MT7663')
   '14C3:7615' = @('mtk', 'MediaTek MT7615')
   # Qualcomm (Linux ath11k/ath12k) and Qualcomm Atheros (ath10k/ath9k).
@@ -96,6 +97,7 @@ $WifiChips = @{
 # kind -> what the report says, and a hint for the reader (may be empty).
 $WifiKinds = @{
   'supported'     = @('supported by nekodrop', '')
+  'supported-mtk' = @('supported by nekodrop (on-demand AirDrop, built-in MT7902 backend)', 'Windows keeps Wi-Fi normally; nekodrop takes the card only during AirDrop transfers.')
   'supported-rtl' = @('supported by nekodrop (on-demand AirDrop, built-in RTL8852CE backend)', 'Windows keeps Wi-Fi normally; nekodrop takes the card only during AirDrop transfers.')
   'intel-fw'      = @('not supported: its firmware is not shipped upstream', 'nekodrop runs the Intel cards whose firmware ForbiddenItlwm ships (API 68); this one has none there.')
   'intel-be'      = @('not supported: Intel Wi-Fi 7, no upstream driver', 'ForbiddenItlwm, which nekodrop ports, has no driver for Wi-Fi 7 cards yet.')
@@ -233,7 +235,7 @@ if ($SelfTest) {
     @('PCI\VEN_14C3&DEV_7922&SUBSYS_7922103C\4&1', 'mtk', 'MediaTek MT7922'),
     @('PCI\VEN_14C3&DEV_0616&SUBSYS_E0CD1A3B\4&1', 'mtk', 'MediaTek MT7922 (AMD RZ616)'),
     @('PCI\VEN_14C3&DEV_7927&SUBSYS_792714C3\4&1', 'mtk', 'MediaTek MT7927 (Wi-Fi 7)'),
-    @('PCI\VEN_14C3&DEV_7902&SUBSYS_790214C3\4&1', 'mtk', 'MediaTek MT7902'),
+    @('PCI\VEN_14C3&DEV_7902&SUBSYS_790214C3\4&1', 'supported-mtk', 'MediaTek MT7902'),
     @('PCI\VEN_17CB&DEV_1103&SUBSYS_010817CB\4&1', 'qcom', 'Qualcomm WCN6855 (FastConnect 6800/6900)'),
     @('PCI\VEN_168C&DEV_003E&SUBSYS_3212144F\4&1', 'qcom', 'Qualcomm Atheros QCA6174'),
     @('PCI\VEN_14E4&DEV_43A0&SUBSYS_0000106B\4&1', 'bcm', 'Broadcom BCM4360'),

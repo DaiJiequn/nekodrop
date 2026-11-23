@@ -51,6 +51,8 @@ $WifiChips = @{
   # Realtek (Linux rtw88/rtw89 device IDs). RTL8852CE is natively supported
   # via nekodrop's built-in devourer backend (on-demand AirDrop).
   '10EC:C852' = @('supported-rtl', 'Realtek RTL8852CE')
+  # MediaTek MT7902: built-in mt76 port (nekodrop-radio-mt.exe, on-demand AirDrop).
+  '14C3:7902' = @('supported-mtk', 'MediaTek MT7902')
   '10EC:8852' = @('rtl', 'Realtek RTL8852AE')
   '10EC:A85A' = @('rtl', 'Realtek RTL8852AE')
   '10EC:B852' = @('rtl', 'Realtek RTL8852BE')
@@ -70,7 +72,6 @@ $WifiChips = @{
   '14C3:7925' = @('mtk', 'MediaTek MT7925')
   '14C3:0717' = @('mtk', 'MediaTek MT7925 (AMD RZ717)')
   '14C3:7927' = @('mtk', 'MediaTek MT7927 (Wi-Fi 7)')
-  '14C3:7902' = @('mtk', 'MediaTek MT7902')
   '14C3:7663' = @('mtk', 'MediaTek MT7663')
   '14C3:7615' = @('mtk', 'MediaTek MT7615')
   # Qualcomm (Linux ath11k/ath12k) and Qualcomm Atheros (ath10k/ath9k).
@@ -95,6 +96,7 @@ $WifiChips = @{
 # kind -> what the report says, and a hint for the reader (may be empty).
 $WifiKinds = @{
   'supported'     = @('supported by nekodrop', '')
+  'supported-mtk' = @('supported by nekodrop (on-demand AirDrop, built-in MT7902 backend)', 'Windows keeps Wi-Fi normally; nekodrop takes the card only during AirDrop transfers.')
   'supported-rtl' = @('supported by nekodrop (on-demand AirDrop, built-in RTL8852CE backend)', 'Windows keeps Wi-Fi normally; nekodrop takes the card only during AirDrop transfers.')
   'intel-fw'      = @('not supported: its firmware is not shipped upstream', 'nekodrop runs the Intel cards whose firmware ForbiddenItlwm ships (API 68); this one has none there.')
   'intel-be'      = @('not supported: Intel Wi-Fi 7, no upstream driver', 'ForbiddenItlwm, which nekodrop ports, has no driver for Wi-Fi 7 cards yet.')
@@ -148,8 +150,8 @@ function Test-KnownWifiId([string]$InstanceId) {
 # The supported-card check: exact 15 Intel IDs plus Realtek RTL8852CE
 # (10EC:C852), with a 4-hex boundary so a 5-digit device ID (e.g. DEV_43F01 or
 # DEV_C8520) can never match a supported 4-digit ID.
-$SupportedCardPattern = '^PCI\\(?:VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')|VEN_10EC&DEV_C852)(?=&|\\|$)'
-$NoSupportedCard = 'This PC has no Wi-Fi card nekodrop supports (Intel AX201, AX200, AX210, AX211, AX411, 9560 on Qu, or Realtek RTL8852CE 10EC:C852); nekodrop cannot run here.'
+$SupportedCardPattern = '^PCI\\(?:VEN_8086&DEV_(' + ($SupportedIntelIds -join '|') + ')|VEN_10EC&DEV_C852|VEN_14C3&DEV_7902)(?=&|\\|$)'
+$NoSupportedCard = 'This PC has no Wi-Fi card nekodrop supports (Intel AX201, AX200, AX210, AX211, AX411, 9560 on Qu, Realtek RTL8852CE 10EC:C852, or MediaTek MT7902 14C3:7902); nekodrop cannot run here.'
 $ReportUrl = 'https://github.com/zheznanohana/nekodrop/blob/main/installer/report.ps1'
 $IssuesUrl = 'https://github.com/zheznanohana/nekodrop/issues'
 # Adapter names that say wireless. As report.ps1: not bare "Killer" (its
@@ -237,9 +239,11 @@ if ($SelfTest) {
   function Ascii([string]$s) { return ("$s" -cmatch '^[\x09\x0A\x0D\x20-\x7E]*$') }
 
   # The supported-card check: exact 15 Intel IDs + Realtek RTL8852CE with 4-hex boundary.
-  if ($SupportedCardPattern -ne '^PCI\\(?:VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0|2723|2725|7A70|7AF0|51F0|51F1|54F0|7F70)|VEN_10EC&DEV_C852)(?=&|\\|$)') {
+  if ($SupportedCardPattern -ne '^PCI\\(?:VEN_8086&DEV_(43F0|A0F0|02F0|06F0|34F0|3DF0|4DF0|2723|2725|7A70|7AF0|51F0|51F1|54F0|7F70)|VEN_10EC&DEV_C852|VEN_14C3&DEV_7902)(?=&|\\|$)') {
     $fail += "supported-card pattern changed: $SupportedCardPattern"
   }
+  if ('PCI\VEN_14C3&DEV_7902&SUBSYS_60401A3B&REV_00\4&1' -notmatch $SupportedCardPattern) { $fail += '14C3:7902 not accepted' }
+  if ('PCI\VEN_14C3&DEV_79021&SUBSYS_60401A3B' -match $SupportedCardPattern) { $fail += '5-digit DEV_79021 matched as MT7902' }
   foreach ($d in $SupportedIntelIds) {
     if ("PCI\VEN_8086&DEV_$d&SUBSYS_00748086&REV_00\3&11583659&0&A3" -notmatch $SupportedCardPattern) { $fail += "8086:$d not accepted" }
     if ("PCI\VEN_8086&DEV_$d" -notmatch $SupportedCardPattern) { $fail += "8086:$d bare ID not accepted" }

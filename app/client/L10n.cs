@@ -181,7 +181,7 @@ public static class L
         ["set.card.applied"] = ("已保存，AirDrop 会重启几秒", "Saved; AirDrop restarts for a few seconds"),
         ["set.card.mismatch"] = ("这个型号和网卡的厂商对不上", "This model does not fit this card's vendor"),
         ["set.card.pick"] = ("请先选网卡和型号", "Choose a card and a model first"),
-        ["set.card.nolist"] = ("没有找到 Intel 或 Realtek 的网卡", "No Intel or Realtek network card found"),
+        ["set.card.nolist"] = ("没有找到 Intel、Realtek 或 MediaTek 的网卡", "No Intel, Realtek or MediaTek network card found"),
         ["set.card.recognized"] = ("已识别", "detected"),
         ["set.card.unrecognized"] = ("未识别", "not detected"),
         ["set.experimental"] = ("实验性功能", "Experimental"),
