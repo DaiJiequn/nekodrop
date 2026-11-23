@@ -14,7 +14,29 @@ radios. It is a port of the parts of Linux [mt76](https://github.com/openwrt/mt7
 - the radio pipe protocol (`radio_link.h`) and the AWDL policy ported from
   ForbiddenItlwm, so the service and awdld treat it like the other radios
 
-The card has no station mode here, so the service runs it on demand.
+- a Wi-Fi station beside AWDL (Concurrent mode), see below
+
+## Concurrent Wi-Fi
+
+The station is iwxradio's `WifiStation` (join, WPA2/WPA3, the TAP bridge)
+over `MtStation` (`mt_station.*`, the `StaDevice` interface):
+
+- the card stays in sniffer mode; a second own address (own MAC 1) makes the
+  MAC acknowledge the AP's frames to the station
+- CCMP is sealed and opened on the host (`ccmp.*`, Windows CNG CCM;
+  `tests/ccmp_test.cpp` checks IEEE 802.11 J.6.4)
+- the firmware has one channel (`num_different_channels = 1`), so the radio
+  time-shares it: AWDL's 16-entry channel sequence (clocked from awdld's own
+  frames) names the router's channel for the entries we spend there, a
+  power-save null frame tells the AP before each move, and frames for the AP
+  wait while the card is away. Wi-Fi gets 12 of 16 entries, 6 while AirDrop
+  moves data
+- a channel move is the RF switch only (re-configuring the sniffer took up to
+  0.36 s), about 11 ms on average
+
+Limits: 5 GHz networks only (see below), about 1.6 MB/s download measured,
+no Block Ack with the AP. `mtradio\scripts\test-station.ps1` joins the
+saved, visible 5 GHz networks and checks ping and a download over TAP.
 
 ## Firmware
 
@@ -44,7 +66,7 @@ AWE pages need SeLockMemoryPrivilege.
 
 - On 2.4 GHz, frames that need an ACK never complete (cause unknown; maybe
   Bluetooth coexistence), so the daemon sends without ACK there. AirDrop
-  itself moves to 5 GHz.
+  itself moves to 5 GHz, and the Wi-Fi station joins 5 GHz networks only.
 - Sending to an iPhone is slower than receiving (about 5 vs 15 MB/s measured).
 
 ## Licence

@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-#include "iwx.h"
+#include "sta_device.h"
 #include "tap.h"
 #include "wpa3.h"
 
@@ -45,7 +45,7 @@ public:
   using Logger = std::function<void(const std::string &)>;
   enum class State { Idle, Listening, Authenticating, Associating, Handshake, Running, Failed };
 
-  WifiStation(IwxDevice &dev, Logger log) : _dev(dev), _log(std::move(log)) {}
+  WifiStation(StaDevice &dev, Logger log) : _dev(dev), _log(std::move(log)) {}
 
   bool start(const StaConfig &cfg, std::string &error);
   /* Whether a received frame belongs to the station (our BSS). */
@@ -116,7 +116,7 @@ private:
   bool mic_ok(const uint8_t *eapol, size_t len, const uint8_t *key = nullptr);
   void add_mic(std::vector<uint8_t> &eapol, const uint8_t *key = nullptr);
 
-  IwxDevice &_dev;
+  StaDevice &_dev;
   Logger _log;
   TapAdapter _tap;
   StaConfig _cfg;
