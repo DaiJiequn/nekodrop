@@ -6,6 +6,26 @@
 
 ---
 
+## v2.0.0 (Hourly / Pre-release) — 2026-11-24
+
+### 中文
+- 新增有人发文件时，在对方图标旁直接接受 / 拒绝，并显示接收进度
+- 新增雷达上的箭头：等待、发送中、已发送、被拒绝一目了然
+- 新增雷达呼吸效果
+- 新增「本机」图标可选台式机 / 笔记本（默认自动）
+- 新增 Windows「共享」菜单：资源管理器和其他应用的分享面板里可直接选 nekodrop
+- 优化 Wi-Fi 窗口：正在使用的网络整块高亮
+
+### English
+- New: accept or decline right beside the sender's icon, with the receiving progress
+- New: arrows on the radar for waiting, sending, sent and declined
+- New: a breathing radar
+- New: this PC as a desktop or a laptop (automatic by default)
+- New: nekodrop in the Windows Share sheet (Explorer and other apps)
+- Better Wi-Fi window: the network in use is highlighted
+
+---
+
 ## v0.1.39 (Hourly / Pre-release) — 2026-11-24
 
 ### 中文
