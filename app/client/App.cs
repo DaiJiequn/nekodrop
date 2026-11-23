@@ -147,6 +147,14 @@ public sealed class App : Application
         {
             StartEngine();
         }
+        else if (_engineIf < 0)
+        {
+            // The engine started before awdl0 existed and binds to it by itself (its
+            // link watcher polls every second). Restarting it here killed it just as
+            // the iPhone that woke the card had found it: the PC dropped out of the
+            // share sheet until it was reopened (#32, #35).
+            _engineIf = now;
+        }
         else if (now != _engineIf
                  || _notReceivingSince is { } since && DateTime.UtcNow - since > TimeSpan.FromSeconds(30))
         {
@@ -519,7 +527,11 @@ public sealed class App : Application
         var radio = (string?)o["radio"];
         // A radio (re)start recreates awdl0: the engine's sockets belong to the old
         // interface, so it starts over on the new one.
-        if (radio == "on" && _lastRadio != "on" && _lastRadio != "" && Settings.Discoverable)
+        // Not when the engine has no awdl0 yet (it binds to the new one by itself):
+        // on a wake it was started a moment earlier, and a second start only sent a
+        // goodbye to the iPhone (#32, #35).
+        if (radio == "on" && _lastRadio != "on" && _lastRadio != "" && Settings.Discoverable &&
+            !(Engine.Running && _engineIf < 0))
         {
             Engine.Dispose();
             StartEngine();
