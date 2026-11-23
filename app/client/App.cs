@@ -694,7 +694,7 @@ public sealed class App : Application
         };
         Model.Detail = radio == "error" ? (string?)o["detail"] ?? "" :
             wifi == "" ? "" : wifi.StartsWith("unsupported") ? "Wi-Fi：" + wifi[13..] : "Wi-Fi：" + WifiText(wifi);
-        if (_tray is not null) _tray.Text = "nekodrop — " + MainWindow.Status(Model.Air).Label;
+        if (_tray is not null) _tray.Text = "nekodrop — " + NekoDrop.MainWindow.Status(Model.Air).Label;
     }
 
     static string WifiText(string s) => s switch
