@@ -50,6 +50,7 @@ public partial class SettingsWindow : Window
         CoexPlanBox.IsChecked = (bool?)A.Service.Last?["coexPlan"] ?? false;
         CheckUpdatesBox.IsChecked = s.CheckUpdates;
         PreviewUpdatesBox.IsChecked = s.PreviewUpdates;
+        DeleteInstallerBox.IsChecked = s.DeleteInstallerAfterInstall;
         VersionText.Text = "nekodrop " + Updater.Current;
         Title = L.T("set.title") + " · nekodrop " + Updater.Current;
         ShowCard(A.Service.Last);
@@ -225,6 +226,7 @@ public partial class SettingsWindow : Window
         try
         {
             A.Settings.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
+            A.Settings.DeleteInstallerAfterInstall = DeleteInstallerBox.IsChecked == true;
             var res = await A.CheckForUpdateDetailed(true);
             switch (res.Status)
             {
@@ -284,6 +286,7 @@ public partial class SettingsWindow : Window
         s.HotkeyKeys = _hotkeyKeys;
         s.CheckUpdates = CheckUpdatesBox.IsChecked == true;
         s.PreviewUpdates = PreviewUpdatesBox.IsChecked == true;
+        s.DeleteInstallerAfterInstall = DeleteInstallerBox.IsChecked == true;
         var language = (LanguageBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "auto";
         var languageChanged = language != s.Language;
         s.Language = language;
