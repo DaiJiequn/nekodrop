@@ -234,7 +234,7 @@ public static class CardCatalog
         void Check(bool ok, string what) { if (!ok) fail.Add(what); }
 
         // The 15 Intel IDs the service took before the catalog (Card.DeviceIds, 0.1.20)
-        // plus Realtek RTL8852CE (10EC:C852) and MediaTek MT7902 (14C3:7902) on-demand backends = 17 active profiles.
+        // plus Realtek RTL8852CE (10EC:C852) and MediaTek MT7902 (14C3:7902) backends = 17 active profiles.
         string[] intel = ["43F0", "A0F0", "02F0", "06F0", "34F0", "3DF0", "4DF0",
                           "2723", "2725", "7A70", "7AF0", "51F0", "51F1", "54F0", "7F70"];
         Check(ActiveProfiles.Count == intel.Length + 2, $"{ActiveProfiles.Count} active profiles, expected {intel.Length + 2}");
